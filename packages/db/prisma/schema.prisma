@@ -1,0 +1,545 @@
+// Futbol database schema — see the architecture doc for rationale.
+//
+// Two logical halves, per the "reference catalog vs world state" decision:
+//   1. Reference catalog (Ref* models): read-mostly, versioned, swappable.
+//      This is where "real data" lives; nothing downstream hardcodes it.
+//   2. World/save state (World*, Season, Fixture, Match*, ...): read-write,
+//      copy-on-write per save, scoped by worldId. A world is one single-player
+//      save or one multiplayer league.
+//
+// Phase 1 (MVP) exercises Era/RefLeague/RefClub/RefClubSeason/RefPlayer/
+// RefPlayerSeason plus World/WorldClub/WorldPlayer/Season/Competition/
+// Fixture/Match/MatchEvent/PlayerMatchStat end-to-end. The remaining models
+// (contracts, staff, youth, finances, transfers, awards, records,
+// achievements, multiplayer chat/presence) are schema-complete per the
+// architecture but are filled in as their phases (2-6) land.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Guests (isGuest: true) have no email/passwordHash — just a display name, so
+/// play requires no signup. "Upgrading" a guest sets email/passwordHash on the
+/// same row (same id) so their worlds/history carry over.
+model User {
+  id           String   @id @default(cuid())
+  email        String?  @unique
+  passwordHash String?
+  displayName  String
+  isGuest      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  worlds World[]
+
+  @@map("users")
+}
+
+// ============================================================================
+// Reference catalog
+// ============================================================================
+
+model Era {
+  id        String   @id @default(cuid())
+  name      String
+  startYear Int
+  endYear   Int
+  createdAt DateTime @default(now())
+
+  leagues RefLeague[]
+  worlds  World[]
+
+  @@map("eras")
+}
+
+model RefLeague {
+  id      String @id @default(cuid())
+  eraId   String
+  name    String
+  country String
+  tier    Int    @default(1)
+
+  era          Era              @relation(fields: [eraId], references: [id])
+  clubSeasons  RefClubSeason[]
+  competitions RefCompetition[]
+
+  @@index([eraId])
+  @@map("ref_leagues")
+}
+
+model RefClub {
+  id       String  @id @default(cuid())
+  name     String
+  country  String
+  badgeRef String?
+
+  clubSeasons RefClubSeason[]
+
+  @@map("ref_clubs")
+}
+
+/// One club's instance in one season — e.g. "Barcelona 2009". The draftable club unit.
+model RefClubSeason {
+  id         String @id @default(cuid())
+  clubId     String
+  seasonYear Int
+  leagueId   String
+  reputation Int
+
+  club          RefClub           @relation(fields: [clubId], references: [id])
+  league        RefLeague         @relation(fields: [leagueId], references: [id])
+  playerSeasons RefPlayerSeason[]
+  worldClubs    WorldClub[]
+
+  @@unique([clubId, seasonYear])
+  @@index([leagueId])
+  @@map("ref_club_seasons")
+}
+
+model RefPlayer {
+  id          String   @id @default(cuid())
+  name        String
+  nationality String
+  dateOfBirth DateTime
+
+  playerSeasons RefPlayerSeason[]
+
+  @@map("ref_players")
+}
+
+/// A player's attributes as they were in one specific season — e.g. "Henry 2004". The draftable player unit.
+model RefPlayerSeason {
+  id            String   @id @default(cuid())
+  playerId      String
+  clubSeasonId  String
+  seasonYear    Int
+  positions     String[]
+  preferredFoot String
+  weakFoot      Int
+  /// PlayerAttributes shape from @futbol/domain, stored as JSONB.
+  attributes    Json
+  overall       Int
+  potential     Int
+  traits        String[]
+
+  player       RefPlayer     @relation(fields: [playerId], references: [id])
+  clubSeason   RefClubSeason @relation(fields: [clubSeasonId], references: [id])
+  worldPlayers WorldPlayer[]
+
+  @@index([clubSeasonId])
+  @@index([playerId])
+  @@map("ref_player_seasons")
+}
+
+model RefManager {
+  id          String  @id @default(cuid())
+  name        String
+  nationality String
+  philosophy  String?
+
+  @@map("ref_managers")
+}
+
+model RefCompetition {
+  id       String  @id @default(cuid())
+  leagueId String?
+  name     String
+  type     String // "league" | "domestic-cup" | "continental" | "international"
+
+  league RefLeague? @relation(fields: [leagueId], references: [id])
+
+  @@map("ref_competitions")
+}
+
+model RefKit {
+  id       String @id @default(cuid())
+  clubId   String
+  season   Int
+  kind     String // "home" | "away" | "third"
+  assetRef String
+
+  @@index([clubId])
+  @@map("ref_kits")
+}
+
+model RefBadge {
+  id       String @id @default(cuid())
+  clubId   String
+  assetRef String
+
+  @@index([clubId])
+  @@map("ref_badges")
+}
+
+// ============================================================================
+// World / save state — everything below is scoped by worldId
+// ============================================================================
+
+enum WorldType {
+  SINGLE
+  LEAGUE
+}
+
+enum WorldStatus {
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+model World {
+  id        String      @id @default(cuid())
+  ownerId   String
+  type      WorldType
+  eraId     String
+  status    WorldStatus @default(ACTIVE)
+  createdAt DateTime    @default(now())
+
+  owner        User               @relation(fields: [ownerId], references: [id])
+  era          Era                @relation(fields: [eraId], references: [id])
+  clubs        WorldClub[]
+  players      WorldPlayer[]
+  seasons      Season[]
+  competitions Competition[]
+  fixtures     Fixture[]
+  matches      Match[]
+  transfers    Transfer[]
+  memberships  LeagueMembership[]
+  chatMessages ChatMessage[]
+
+  @@index([ownerId])
+  @@map("worlds")
+}
+
+/// A club instantiated inside a world/save; copy-on-write from a RefClubSeason so the world evolves independently.
+model WorldClub {
+  id              String  @id @default(cuid())
+  worldId         String
+  refClubSeasonId String?
+  name            String
+  managedByUserId String? // null = AI-controlled
+  formation       String?
+  /// Array of {position, playerId} — exactly 11 once drafted. Domain Squad.startingXI shape.
+  lineup          Json?
+  /// Array of {position, playerId}, up to 12. Domain Squad.substitutes shape.
+  bench           Json?
+
+  world         World          @relation(fields: [worldId], references: [id])
+  refClubSeason RefClubSeason? @relation(fields: [refClubSeasonId], references: [id])
+  players       WorldPlayer[]
+  contracts     Contract[]
+  staff         Staff[]
+  youthPlayers  YouthPlayer[]
+  finances      Finance[]
+
+  @@index([worldId])
+  @@map("world_clubs")
+}
+
+/// A player instantiated inside a world/save; snapshot of a RefPlayerSeason's attributes that then diverges over time.
+model WorldPlayer {
+  id                String   @id @default(cuid())
+  worldId           String
+  clubId            String
+  refPlayerSeasonId String
+  name              String
+  age               Int
+  positions         String[]
+  preferredFoot     String
+  weakFoot          Int
+  attributes        Json
+  overall           Int
+  potential         Int
+  traits            String[]
+  fitness           Float    @default(1)
+  morale            Float    @default(0.5)
+  form              Float    @default(0.5)
+  sharpness         Float    @default(1)
+
+  world           World           @relation(fields: [worldId], references: [id])
+  club            WorldClub       @relation(fields: [clubId], references: [id])
+  refPlayerSeason RefPlayerSeason @relation(fields: [refPlayerSeasonId], references: [id])
+  contracts       Contract[]
+
+  @@index([worldId, clubId])
+  @@map("world_players")
+}
+
+enum CompetitionType {
+  LEAGUE
+  DOMESTIC_CUP
+  CONTINENTAL
+  INTERNATIONAL
+  CUSTOM
+}
+
+model Competition {
+  id      String          @id @default(cuid())
+  worldId String
+  name    String
+  type    CompetitionType
+
+  world   World    @relation(fields: [worldId], references: [id])
+  seasons Season[]
+
+  @@index([worldId])
+  @@map("competitions")
+}
+
+enum SeasonStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+}
+
+model Season {
+  id            String       @id @default(cuid())
+  worldId       String
+  competitionId String
+  year          Int
+  status        SeasonStatus @default(SCHEDULED)
+
+  world       World       @relation(fields: [worldId], references: [id])
+  competition Competition @relation(fields: [competitionId], references: [id])
+  fixtures    Fixture[]
+
+  @@index([worldId])
+  @@map("seasons")
+}
+
+enum FixtureStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  POSTPONED
+}
+
+model Fixture {
+  id         String        @id @default(cuid())
+  worldId    String
+  seasonId   String
+  matchday   Int
+  homeClubId String
+  awayClubId String
+  status     FixtureStatus @default(SCHEDULED)
+  matchId    String?       @unique
+
+  world  World  @relation(fields: [worldId], references: [id])
+  season Season @relation(fields: [seasonId], references: [id])
+  match  Match? @relation(fields: [matchId], references: [id])
+
+  @@index([worldId, seasonId, matchday])
+  @@map("fixtures")
+}
+
+/// Persists the (setup, seed, engineVersion) triple alongside the result — this is what makes matches reproducible and auditable.
+model Match {
+  id             String   @id @default(cuid())
+  worldId        String
+  /// MatchSetup snapshot from @futbol/domain.
+  setup          Json
+  seed           String
+  engineVersion  String
+  homeScore      Int
+  awayScore      Int
+  homeXg         Float
+  awayXg         Float
+  homePossession Float
+  awayPossession Float
+  createdAt      DateTime @default(now())
+
+  world       World             @relation(fields: [worldId], references: [id])
+  fixture     Fixture?
+  events      MatchEvent[]
+  playerStats PlayerMatchStat[]
+
+  @@index([worldId])
+  @@map("matches")
+}
+
+model MatchEvent {
+  id      String @id @default(cuid())
+  matchId String
+  seq     Int
+  minute  Int
+  type    String
+  /// The rest of the MatchEvent discriminated-union member, from @futbol/domain.
+  payload Json
+
+  match Match @relation(fields: [matchId], references: [id])
+
+  @@index([matchId, seq])
+  @@map("match_events")
+}
+
+model PlayerMatchStat {
+  id              String @id @default(cuid())
+  matchId         String
+  playerId        String
+  rating          Float
+  goals           Int
+  assists         Int
+  shots           Int
+  passesCompleted Int
+  tackles         Int
+  minutesPlayed   Int
+
+  match Match @relation(fields: [matchId], references: [id])
+
+  @@index([matchId])
+  @@index([playerId])
+  @@map("player_match_stats")
+}
+
+// ---- Phase 2+ models: schema-complete now, filled in as their phase lands ----
+
+model Contract {
+  id        String   @id @default(cuid())
+  worldId   String
+  clubId    String
+  playerId  String
+  wage      Int
+  startDate DateTime
+  endDate   DateTime
+  createdAt DateTime @default(now())
+
+  club   WorldClub   @relation(fields: [clubId], references: [id])
+  player WorldPlayer @relation(fields: [playerId], references: [id])
+
+  @@index([worldId])
+  @@map("contracts")
+}
+
+model Staff {
+  id      String @id @default(cuid())
+  worldId String
+  clubId  String
+  name    String
+  role    String // "manager" | "assistant" | "scout" | "physio" | ...
+
+  club WorldClub @relation(fields: [clubId], references: [id])
+
+  @@index([worldId])
+  @@map("staff")
+}
+
+model YouthPlayer {
+  id         String   @id @default(cuid())
+  worldId    String
+  clubId     String
+  name       String
+  age        Int
+  positions  String[]
+  attributes Json
+  potential  Int
+
+  club WorldClub @relation(fields: [clubId], references: [id])
+
+  @@index([worldId])
+  @@map("youth_players")
+}
+
+model Finance {
+  id         String   @id @default(cuid())
+  worldId    String
+  clubId     String
+  balance    BigInt
+  recordedAt DateTime @default(now())
+
+  club WorldClub @relation(fields: [clubId], references: [id])
+
+  @@index([worldId])
+  @@map("finances")
+}
+
+enum TransferType {
+  PERMANENT
+  LOAN
+  SWAP
+}
+
+enum TransferStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  COMPLETED
+}
+
+model Transfer {
+  id         String         @id @default(cuid())
+  worldId    String
+  fromClubId String
+  toClubId   String
+  playerId   String
+  feeCents   BigInt
+  type       TransferType
+  status     TransferStatus @default(PENDING)
+  createdAt  DateTime       @default(now())
+
+  world World @relation(fields: [worldId], references: [id])
+
+  @@index([worldId])
+  @@map("transfers")
+}
+
+model Award {
+  id       String @id @default(cuid())
+  worldId  String
+  seasonId String
+  name     String
+  winnerId String // clubId or playerId depending on award type
+
+  @@index([worldId])
+  @@map("awards")
+}
+
+model WorldRecord {
+  id       String @id @default(cuid())
+  worldId  String
+  name     String
+  holderId String
+  value    Float
+
+  @@index([worldId])
+  @@map("records")
+}
+
+model Achievement {
+  id         String   @id @default(cuid())
+  worldId    String
+  userId     String
+  key        String
+  unlockedAt DateTime @default(now())
+
+  @@index([worldId])
+  @@map("achievements")
+}
+
+model LeagueMembership {
+  id      String @id @default(cuid())
+  worldId String
+  userId  String
+  clubId  String
+  role    String @default("manager") // "manager" | "admin"
+
+  world World @relation(fields: [worldId], references: [id])
+
+  @@unique([worldId, userId])
+  @@map("league_memberships")
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  worldId   String
+  userId    String
+  body      String
+  createdAt DateTime @default(now())
+
+  world World @relation(fields: [worldId], references: [id])
+
+  @@index([worldId, createdAt])
+  @@map("chat_messages")
+}
