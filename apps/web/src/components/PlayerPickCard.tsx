@@ -12,8 +12,14 @@ interface Props {
   onClick?: (() => void) | undefined;
 }
 
+const TAG_TONE: Record<string, string> = {
+  recommended: "border-gold-500/40 bg-gold-500/10 text-gold-300",
+  "already in your XI": "border-ink-700 bg-ink-800 text-smoke-500",
+};
+
 export function PlayerPickCard({ player, showRatings, selected, disabled, muted, tag, onClick }: Props) {
   const primaryGroup = POSITION_GROUP[(player.positions[0] as Position) ?? "CM"];
+  const tagTone = tag ? (TAG_TONE[tag] ?? "border-crimson-500/30 bg-crimson-500/10 text-crimson-300") : "";
 
   return (
     <button
@@ -21,16 +27,18 @@ export function PlayerPickCard({ player, showRatings, selected, disabled, muted,
       onClick={onClick}
       disabled={disabled}
       className={`notch-sm flex w-full items-center gap-3 border-2 px-3 py-2.5 text-left text-sm transition disabled:cursor-not-allowed disabled:opacity-40 ${
-        selected ? "border-gold-500 bg-gold-500/10" : "border-ink-700 bg-ink-900/40 hover:border-ink-600"
+        selected
+          ? "border-gold-500 bg-gold-500/10"
+          : "border-ink-700 bg-ink-900/40 hover:border-ink-600 hover:bg-ink-900/70"
       } ${muted ? "opacity-60" : ""}`}
     >
       {player.player.photoUrl ? (
-        <span className="relative h-10 w-10 shrink-0">
+        <span className="relative h-11 w-11 shrink-0">
           <img
             src={player.player.photoUrl}
             alt=""
             loading="lazy"
-            className="notch-sm h-10 w-10 object-cover"
+            className="notch-sm h-11 w-11 border border-ink-700 object-cover"
             onError={(e) => {
               e.currentTarget.style.display = "none";
             }}
@@ -45,23 +53,26 @@ export function PlayerPickCard({ player, showRatings, selected, disabled, muted,
         </span>
       ) : showRatings ? (
         <span
-          className={`notch-sm flex h-10 w-10 shrink-0 items-center justify-center font-display text-sm font-bold text-ink-950 ${GROUP_FILL[primaryGroup]}`}
+          className={`notch-sm flex h-11 w-11 shrink-0 items-center justify-center font-display text-sm font-bold text-ink-950 ${GROUP_FILL[primaryGroup]}`}
         >
           {player.overall}
         </span>
       ) : (
-        <span className="notch-sm flex h-10 w-10 shrink-0 items-center justify-center border-2 border-ink-700 bg-ink-800 text-smoke-500">
+        <span className="notch-sm flex h-11 w-11 shrink-0 items-center justify-center border-2 border-ink-700 bg-ink-800 text-smoke-500">
           ?
         </span>
       )}
 
       <span className="min-w-0 flex-1">
         <span className="block truncate font-medium text-paper">{player.player.name}</span>
-        <span className="block truncate text-xs text-smoke-500">
-          {player.player.nationality}
-          {tag && <span className="ml-1.5 text-smoke-600">&middot; {tag}</span>}
-        </span>
+        <span className="block truncate text-xs text-smoke-500">{player.player.nationality}</span>
       </span>
+
+      {tag && (
+        <span className={`notch-sm shrink-0 border px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${tagTone}`}>
+          {tag}
+        </span>
+      )}
 
       <span className="flex shrink-0 gap-1">
         {player.positions.map((pos) => {

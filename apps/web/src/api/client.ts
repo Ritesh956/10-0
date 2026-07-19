@@ -3,12 +3,20 @@ import type {
   CatalogFilter,
   ClubSeasonDto,
   EraDto,
+  EuropeAdvanceResultDto,
+  EuropeLeaguePhaseDto,
+  EuropeRoundDto,
+  EuropeStatusDto,
+  KnockoutRound,
+  KnockoutTieDto,
   LeagueDto,
   ManagerDto,
+  MatchSummaryDto,
   PlayerSeasonDto,
   SeasonDto,
   StandingsDto,
   SummaryDto,
+  TeamStatsDto,
   WorldDto,
 } from "./types";
 
@@ -143,4 +151,35 @@ export const api = {
 
   getSummary: (worldId: string, seasonId: string) =>
     request<SummaryDto>(`/worlds/${worldId}/seasons/${seasonId}/summary`),
+
+  getMatchesWithEvents: (worldId: string, seasonId: string) =>
+    request<MatchSummaryDto[]>(`/worlds/${worldId}/seasons/${seasonId}/matches`),
+
+  getTeamStats: (worldId: string, seasonId: string, clubId: string) =>
+    request<TeamStatsDto>(`/worlds/${worldId}/seasons/${seasonId}/team-stats?clubId=${clubId}`),
+
+  getEuropeStatus: (worldId: string, domesticSeasonId: string) =>
+    request<EuropeStatusDto>(`/worlds/${worldId}/europe/status?domesticSeasonId=${domesticSeasonId}`),
+
+  startEuropeLeaguePhase: (worldId: string, domesticSeasonId: string) =>
+    request<EuropeLeaguePhaseDto>(`/worlds/${worldId}/europe/league-phase?domesticSeasonId=${domesticSeasonId}`, {
+      method: "POST",
+    }),
+
+  startEuropeKnockouts: (worldId: string, competitionId: string, leaguePhaseSeasonId: string) =>
+    request<EuropeRoundDto>(
+      `/worlds/${worldId}/europe/${competitionId}/knockouts?leaguePhaseSeasonId=${leaguePhaseSeasonId}`,
+      { method: "POST" },
+    ),
+
+  advanceEuropeKnockouts: (worldId: string, competitionId: string, round: KnockoutRound) =>
+    request<EuropeAdvanceResultDto>(`/worlds/${worldId}/europe/${competitionId}/advance?round=${round}`, {
+      method: "POST",
+    }),
+
+  getEuropeBracket: (worldId: string, competitionId: string) =>
+    request<KnockoutTieDto[]>(`/worlds/${worldId}/europe/${competitionId}/bracket`),
+
+  getLeaguePhaseStandings: (worldId: string, seasonId: string) =>
+    request<StandingsDto>(`/worlds/${worldId}/europe/league-phase-standings?seasonId=${seasonId}`),
 };

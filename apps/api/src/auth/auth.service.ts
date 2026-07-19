@@ -23,7 +23,7 @@ interface UserRecord {
 export class AuthService {
   constructor(
     @Inject(PRISMA) private readonly prisma: PrismaClient,
-    private readonly jwt: JwtService,
+    @Inject(JwtService) private readonly jwt: JwtService,
   ) {}
 
   async register(dto: RegisterDto) {

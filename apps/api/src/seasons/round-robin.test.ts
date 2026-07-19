@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateDoubleRoundRobin } from "./round-robin.js";
+import { generateDoubleRoundRobin, generateSingleRoundRobin } from "./round-robin.js";
 
 describe("generateDoubleRoundRobin", () => {
   it("gives every club the same number of matches, home and away once each against every opponent", () => {
@@ -59,5 +59,35 @@ describe("generateDoubleRoundRobin", () => {
   it("returns an empty schedule for fewer than 2 clubs", () => {
     expect(generateDoubleRoundRobin([])).toEqual([]);
     expect(generateDoubleRoundRobin(["A"])).toEqual([]);
+  });
+});
+
+describe("generateSingleRoundRobin", () => {
+  it("plays every pair exactly once, unordered, with each club playing n-1 matches", () => {
+    const clubs = ["A", "B", "C", "D", "E", "F", "G", "H"];
+    const fixtures = generateSingleRoundRobin(clubs);
+
+    expect(fixtures).toHaveLength((clubs.length * (clubs.length - 1)) / 2);
+    for (const club of clubs) {
+      const played = fixtures.filter((f) => f.homeClubId === club || f.awayClubId === club);
+      expect(played).toHaveLength(clubs.length - 1);
+    }
+
+    const unorderedPairCounts = new Map<string, number>();
+    for (const f of fixtures) {
+      const key = [f.homeClubId, f.awayClubId].sort().join("-");
+      unorderedPairCounts.set(key, (unorderedPairCounts.get(key) ?? 0) + 1);
+    }
+    for (const a of clubs) {
+      for (const b of clubs) {
+        if (a === b) continue;
+        expect(unorderedPairCounts.get([a, b].sort().join("-"))).toBe(1);
+      }
+    }
+  });
+
+  it("returns an empty schedule for fewer than 2 clubs", () => {
+    expect(generateSingleRoundRobin([])).toEqual([]);
+    expect(generateSingleRoundRobin(["A"])).toEqual([]);
   });
 });

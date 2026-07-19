@@ -11,7 +11,7 @@ import type { DraftClubDto, DraftFantasyDto } from "./draft.schemas.js";
 export class DraftService {
   constructor(
     @Inject(PRISMA) private readonly prisma: PrismaClient,
-    private readonly worlds: WorldsService,
+    @Inject(WorldsService) private readonly worlds: WorldsService,
   ) {}
 
   async draftClub(worldId: string, userId: string, dto: DraftClubDto) {

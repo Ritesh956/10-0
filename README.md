@@ -9,7 +9,7 @@ This is Phase 1 (MVP): **Draft → Season → Share**, single-player.
 ```
 apps/
   web/         React + Vite + Tailwind frontend
-  api/         NestJS REST API (auth, catalog, worlds, draft, seasons)
+  api/         NestJS REST API (auth, catalog, worlds, draft, seasons, europe)
   sim-worker/  BullMQ worker that runs the match engine and persists results
 packages/
   domain/      Shared types (Player, Squad, MatchEvent, MatchResult, ...) + zod schemas
@@ -57,7 +57,7 @@ pnpm --filter @futbol/sim-worker dev   # consumes season-simulation jobs
 pnpm --filter @futbol/web dev          # http://localhost:5173
 ```
 
-Then in the browser: from the landing page, **Start a draft** → **Set the Rules** (pick a league or all of them, a formation, difficulty, and a few other options) → the **Draft Room**, where you spin a wheel for a random club-season, pick a player from that squad into an open position, and repeat until the XI is full → review **Your XI**, optionally draw a manager, see a pre-season projection → **Simulate Season** → view standings and the shareable result card. A guest username is only requested at that final confirm step (via a lightweight modal), not up front — browsing and drafting work with no account. A **Multiplayer** mode (`/multiplayer`) supports local pass-and-play head-to-head: two players each draft an XI under the same rules, then a two-leg fixture decides the winner. A "Save your progress" button appears in the header for guest sessions — it attaches an email/password to the same account so history persists across devices.
+Then in the browser: from the landing page, **Start a draft** → **Set the Rules** (pick a league or all of them, a formation, difficulty, and a few other options) → the **Draft Room**, where you spin a wheel for a random club-season, pick a player from that squad into an open position, and repeat until the XI is full → review **Your XI**, optionally draw a manager, see a pre-season projection → **Simulate Season**. From there the season plays out match-by-match — a popup per fixture with the score and every goalscorer/assist/minute, ~1.5s each and skippable — before landing on the final table and a "your club's season" stats screen (top scorer, top assist, full squad breakdown). Finish in the domestic top 8 and it continues automatically into a Champions-League-style European campaign: a league phase, then a two-legged knockout bracket (quarter-finals → semi-finals → a single-match final), each round replayed the same way, ending on a champion and a shareable result card either way. A guest username is only requested at the draft's final confirm step (via a lightweight modal), not up front — browsing and drafting work with no account. A **Multiplayer** mode (`/multiplayer`) supports local pass-and-play head-to-head: two players each draft an XI under the same rules, then a two-leg fixture decides the winner. A "Save your progress" button appears in the header for guest sessions — it attaches an email/password to the same account so history persists across devices.
 
 ## Verifying the whole workspace
 
@@ -67,11 +67,13 @@ pnpm test       # turbo: runs every test suite
 pnpm typecheck  # turbo: typechecks every package
 ```
 
-All three pass cleanly across all 8 packages (22 tests: domain, engine determinism/calibration, sim-lab statistical realism, api business logic, sim-worker).
+All three pass cleanly across all 8 packages (24 tests: domain, engine determinism/calibration, sim-lab statistical realism, api business logic, sim-worker).
 
 ## Verified live, end-to-end
 
 Beyond build/test/typecheck, the full user journey has been exercised against a real Postgres (Neon) and real Redis (Memurai), both via direct API calls and through the actual browser UI: register/guest-login → create world → draft a club → create a season → simulate (queued to Redis, picked up by the worker, engine runs, results persisted) → standings render correctly → shareable result card renders correctly. Four real bugs were found and fixed by this live pass (a CJS/ESM import gotcha, a JWT-secret load-order bug, a draft lineup referencing the wrong id, and a missing Prisma `include`) — see `CLAUDE.md` for the specifics, since they're the kind of thing worth knowing before touching that code again.
+
+A later pass verified the animated season replay and Champions League feature the same way: drafted a full squad, simulated a real 380-fixture domestic season, confirmed the match-by-match popups render correct scorers/assists/minutes, confirmed qualification correctly triggers the European campaign, and drove the entire league-phase → QF → SF → Final bracket to a resolved champion (including watching the drafted club get eliminated in the semis, confirming the tournament still plays out to completion for everyone else). Two more real bugs were found and fixed: `apps/api`'s `tsx watch` dev server silently resolves NestJS's constructor-injected dependencies to `undefined` (esbuild doesn't emit the decorator metadata Nest's DI needs — fixed by making every injection explicit with `@Inject()`), and the team-stats endpoint was folding the opponent's whole squad into "your" stats since `PlayerMatchStat` rows aren't tagged by club. Both are documented in `CLAUDE.md`.
 
 **Deployment**: not performed. Standing up production infrastructure and deploying `apps/api`, `apps/sim-worker`, and `apps/web` to a host (Railway/Render/Fly.io, per the architecture doc) requires your accounts and credentials — that's a step for you to drive, or to hand back to me once you've chosen a platform and I can wire up the deploy config.
 

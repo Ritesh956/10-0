@@ -3,13 +3,21 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import type { ClubSeasonDto, ManagerDto, PlayerSeasonDto } from "../api/types";
 import { DraftedPlayerRow } from "../components/DraftedPlayerRow";
-import { DrawReel } from "../components/DrawReel";
+import { DrawReel, type ReelCandidate } from "../components/DrawReel";
 import { GuestGateModal } from "../components/GuestGateModal";
 import { PitchView, type PitchSlotState } from "../components/PitchView";
 import { PlayerPickCard } from "../components/PlayerPickCard";
 import { Button } from "../components/ui/Button";
 import { RatingBar } from "../components/ui/RatingBar";
-import { POSITION_GROUP, positionLabel, slotsForFormation, type Position, type PositionGroup } from "../lib/formations";
+import {
+  canPlayPosition,
+  POSITION_GROUP,
+  positionLabel,
+  slotsForFormation,
+  type Position,
+  type PositionGroup,
+} from "../lib/formations";
+import { isRealCountry } from "../lib/leagues";
 import { surname } from "../lib/positionColors";
 import { useAuth } from "../lib/auth-context";
 import { useDraft } from "../state/DraftContext";
@@ -47,6 +55,12 @@ const ORDINAL_SUFFIX = ["th", "st", "nd", "rd"];
 function ordinal(n: number): string {
   const v = n % 100;
   return `${n}${ORDINAL_SUFFIX[(v - 20) % 10] ?? ORDINAL_SUFFIX[v] ?? ORDINAL_SUFFIX[0]}`;
+}
+
+/** A shuffled sample of real candidate club-seasons to spin through in the draw reel. */
+function sampleReelCandidates(pool: ClubSeasonDto[], count = 14): ReelCandidate[] {
+  const shuffled = [...pool].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, Math.min(count, shuffled.length)).map((cs) => ({ club: cs.club.name, year: cs.seasonYear }));
 }
 
 function average(values: number[]): number {
@@ -103,11 +117,23 @@ export function DraftPage() {
   const filledCount = Object.keys(picks).length;
   const allFilled = filledCount >= slots.length;
 
+  // When exactly one slot remains, surface it as the obvious next pick instead of making the
+  // user hunt for it — highlighted on the pitch, auto-targeted, and bumped to the top of the pool.
+  const emptySlotIndices = slots.map((_, i) => i).filter((i) => !(i in picks));
+  const recommendedSlotIndex = emptySlotIndices.length === 1 ? emptySlotIndices[0]! : null;
+  // The full set of positions still open across the XI — a player who can't fill any of these
+  // can never be used this draft, regardless of how many slots remain.
+  const remainingPositions = [...new Set(emptySlotIndices.map((i) => slots[i]!.position))];
+  function isUsableAnywhere(player: PlayerSeasonDto): boolean {
+    return remainingPositions.some((pos) => canPlayPosition(player.positions, pos));
+  }
+
   const [pool, setPool] = useState<ClubSeasonDto[] | null>(null);
   const [poolError, setPoolError] = useState<string | null>(null);
 
   const [currentClub, setCurrentClub] = useState<ClubSeasonDto | null>(null);
   const [spinning, setSpinning] = useState(false);
+  const [reelCandidates, setReelCandidates] = useState<ReelCandidate[]>([]);
   const [playerPool, setPlayerPool] = useState<PlayerSeasonDto[]>([]);
   const [loadingPlayers, setLoadingPlayers] = useState(false);
   const [pendingPlayer, setPendingPlayer] = useState<PlayerSeasonDto | null>(null);
@@ -136,7 +162,9 @@ export function DraftPage() {
         const raw = await api.listClubSeasons({ eraId: config.eraId, leagueIds: config.leagueIds });
         const filtered = raw.filter(
           (cs) =>
-            cs.seasonYear >= (config.eraYearMin ?? 0) && cs.seasonYear <= (config.eraYearMax ?? 9999),
+            cs.seasonYear >= (config.eraYearMin ?? 0) &&
+            cs.seasonYear <= (config.eraYearMax ?? 9999) &&
+            isRealCountry(cs.club.country),
         );
         if (!cancelled) setPool(filtered);
       } catch (err) {
@@ -172,7 +200,8 @@ export function DraftPage() {
     setPlayerPool([]);
     const candidates = excludeId ? pool.filter((cs) => cs.id !== excludeId) : pool;
     const source = candidates.length > 0 ? candidates : pool;
-    await new Promise((resolve) => setTimeout(resolve, 900));
+    setReelCandidates(sampleReelCandidates(source));
+    await new Promise((resolve) => setTimeout(resolve, 1200));
     const club = source[Math.floor(Math.random() * source.length)]!;
     setCurrentClub(club);
     setSpinning(false);
@@ -197,10 +226,27 @@ export function DraftPage() {
     resetSpinState();
   }
 
+  /** Only assigns if the player is actually eligible for the slot; otherwise surfaces an error. */
+  function tryAssignPlayer(slotIndex: number, player: PlayerSeasonDto): boolean {
+    const slot = slots[slotIndex];
+    if (!slot || !canPlayPosition(player.positions, slot.position)) {
+      setError(
+        `${player.player.name} can't play ${slot ? positionLabel(slot.position) : ""} (${slot?.position ?? ""}).`,
+      );
+      return false;
+    }
+    setError(null);
+    assignPlayer(slotIndex, player);
+    return true;
+  }
+
   function handlePlayerClick(player: PlayerSeasonDto) {
     if (Object.values(picks).some((p) => p.id === player.id)) return; // already in the XI
-    if (config.draftMode === "position-first" && targetSlotIndex !== null) {
-      assignPlayer(targetSlotIndex, player);
+    if (config.draftMode === "position-first" && effectiveTargetIndex !== null) {
+      tryAssignPlayer(effectiveTargetIndex, player);
+    } else if (config.draftMode === "squad-first" && recommendedSlotIndex !== null) {
+      // Only one slot left — skip the extra "choose a position" tap when the player fits it.
+      if (!tryAssignPlayer(recommendedSlotIndex, player)) setPendingPlayer(player);
     } else {
       setPendingPlayer(player);
     }
@@ -212,9 +258,13 @@ export function DraftPage() {
         setMoveSourceIndex(index === moveSourceIndex ? null : index);
       } else if (moveSourceIndex !== null) {
         const movingPlayer = picks[moveSourceIndex];
-        if (movingPlayer) {
+        const slot = slots[index];
+        if (movingPlayer && slot && canPlayPosition(movingPlayer.positions, slot.position)) {
           removePick(moveSourceIndex);
           addPick(index, movingPlayer);
+          setError(null);
+        } else if (movingPlayer) {
+          setError(`${movingPlayer.player.name} can't play ${slot ? positionLabel(slot.position) : ""} there.`);
         }
         setMoveSourceIndex(null);
         setMoveMode(false);
@@ -223,7 +273,7 @@ export function DraftPage() {
     }
     if (picks[index]) return; // slot already filled
     if (config.draftMode === "squad-first" && pendingPlayer) {
-      assignPlayer(index, pendingPlayer);
+      tryAssignPlayer(index, pendingPlayer);
     } else if (config.draftMode === "position-first" && !currentClub && !spinning) {
       setTargetSlotIndex(index);
     }
@@ -262,16 +312,35 @@ export function DraftPage() {
       ? { filled: { name: player.player.name, overall: player.overall, photoUrl: player.player.photoUrl } }
       : {
           ineligible: pendingPlayer
-            ? !pendingPlayer.positions.includes(slot.position)
+            ? !canPlayPosition(pendingPlayer.positions, slot.position)
             : movingPlayer
-              ? !movingPlayer.positions.includes(slot.position)
+              ? !canPlayPosition(movingPlayer.positions, slot.position)
               : false,
         };
   });
 
-  const targetSlot = targetSlotIndex !== null ? slots[targetSlotIndex] : null;
+  // In position-first mode, auto-target the last remaining slot instead of making the user click it.
+  const effectiveTargetIndex = targetSlotIndex ?? (config.draftMode === "position-first" ? recommendedSlotIndex : null);
+  const targetSlot = effectiveTargetIndex !== null ? slots[effectiveTargetIndex] : null;
+  const recommendedSlot = recommendedSlotIndex !== null ? slots[recommendedSlotIndex] : null;
+  // Squad-first has no explicit target slot until the very last one is left — that's the recommendation.
+  const effectiveSlot = targetSlot ?? (config.draftMode === "squad-first" ? recommendedSlot : null);
 
-  const sortedPlayerPool = useMemo(() => sortPlayers(playerPool, sortMode), [playerPool, sortMode]);
+  const sortedPlayerPool = useMemo(() => {
+    const sorted = sortPlayers(playerPool, sortMode);
+    if (effectiveSlot) {
+      // A single known target (last slot left, or position-first's drawn slot) — bring fits to the top.
+      const compatible = sorted.filter((p) => canPlayPosition(p.positions, effectiveSlot.position));
+      const rest = sorted.filter((p) => !canPlayPosition(p.positions, effectiveSlot.position));
+      return [...compatible, ...rest];
+    }
+    // Multiple slots still open — a player only needs to fit *one* of them, but anyone who fits
+    // none of the remaining slots can never be used this draft, so sink them to the bottom.
+    const usable = sorted.filter((p) => isUsableAnywhere(p));
+    const unusable = sorted.filter((p) => !isUsableAnywhere(p));
+    return [...usable, ...unusable];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerPool, sortMode, effectiveSlot, picks]);
 
   const draftedIds = useMemo(() => new Set(Object.values(picks).map((p) => p.id)), [picks]);
 
@@ -297,16 +366,24 @@ export function DraftPage() {
   const overallRating = useMemo(() => average(Object.values(picks).map((p) => p.overall)), [picks]);
 
   const odds = useMemo(() => {
-    const strength = Math.max(0, Math.min(1, (overallRating - 55) / 35));
-    const seasonSize = 8;
+    // SEASON_SIZE mirrors the real top-flight-sized league SeasonPage actually simulates
+    // (see apps/web/src/pages/SeasonPage.tsx's createSeason call) — keep the two in sync.
+    const seasonSize = 20;
     const matches = (seasonSize - 1) * 2;
-    const maxPoints = matches * 3;
+    // A hard 55-90 clamp saturated `strength` to 1 for almost any good squad (overall 90+
+    // is common), making every strong draft show the same "90% to win it" numbers. A logistic
+    // curve centered on a realistic "mid-table top-flight XI" benchmark keeps differentiating
+    // squads all the way up near the top of the rating scale instead of flatlining early.
+    const MID_OVERALL = 75;
+    const SPREAD = 8;
+    const strength = 1 / (1 + Math.exp(-(overallRating - MID_OVERALL) / SPREAD));
+    const ppg = 0.6 + strength * 2; // ~0.6 (relegation form) to ~2.6 (title-winning pace) points/game
     return {
       seasonSize,
-      expectedPoints: Math.round(strength * maxPoints * 0.65 + 8),
-      winPct: Math.max(1, Math.min(95, Math.round(strength ** 2 * 90))),
-      top4Pct: Math.max(3, Math.min(99, Math.round(20 + strength * 78))),
-      relegationPct: Math.max(0, Math.min(70, Math.round((1 - strength) ** 2 * 70))),
+      expectedPoints: Math.round(ppg * matches),
+      winPct: Math.max(1, Math.min(95, Math.round(strength ** 2.2 * 90))),
+      top4Pct: Math.max(2, Math.min(99, Math.round(15 + strength * 82))),
+      relegationPct: Math.max(0, Math.min(70, Math.round((1 - strength) ** 2.3 * 50))),
       projectedFinish: Math.max(1, Math.min(seasonSize, Math.round(seasonSize - strength * (seasonSize - 1)))),
     };
   }, [overallRating]);
@@ -321,37 +398,68 @@ export function DraftPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-10">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-2xl font-bold uppercase tracking-wide text-paper">Draft Room</h1>
-          <p className="text-sm text-smoke-500">
-            {config.formation} &middot; {filledCount}/{slots.length} filled &middot; {rerollsRemaining} redraws left
-          </p>
+      <div className="mb-8 border-b border-ink-800 pb-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <span className="notch-sm inline-flex items-center gap-2 border-2 border-ink-700 bg-ink-900 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-smoke-500">
+              Building your XI
+            </span>
+            <h1 className="mt-4 font-display text-3xl font-bold uppercase leading-tight tracking-tight text-paper sm:text-4xl">
+              Draft Room
+            </h1>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="group hover:border-crimson-500/60 hover:text-crimson-300"
+            onClick={() => {
+              resetDraft();
+              resetSpinState();
+              setMoveMode(false);
+              setMoveSourceIndex(null);
+              setPostDraftStep("review");
+              setManagerPick(null);
+            }}
+          >
+            <span className="inline-block transition-transform duration-300 group-hover:-rotate-180">&#8635;</span>
+            Restart run
+          </Button>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            resetDraft();
-            resetSpinState();
-            setMoveMode(false);
-            setMoveSourceIndex(null);
-            setPostDraftStep("review");
-            setManagerPick(null);
-          }}
-        >
-          &#8635; Restart run
-        </Button>
+
+        <dl className="mt-5 grid grid-cols-3 gap-3 sm:max-w-md">
+          <div className="notch-sm border-2 border-ink-700 bg-ink-900/40 px-3 py-2">
+            <dt className="text-[10px] uppercase tracking-wide text-smoke-600">Formation</dt>
+            <dd className="font-display text-lg font-bold text-paper">{config.formation}</dd>
+          </div>
+          <div className="notch-sm border-2 border-ink-700 bg-ink-900/40 px-3 py-2">
+            <dt className="text-[10px] uppercase tracking-wide text-smoke-600">Filled</dt>
+            <dd className="font-display text-lg font-bold text-gold-400">
+              {filledCount}
+              <span className="text-smoke-500">/{slots.length}</span>
+            </dd>
+          </div>
+          <div className="notch-sm border-2 border-ink-700 bg-ink-900/40 px-3 py-2">
+            <dt className="text-[10px] uppercase tracking-wide text-smoke-600">Redraws</dt>
+            <dd className="font-display text-lg font-bold text-paper">{rerollsRemaining}</dd>
+          </div>
+        </dl>
       </div>
 
-      {(error || poolError) && <p className="mb-4 text-sm text-crimson-400">{error ?? poolError}</p>}
+      {(error || poolError) && (
+        <div className="notch mb-6 flex items-start gap-3 border-2 border-crimson-500/40 bg-crimson-500/10 p-4">
+          <span className="notch-sm flex h-6 w-6 shrink-0 items-center justify-center border border-crimson-500/40 bg-crimson-500/10 text-xs font-bold text-crimson-300">
+            !
+          </span>
+          <p className="text-sm text-crimson-300">{error ?? poolError}</p>
+        </div>
+      )}
 
       <div className="grid gap-8 md:grid-cols-2">
         <div>
           <PitchView
             formation={config.formation}
             slotState={slotState}
-            activeSlotIndex={(moveMode ? moveSourceIndex : targetSlotIndex) ?? undefined}
+            activeSlotIndex={(moveMode ? moveSourceIndex : effectiveTargetIndex) ?? recommendedSlotIndex ?? undefined}
             showRatings={config.showRatings}
             onSlotClick={pitchClickable}
           />
@@ -370,7 +478,7 @@ export function DraftPage() {
           </Button>
           <p className="mt-1 text-center text-xs text-ink-600">Reposition a drafted player to open up a slot.</p>
 
-          <div className="mt-3 flex flex-wrap justify-center gap-x-3 gap-y-1 text-[10px] text-smoke-600">
+          <div className="notch-sm mt-3 flex flex-wrap justify-center gap-x-3 gap-y-1 border border-ink-800 bg-ink-900/30 px-3 py-2 text-[10px] text-smoke-600">
             <span className="inline-flex items-center gap-1">
               <span className="h-2 w-2 rounded-full bg-plum-400" /> Keeper
             </span>
@@ -402,7 +510,7 @@ export function DraftPage() {
           )}
         </div>
 
-        <div className="flex flex-col justify-center">
+        <div className="flex flex-col">
           {moveMode ? (
             <div className="notch border-2 border-dashed border-ink-700 p-8 text-center text-sm text-smoke-500">
               {moveSourceIndex === null
@@ -413,7 +521,8 @@ export function DraftPage() {
             postDraftStep === "review" ? (
               <div className="space-y-4">
                 <div>
-                  <h2 className="font-display text-xl font-bold uppercase tracking-wide text-paper">Your XI</h2>
+                  <p className="text-xs font-semibold uppercase tracking-widest text-gold-400">Squad complete</p>
+                  <h2 className="mt-1 font-display text-xl font-bold uppercase tracking-wide text-paper">Your XI</h2>
                   <p className="text-sm text-smoke-500">
                     {config.formation} &middot; Overall {overallRating}
                   </p>
@@ -557,7 +666,7 @@ export function DraftPage() {
                   <span className="font-semibold text-paper">{positionLabel(targetSlot.position)}</span> (
                   {targetSlot.position})
                 </p>
-                <DrawReel spinning={spinning} onSpin={() => void doSpin()} />
+                <DrawReel spinning={spinning} candidates={reelCandidates} onSpin={() => void doSpin()} />
               </div>
             ) : (
               <div className="notch border-2 border-dashed border-ink-700 p-8 text-center text-sm text-smoke-500">
@@ -571,12 +680,13 @@ export function DraftPage() {
                   clubName={currentClub?.club.name}
                   seasonYear={currentClub?.seasonYear}
                   leagueName={currentClub?.league.name}
+                  candidates={reelCandidates}
                   spinning={spinning}
                   disabled
                   onSpin={() => void doSpin()}
                 />
               ) : (
-                <div className="notch border-2 border-ink-700 bg-ink-900/60 p-4">
+                <div className="notch border-2 border-ink-700 bg-ink-900/60 p-5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="notch-sm border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-gold-400">
@@ -587,14 +697,22 @@ export function DraftPage() {
                       </span>
                       <span className="text-xs text-smoke-500">{slots.length - filledCount} slots left</span>
                     </div>
-                    <Button variant="outline" size="sm" disabled={rerollsRemaining <= 0} onClick={handleReroll}>
-                      Redraw ({rerollsRemaining} left)
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={rerollsRemaining <= 0}
+                      className={rerollsRemaining > 0 ? "border-gold-500/50 text-gold-300 hover:border-gold-400" : ""}
+                      onClick={handleReroll}
+                    >
+                      &#8635; Redraw ({rerollsRemaining} left)
                     </Button>
                   </div>
-                  <p className="mt-2 font-display text-lg font-bold uppercase tracking-wide text-paper">
-                    {currentClub.club.name} <span className="text-gold-400">{currentClub.seasonYear}</span>
-                  </p>
-                  <p className="text-xs text-smoke-500">{currentClub.league.name}</p>
+                  <div className="mt-3 border-t border-ink-800 pt-3">
+                    <p className="font-display text-xl font-bold uppercase tracking-wide text-paper">
+                      {currentClub.club.name} <span className="text-gold-400">{currentClub.seasonYear}</span>
+                    </p>
+                    <p className="text-xs text-smoke-500">{currentClub.league.name}</p>
+                  </div>
                 </div>
               )}
 
@@ -611,18 +729,17 @@ export function DraftPage() {
                         "Pick any player, then choose their position."
                       )}
                     </p>
-                    <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide">
-                      <span className="text-ink-600">Sort:</span>
+                    <div className="notch-sm flex shrink-0 items-center gap-0.5 border border-ink-700 bg-ink-900/40 p-0.5 text-[11px] uppercase tracking-wide">
                       {(["rating", "position", "surname"] as const).map((mode) => (
                         <button
                           key={mode}
                           type="button"
                           onClick={() => setSortMode(mode)}
-                          className={
+                          className={`notch-sm px-2.5 py-1 font-semibold transition ${
                             sortMode === mode
-                              ? "font-semibold text-gold-400"
+                              ? "bg-gold-500/15 text-gold-300"
                               : "text-smoke-600 hover:text-smoke-400"
-                          }
+                          }`}
                         >
                           {mode === "surname" ? "A–Z" : mode}
                         </button>
@@ -634,21 +751,28 @@ export function DraftPage() {
                     {loadingPlayers && <p className="text-center text-sm text-smoke-500">Loading squad...</p>}
                     {sortedPlayerPool.map((player) => {
                       const alreadyDrafted = draftedIds.has(player.id);
+                      const eligible = effectiveSlot
+                        ? canPlayPosition(player.positions, effectiveSlot.position)
+                        : isUsableAnywhere(player);
                       return (
                         <PlayerPickCard
                           key={player.id}
                           player={player}
                           showRatings={config.showRatings}
                           selected={pendingPlayer?.id === player.id}
-                          disabled={alreadyDrafted}
+                          disabled={alreadyDrafted || !eligible}
                           tag={
                             alreadyDrafted
                               ? "already in your XI"
-                              : targetSlot && !player.positions.includes(targetSlot.position)
-                                ? "off-position"
-                                : undefined
+                              : !eligible
+                                ? effectiveSlot
+                                  ? `can't play ${positionLabel(effectiveSlot.position)}`
+                                  : "can't be used"
+                                : recommendedSlot && targetSlotIndex === null
+                                  ? "recommended"
+                                  : undefined
                           }
-                          muted={targetSlot ? !player.positions.includes(targetSlot.position) : false}
+                          muted={!eligible}
                           onClick={() => handlePlayerClick(player)}
                         />
                       );
@@ -658,7 +782,7 @@ export function DraftPage() {
               )}
             </div>
           ) : (
-            <DrawReel spinning={spinning} onSpin={() => void doSpin()} />
+            <DrawReel spinning={spinning} candidates={reelCandidates} onSpin={() => void doSpin()} />
           )}
         </div>
       </div>

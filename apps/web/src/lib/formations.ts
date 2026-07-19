@@ -64,6 +64,36 @@ export function positionLabel(position: Position): string {
   return POSITION_LABEL[position];
 }
 
+/**
+ * Which slots a player listed at a given position can also reasonably fill,
+ * based on real positional versatility (a CAM can play as a false-9/ST, a CM
+ * can drop into a CDM double-pivot or push into a CAM role, etc). Always
+ * includes the position itself. Used to decide whether a drafted player is
+ * eligible for a pitch slot beyond an exact position match.
+ */
+export const POSITION_COMPATIBILITY: Record<Position, Position[]> = {
+  GK: ["GK"],
+  CB: ["CB"],
+  LB: ["LB", "LWB"],
+  RB: ["RB", "RWB"],
+  LWB: ["LWB", "LB", "LM"],
+  RWB: ["RWB", "RB", "RM"],
+  CDM: ["CDM", "CM"],
+  CM: ["CM", "CDM", "CAM"],
+  CAM: ["CAM", "CM", "ST", "CF"],
+  LM: ["LM", "LWB", "LW"],
+  RM: ["RM", "RWB", "RW"],
+  LW: ["LW", "LM", "ST"],
+  RW: ["RW", "RM", "ST"],
+  ST: ["ST", "CF", "CAM"],
+  CF: ["CF", "ST", "CAM"],
+};
+
+/** Whether a player who can play any of `playerPositions` is eligible for `slot`. */
+export function canPlayPosition(playerPositions: string[], slot: Position): boolean {
+  return playerPositions.some((p) => POSITION_COMPATIBILITY[p as Position]?.includes(slot));
+}
+
 export interface FormationSlot {
   position: Position;
   /** 0-100, left to right */
@@ -161,7 +191,7 @@ const FORMATION_COORDS: Record<Formation, Array<{ x: number; y: number }>> = {
     { x: 70, y: 76 },
     { x: 10, y: 55 },
     { x: 35, y: 50 },
-    { x: 50, y: 52 },
+    { x: 50, y: 62 },
     { x: 65, y: 50 },
     { x: 90, y: 55 },
     { x: 40, y: 20 },
@@ -201,7 +231,7 @@ const FORMATION_COORDS: Record<Formation, Array<{ x: number; y: number }>> = {
     { x: 70, y: 78 },
     { x: 92, y: 68 },
     { x: 35, y: 48 },
-    { x: 50, y: 50 },
+    { x: 50, y: 60 },
     { x: 65, y: 48 },
     { x: 40, y: 20 },
     { x: 60, y: 20 },

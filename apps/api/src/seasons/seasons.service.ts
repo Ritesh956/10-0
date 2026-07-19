@@ -18,7 +18,7 @@ export class SeasonsService {
   constructor(
     @Inject(PRISMA) private readonly prisma: PrismaClient,
     @Inject(SEASON_SIM_QUEUE_TOKEN) private readonly queue: Queue,
-    private readonly worlds: WorldsService,
+    @Inject(WorldsService) private readonly worlds: WorldsService,
   ) {}
 
   async createSeason(worldId: string, userId: string, dto: CreateSeasonDto) {
@@ -177,5 +177,119 @@ export class SeasonsService {
         : undefined;
 
     return { standings, userClub, userRow, position, unbeaten, shareText };
+  }
+
+  /**
+   * Per-fixture score + goal-by-goal breakdown (scorer/assist names resolved from the WorldPlayer
+   * snapshot, not the ref catalog — matches what actually played, including any mid-world changes).
+   * Ordered by matchday so the frontend can play them back like a season unfolding.
+   */
+  async getMatchesWithEvents(worldId: string, seasonId: string, userId: string) {
+    await this.worlds.assertOwnership(worldId, userId);
+
+    const fixtures = await this.prisma.fixture.findMany({
+      where: { worldId, seasonId, status: "COMPLETED" },
+      orderBy: { matchday: "asc" },
+      include: { match: { include: { events: { orderBy: { seq: "asc" } } } } },
+    });
+
+    const playerIds = new Set<string>();
+    for (const fixture of fixtures) {
+      for (const event of fixture.match?.events ?? []) {
+        if (event.type !== "goal") continue;
+        const payload = event.payload as { playerId?: string; assistPlayerId?: string };
+        if (payload.playerId) playerIds.add(payload.playerId);
+        if (payload.assistPlayerId) playerIds.add(payload.assistPlayerId);
+      }
+    }
+    const players = await this.prisma.worldPlayer.findMany({
+      where: { id: { in: [...playerIds] } },
+      select: { id: true, name: true },
+    });
+    const nameById = new Map(players.map((p) => [p.id, p.name]));
+
+    return fixtures
+      .filter((fixture): fixture is typeof fixture & { match: NonNullable<(typeof fixture)["match"]> } =>
+        fixture.match !== null,
+      )
+      .map((fixture) => ({
+        fixtureId: fixture.id,
+        matchday: fixture.matchday,
+        homeClubId: fixture.homeClubId,
+        awayClubId: fixture.awayClubId,
+        homeScore: fixture.match.homeScore,
+        awayScore: fixture.match.awayScore,
+        goals: fixture.match.events
+          .filter((event) => event.type === "goal")
+          .map((event) => {
+            const payload = event.payload as { clubId?: string; playerId?: string; assistPlayerId?: string };
+            return {
+              minute: event.minute,
+              clubId: payload.clubId ?? fixture.homeClubId,
+              scorerName: (payload.playerId && nameById.get(payload.playerId)) ?? "Unknown",
+              assistName: payload.assistPlayerId ? nameById.get(payload.assistPlayerId) : undefined,
+            };
+          }),
+      }));
+  }
+
+  /**
+   * Aggregates PlayerMatchStat across every completed fixture a club played in this season —
+   * top scorer/assister, goals for/against, and a full squad breakdown for the "your team" screen.
+   */
+  async getTeamStats(worldId: string, seasonId: string, clubId: string, userId: string) {
+    await this.worlds.assertOwnership(worldId, userId);
+
+    // PlayerMatchStat has no clubId of its own — every match's rows cover BOTH sides' full squads,
+    // so without this the opposing team's players would get folded into "our" squad totals below.
+    const clubPlayers = await this.prisma.worldPlayer.findMany({ where: { clubId }, select: { id: true, name: true } });
+    const clubPlayerIds = new Set(clubPlayers.map((p) => p.id));
+    const nameById = new Map(clubPlayers.map((p) => [p.id, p.name]));
+
+    const fixtures = await this.prisma.fixture.findMany({
+      where: {
+        worldId,
+        seasonId,
+        status: "COMPLETED",
+        OR: [{ homeClubId: clubId }, { awayClubId: clubId }],
+      },
+      include: { match: { include: { playerStats: true } } },
+    });
+
+    let goalsFor = 0;
+    let goalsAgainst = 0;
+    const totals = new Map<string, { matchesPlayed: number; goals: number; assists: number }>();
+
+    for (const fixture of fixtures) {
+      if (!fixture.match) continue;
+      const isHome = fixture.homeClubId === clubId;
+      goalsFor += isHome ? fixture.match.homeScore : fixture.match.awayScore;
+      goalsAgainst += isHome ? fixture.match.awayScore : fixture.match.homeScore;
+
+      for (const stat of fixture.match.playerStats) {
+        if (!clubPlayerIds.has(stat.playerId)) continue;
+        const entry = totals.get(stat.playerId) ?? { matchesPlayed: 0, goals: 0, assists: 0 };
+        if (stat.minutesPlayed > 0) entry.matchesPlayed += 1;
+        entry.goals += stat.goals;
+        entry.assists += stat.assists;
+        totals.set(stat.playerId, entry);
+      }
+    }
+
+    const squad = [...totals.entries()]
+      .map(([playerId, stat]) => ({ playerId, name: nameById.get(playerId) ?? "Unknown", ...stat }))
+      .sort((a, b) => b.goals - a.goals || b.assists - a.assists);
+
+    const topScorer = [...squad].sort((a, b) => b.goals - a.goals)[0];
+    const topAssist = [...squad].sort((a, b) => b.assists - a.assists)[0];
+
+    return {
+      clubId,
+      goalsFor,
+      goalsAgainst,
+      topScorer: topScorer && topScorer.goals > 0 ? topScorer : undefined,
+      topAssist: topAssist && topAssist.assists > 0 ? topAssist : undefined,
+      squad,
+    };
   }
 }

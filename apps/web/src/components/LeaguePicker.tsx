@@ -1,5 +1,4 @@
 import type { LeagueDto } from "../api/types";
-import { Chip } from "./ui/Chip";
 
 interface Props {
   leagues: LeagueDto[];
@@ -8,55 +7,50 @@ interface Props {
 }
 
 export function LeaguePicker({ leagues, selectedIds, onChange }: Props) {
-  const byCountry = new Map<string, LeagueDto[]>();
-  for (const league of leagues) {
-    const list = byCountry.get(league.country) ?? [];
-    list.push(league);
-    byCountry.set(league.country, list);
-  }
-  const countries = [...byCountry.keys()].sort();
+  const sorted = [...leagues].sort((a, b) => a.tier - b.tier || a.name.localeCompare(b.name));
 
   function toggle(id: string) {
     onChange(selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]);
   }
 
+  if (leagues.length === 0) {
+    return <p className="text-sm text-smoke-500">No leagues available for this era yet.</p>;
+  }
+
   return (
-    <div className="space-y-4">
-      <Chip active={selectedIds.length === 0} onClick={() => onChange([])}>
-        All leagues
-      </Chip>
+    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
+      <button
+        type="button"
+        onClick={() => onChange([])}
+        className={`notch-sm flex min-h-16 flex-col items-center justify-center gap-0.5 border-2 px-3 py-2.5 text-center text-sm font-semibold uppercase tracking-wide transition ${
+          selectedIds.length === 0
+            ? "border-gold-500 bg-gold-500/10 text-gold-300"
+            : "border-ink-700 bg-ink-900/40 text-paper hover:border-ink-600"
+        }`}
+      >
+        All Leagues
+      </button>
 
-      {leagues.length === 0 && <p className="text-sm text-smoke-500">No leagues available for this era yet.</p>}
-
-      {countries.map((country) => (
-        <div key={country}>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-smoke-600">{country}</p>
-          <div className="flex flex-wrap gap-2">
-            {(byCountry.get(country) ?? [])
-              .sort((a, b) => a.tier - b.tier || a.name.localeCompare(b.name))
-              .map((league) => {
-                const active = selectedIds.includes(league.id);
-                return (
-                  <button
-                    key={league.id}
-                    type="button"
-                    onClick={() => toggle(league.id)}
-                    className={`notch-sm flex items-center gap-2 border-2 px-3 py-2 text-sm transition ${
-                      active
-                        ? "border-gold-500 bg-gold-500/10 text-gold-300"
-                        : "border-ink-700 bg-ink-900/40 text-paper hover:border-ink-600"
-                    }`}
-                  >
-                    {league.name}
-                    {league.tier > 1 && (
-                      <span className="bg-ink-800 px-1.5 py-0.5 text-[10px] text-smoke-500">Tier {league.tier}</span>
-                    )}
-                  </button>
-                );
-              })}
-          </div>
-        </div>
-      ))}
+      {sorted.map((league) => {
+        const active = selectedIds.includes(league.id);
+        return (
+          <button
+            key={league.id}
+            type="button"
+            onClick={() => toggle(league.id)}
+            className={`notch-sm flex min-h-16 flex-col items-center justify-center gap-0.5 border-2 px-3 py-2.5 text-center text-sm transition ${
+              active
+                ? "border-gold-500 bg-gold-500/10 text-gold-300"
+                : "border-ink-700 bg-ink-900/40 text-paper hover:border-ink-600"
+            }`}
+          >
+            <span className="font-medium leading-tight">{league.name}</span>
+            {league.tier > 1 && (
+              <span className="notch-sm bg-ink-800 px-1.5 py-0.5 text-[10px] text-smoke-500">Tier {league.tier}</span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }

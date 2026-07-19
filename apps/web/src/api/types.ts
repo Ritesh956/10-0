@@ -126,3 +126,76 @@ export interface CatalogFilter {
   clubSeasonId?: string;
   ratingsMode?: "season" | "prime";
 }
+
+export interface MatchGoalDto {
+  minute: number;
+  clubId: string;
+  scorerName: string;
+  assistName?: string;
+}
+
+export interface MatchSummaryDto {
+  fixtureId: string;
+  matchday: number;
+  homeClubId: string;
+  awayClubId: string;
+  homeScore: number;
+  awayScore: number;
+  goals: MatchGoalDto[];
+}
+
+export interface SquadStatRowDto {
+  playerId: string;
+  name: string;
+  matchesPlayed: number;
+  goals: number;
+  assists: number;
+}
+
+export interface TeamStatsDto {
+  clubId: string;
+  goalsFor: number;
+  goalsAgainst: number;
+  topScorer?: SquadStatRowDto;
+  topAssist?: SquadStatRowDto;
+  squad: SquadStatRowDto[];
+}
+
+export type KnockoutRound = "QF" | "SF" | "FINAL";
+
+export interface KnockoutTieDto {
+  id: string;
+  round: KnockoutRound;
+  homeClubId: string;
+  awayClubId: string;
+  firstLegFixtureId: string | null;
+  secondLegFixtureId: string | null;
+  winnerClubId: string | null;
+  wentToPenalties: boolean;
+}
+
+export interface EuropeStatusDto {
+  qualified: boolean;
+  position: number;
+  qualifierCount: number;
+  competitionId?: string;
+  ties: KnockoutTieDto[];
+}
+
+export interface EuropeLeaguePhaseDto {
+  competitionId: string;
+  seasonId: string;
+}
+
+export interface EuropeRoundDto {
+  round: KnockoutRound;
+  seasonId: string;
+  ties: KnockoutTieDto[];
+}
+
+export interface EuropeAdvanceResultDto {
+  resolvedRound: KnockoutRound;
+  resolvedTies: KnockoutTieDto[];
+  next?: EuropeRoundDto;
+  champion?: string;
+}

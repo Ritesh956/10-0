@@ -11,6 +11,7 @@ import { Toggle } from "../components/ui/Toggle";
 import { Chip } from "../components/ui/Chip";
 import { SiteFooter } from "../components/SiteFooter";
 import { isFormation } from "../lib/formations";
+import { isRealCountry } from "../lib/leagues";
 import { useDraft, type Difficulty, type DraftMode, type PlayerRatingsMode } from "../state/DraftContext";
 
 interface SectionProps {
@@ -77,7 +78,10 @@ export function SetupPage() {
 
   useEffect(() => {
     if (!config.eraId) return;
-    void api.listLeagues(config.eraId).then(setLeagues).catch(() => setLeagues([]));
+    void api
+      .listLeagues(config.eraId)
+      .then((list) => setLeagues(list.filter((l) => isRealCountry(l.country))))
+      .catch(() => setLeagues([]));
   }, [config.eraId]);
 
   const activeEra = eras.find((e) => e.id === config.eraId);

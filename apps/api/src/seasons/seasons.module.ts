@@ -7,5 +7,6 @@ import { SeasonsService } from "./seasons.service.js";
   imports: [WorldsModule],
   controllers: [SeasonsController],
   providers: [SeasonsService],
+  exports: [SeasonsService],
 })
 export class SeasonsModule {}

@@ -1,11 +1,11 @@
-import { Controller, Get, Query } from "@nestjs/common";
+import { Controller, Get, Inject, Query } from "@nestjs/common";
 import { CatalogService } from "./catalog.service.js";
 import { clubSeasonFilterSchema, playerSeasonFilterSchema } from "./catalog.schemas.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
 
 @Controller("catalog")
 export class CatalogController {
-  constructor(private readonly catalog: CatalogService) {}
+  constructor(@Inject(CatalogService) private readonly catalog: CatalogService) {}
 
   @Get("eras")
   listEras() {

@@ -219,6 +219,7 @@ model World {
   competitions Competition[]
   fixtures     Fixture[]
   matches      Match[]
+  knockoutTies KnockoutTie[]
   transfers    Transfer[]
   memberships  LeagueMembership[]
   chatMessages ChatMessage[]
@@ -318,6 +319,7 @@ model Season {
   competitionId String
   year          Int
   status        SeasonStatus @default(SCHEDULED)
+  createdAt     DateTime     @default(now())
 
   world       World       @relation(fields: [worldId], references: [id])
   competition Competition @relation(fields: [competitionId], references: [id])
@@ -409,6 +411,33 @@ model PlayerMatchStat {
   @@index([matchId])
   @@index([playerId])
   @@map("player_match_stats")
+}
+
+enum KnockoutRound {
+  QF
+  SF
+  FINAL
+}
+
+/// A two-legged knockout tie (single match for FINAL, stored as firstLeg with secondLeg left null).
+/// Fixture/Match don't otherwise capture "these two fixtures are one aggregate tie" — this is the
+/// join. homeClubId/awayClubId are the nominal seeding order; homeClubId hosts the decisive leg 2.
+model KnockoutTie {
+  id                 String        @id @default(cuid())
+  worldId            String
+  competitionId      String
+  round              KnockoutRound
+  homeClubId         String
+  awayClubId         String
+  firstLegFixtureId  String?       @unique
+  secondLegFixtureId String?       @unique
+  winnerClubId       String?
+  wentToPenalties    Boolean       @default(false)
+
+  world World @relation(fields: [worldId], references: [id])
+
+  @@index([worldId, competitionId])
+  @@map("knockout_ties")
 }
 
 // ---- Phase 2+ models: schema-complete now, filled in as their phase lands ----

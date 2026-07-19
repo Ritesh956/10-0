@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard.js";
 import { CurrentUser } from "../auth/current-user.decorator.js";
 import type { AuthTokenPayload } from "../auth/auth.service.js";
@@ -9,7 +9,7 @@ import { createSeasonSchema, type CreateSeasonDto } from "./seasons.schemas.js";
 @UseGuards(JwtAuthGuard)
 @Controller("worlds/:worldId/seasons")
 export class SeasonsController {
-  constructor(private readonly seasons: SeasonsService) {}
+  constructor(@Inject(SeasonsService) private readonly seasons: SeasonsService) {}
 
   @Post()
   create(
@@ -50,5 +50,24 @@ export class SeasonsController {
     @Param("seasonId") seasonId: string,
   ) {
     return this.seasons.getSummary(worldId, seasonId, user.sub);
+  }
+
+  @Get(":seasonId/matches")
+  matches(
+    @CurrentUser() user: AuthTokenPayload,
+    @Param("worldId") worldId: string,
+    @Param("seasonId") seasonId: string,
+  ) {
+    return this.seasons.getMatchesWithEvents(worldId, seasonId, user.sub);
+  }
+
+  @Get(":seasonId/team-stats")
+  teamStats(
+    @CurrentUser() user: AuthTokenPayload,
+    @Param("worldId") worldId: string,
+    @Param("seasonId") seasonId: string,
+    @Query("clubId") clubId: string,
+  ) {
+    return this.seasons.getTeamStats(worldId, seasonId, clubId, user.sub);
   }
 }

@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Inject, Param, Post, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard.js";
 import { CurrentUser } from "../auth/current-user.decorator.js";
 import type { AuthTokenPayload } from "../auth/auth.service.js";
@@ -9,7 +9,7 @@ import { draftClubSchema, draftFantasySchema, type DraftClubDto, type DraftFanta
 @UseGuards(JwtAuthGuard)
 @Controller("worlds/:worldId/draft")
 export class DraftController {
-  constructor(private readonly draft: DraftService) {}
+  constructor(@Inject(DraftService) private readonly draft: DraftService) {}
 
   @Post("club")
   draftClub(

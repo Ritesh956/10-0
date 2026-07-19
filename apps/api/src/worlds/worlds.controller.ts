@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Post, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard.js";
 import { CurrentUser } from "../auth/current-user.decorator.js";
 import type { AuthTokenPayload } from "../auth/auth.service.js";
@@ -9,7 +9,7 @@ import { createWorldSchema, type CreateWorldDto } from "./worlds.schemas.js";
 @UseGuards(JwtAuthGuard)
 @Controller("worlds")
 export class WorldsController {
-  constructor(private readonly worlds: WorldsService) {}
+  constructor(@Inject(WorldsService) private readonly worlds: WorldsService) {}
 
   @Post()
   create(@CurrentUser() user: AuthTokenPayload, @Body(new ZodValidationPipe(createWorldSchema)) dto: CreateWorldDto) {

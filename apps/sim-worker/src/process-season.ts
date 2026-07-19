@@ -49,12 +49,29 @@ function toWorldClubRow(club: { id: string; worldId: string; name: string; forma
 export async function processSeasonSimJob(prisma: PrismaClient, job: SeasonSimJob): Promise<void> {
   const { worldId, seasonId } = job;
 
+  const season = await prisma.season.findUniqueOrThrow({ where: { id: seasonId }, include: { competition: true } });
+  const isContinental = season.competition.type === "CONTINENTAL";
+
+  // The Champions League Final is a single neutral-venue match — every other continental fixture
+  // (league phase + two-legged knockout ties) is "cup" importance, domestic fixtures stay "league".
+  const finalFixtureIds = new Set<string>();
+  if (isContinental) {
+    const finalTies = await prisma.knockoutTie.findMany({
+      where: { worldId, competitionId: season.competitionId, round: "FINAL" },
+    });
+    for (const tie of finalTies) {
+      if (tie.firstLegFixtureId) finalFixtureIds.add(tie.firstLegFixtureId);
+      if (tie.secondLegFixtureId) finalFixtureIds.add(tie.secondLegFixtureId);
+    }
+  }
+
   const fixtures = await prisma.fixture.findMany({
     where: { worldId, seasonId, status: "SCHEDULED" },
     orderBy: { matchday: "asc" },
   });
 
   for (const fixture of fixtures) {
+    const isFinal = finalFixtureIds.has(fixture.id);
     const [homeClub, awayClub] = await Promise.all([
       prisma.worldClub.findUniqueOrThrow({ where: { id: fixture.homeClubId }, include: { refManager: true } }),
       prisma.worldClub.findUniqueOrThrow({ where: { id: fixture.awayClubId }, include: { refManager: true } }),
@@ -75,8 +92,8 @@ export async function processSeasonSimJob(prisma: PrismaClient, job: SeasonSimJo
       home: { clubId: homeClub.id, squad: homeSquad, tactics: homeTactics, isHome: true },
       away: { clubId: awayClub.id, squad: awaySquad, tactics: awayTactics, isHome: false },
       weather: "clear",
-      importance: "league",
-      neutralVenue: false,
+      importance: isFinal ? "final" : isContinental ? "cup" : "league",
+      neutralVenue: isFinal,
       rivalryIntensity: 0,
     });
 

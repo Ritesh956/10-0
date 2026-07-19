@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Inject, Post, UseGuards } from "@nestjs/common";
 import { AuthService } from "./auth.service.js";
 import type { AuthTokenPayload } from "./auth.service.js";
 import {
@@ -17,7 +17,7 @@ import { CurrentUser } from "./current-user.decorator.js";
 
 @Controller("auth")
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(@Inject(AuthService) private readonly authService: AuthService) {}
 
   @Post("register")
   register(@Body(new ZodValidationPipe(registerSchema)) dto: RegisterDto) {

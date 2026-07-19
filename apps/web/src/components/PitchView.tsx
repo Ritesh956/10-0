@@ -1,9 +1,29 @@
+import { useState } from "react";
 import { type Formation, POSITION_GROUP, positionLabel, slotsForFormation } from "../lib/formations";
 import { GROUP_FILL, GROUP_HALO, GROUP_TINT, initials } from "../lib/positionColors";
 
 export interface PitchSlotState {
   filled?: { name: string; overall?: number; photoUrl?: string | null };
   ineligible?: boolean;
+}
+
+/** Shows the player's photo when it loads, falling back to initials only if there's no photo or it fails to load. */
+function MarkerFace({ name, photoUrl }: { name: string; photoUrl?: string | null | undefined }) {
+  const [photoFailed, setPhotoFailed] = useState(false);
+  const showPhoto = Boolean(photoUrl) && !photoFailed;
+
+  if (showPhoto) {
+    return (
+      <img
+        src={photoUrl!}
+        alt=""
+        loading="lazy"
+        className="absolute inset-0 h-full w-full object-cover"
+        onError={() => setPhotoFailed(true)}
+      />
+    );
+  }
+  return <span className="relative">{initials(name)}</span>;
 }
 
 interface Props {
@@ -25,7 +45,10 @@ export function PitchView({ formation, slotState = {}, activeSlotIndex, showRati
     <div className="relative aspect-[3/4] w-full overflow-hidden rounded-md border-2 border-grass-600/60 bg-gradient-to-b from-grass-700 via-grass-800 to-grass-900 shadow-inner shadow-black/40">
       {/* pitch markings */}
       <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-paper/15" />
-      <div className="absolute left-1/2 top-1/2 h-24 w-24 -translate-x-1/2 -translate-y-1/2 rounded-full border border-paper/15" />
+      <div
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-paper/15"
+        style={{ width: "6%", aspectRatio: "1 / 1" }}
+      />
       <div className="absolute left-1/2 top-0 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-paper/15" />
       <div className="absolute left-1/2 top-[8%] h-[16%] w-[46%] -translate-x-1/2 border border-paper/15" />
       <div className="absolute bottom-0 left-1/2 h-[16%] w-[46%] -translate-x-1/2 border border-paper/15" />
@@ -65,18 +88,11 @@ export function PitchView({ formation, slotState = {}, activeSlotIndex, showRati
                       : `${GROUP_TINT[group]} text-paper`
                 }`}
               >
-                {state?.filled?.photoUrl && (
-                  <img
-                    src={state.filled.photoUrl}
-                    alt=""
-                    loading="lazy"
-                    className="absolute inset-0 h-full w-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.style.display = "none";
-                    }}
-                  />
+                {state?.filled ? (
+                  <MarkerFace name={state.filled.name} photoUrl={state.filled.photoUrl} />
+                ) : (
+                  <span className="relative">{slot.position}</span>
                 )}
-                <span className="relative">{state?.filled ? initials(state.filled.name) : slot.position}</span>
               </span>
             </span>
             {!compact && (
