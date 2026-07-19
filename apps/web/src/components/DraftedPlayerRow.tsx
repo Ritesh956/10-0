@@ -17,6 +17,17 @@ export function DraftedPlayerRow({ position, group, player, showRatings }: Props
       >
         {position}
       </span>
+      {player.player.photoUrl && (
+        <img
+          src={player.player.photoUrl}
+          alt=""
+          loading="lazy"
+          className="notch-sm h-8 w-8 shrink-0 object-cover"
+          onError={(e) => {
+            e.currentTarget.style.display = "none";
+          }}
+        />
+      )}
       <span className="min-w-0 flex-1">
         <span className="block truncate font-medium text-paper">{player.player.name}</span>
         <span className="block truncate text-xs text-smoke-500">{player.player.nationality}</span>

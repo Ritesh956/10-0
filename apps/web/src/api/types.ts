@@ -43,8 +43,21 @@ export interface PlayerSeasonDto {
   positions: string[];
   overall: number;
   potential: number;
-  player: { name: string; nationality: string };
+  player: { name: string; nationality: string; photoUrl: string | null };
   clubSeason: { club: { name: string } };
+}
+
+export interface ManagerDto {
+  id: string;
+  name: string;
+  nationality: string;
+  philosophy: string | null;
+  mentality: string;
+  tempo: string;
+  width: string;
+  pressing: string;
+  passingStyle: string;
+  managerPhilosophy: string | null;
 }
 
 export interface WorldClubDto {
@@ -111,4 +124,5 @@ export interface CatalogFilter {
   leagueIds?: string[];
   positions?: string[];
   clubSeasonId?: string;
+  ratingsMode?: "season" | "prime";
 }

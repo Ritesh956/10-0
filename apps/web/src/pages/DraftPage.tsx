@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
-import type { ClubSeasonDto, PlayerSeasonDto } from "../api/types";
+import type { ClubSeasonDto, ManagerDto, PlayerSeasonDto } from "../api/types";
 import { DraftedPlayerRow } from "../components/DraftedPlayerRow";
 import { DrawReel } from "../components/DrawReel";
 import { GuestGateModal } from "../components/GuestGateModal";
@@ -19,16 +19,29 @@ type PostDraftStep = "review" | "manager" | "preseason";
 
 const GROUP_ORDER: Record<PositionGroup, number> = { GK: 0, DEF: 1, MID: 2, ATT: 3 };
 
-const MANAGER_NAMES = [
-  "Anders Voss",
-  "Marco Bellandi",
-  "Owen Fairweather",
-  "Diego Salazar",
-  "Klaus Reinholt",
-  "Femi Adeyemi",
-  "Iain Calder",
-  "Rui Barbosa",
-];
+const TACTICS_LABELS: Record<string, string> = {
+  "very-defensive": "Very Defensive",
+  defensive: "Defensive",
+  balanced: "Balanced",
+  attacking: "Attacking",
+  "very-attacking": "Very Attacking",
+  slow: "Slow Tempo",
+  fast: "Fast Tempo",
+  narrow: "Narrow",
+  wide: "Wide",
+  low: "Low Press",
+  medium: "Medium Press",
+  high: "High Press",
+  short: "Short Passing",
+  mixed: "Mixed Passing",
+  direct: "Direct Passing",
+};
+
+function tacticsBadges(manager: ManagerDto): string[] {
+  return [manager.mentality, manager.tempo, manager.width, manager.pressing, manager.passingStyle].map(
+    (v) => TACTICS_LABELS[v] ?? v,
+  );
+}
 
 const ORDINAL_SUFFIX = ["th", "st", "nd", "rd"];
 function ordinal(n: number): string {
@@ -105,7 +118,8 @@ export function DraftPage() {
   const [moveSourceIndex, setMoveSourceIndex] = useState<number | null>(null);
 
   const [postDraftStep, setPostDraftStep] = useState<PostDraftStep>("review");
-  const [managerName, setManagerName] = useState<string | null>(null);
+  const [managerPick, setManagerPick] = useState<ManagerDto | null>(null);
+  const [spinningManager, setSpinningManager] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [showGuestGate, setShowGuestGate] = useState(false);
@@ -138,7 +152,7 @@ export function DraftPage() {
   async function loadPlayersFor(club: ClubSeasonDto) {
     setLoadingPlayers(true);
     try {
-      const players = await api.listPlayerSeasons({ clubSeasonId: club.id });
+      const players = await api.listPlayerSeasons({ clubSeasonId: club.id, ratingsMode: config.playerRatings });
       setPlayerPool(players);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load players");
@@ -222,7 +236,7 @@ export function DraftPage() {
       const world = await api.createWorld(config.eraId);
       setWorldId(world.id);
       const refPlayerSeasonIds = slots.map((_, i) => picks[i]?.id).filter((id): id is string => Boolean(id));
-      await api.draftFantasy(world.id, squadName, config.formation, refPlayerSeasonIds);
+      await api.draftFantasy(world.id, squadName, config.formation, refPlayerSeasonIds, managerPick?.id);
       navigate("/season");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to confirm your XI");
@@ -245,7 +259,7 @@ export function DraftPage() {
   slots.forEach((slot, i) => {
     const player = picks[i];
     slotState[i] = player
-      ? { filled: { name: player.player.name, overall: player.overall } }
+      ? { filled: { name: player.player.name, overall: player.overall, photoUrl: player.player.photoUrl } }
       : {
           ineligible: pendingPlayer
             ? !pendingPlayer.positions.includes(slot.position)
@@ -323,7 +337,7 @@ export function DraftPage() {
             setMoveMode(false);
             setMoveSourceIndex(null);
             setPostDraftStep("review");
-            setManagerName(null);
+            setManagerPick(null);
           }}
         >
           &#8635; Restart run
@@ -432,25 +446,34 @@ export function DraftPage() {
                 <p className="text-xs font-semibold uppercase tracking-widest text-smoke-600">Optional</p>
                 <h2 className="font-display text-xl font-bold uppercase tracking-wide text-paper">Add a manager?</h2>
                 <p className="text-sm text-smoke-500">
-                  A gaffer changes the story of your season, not your odds of going unbeaten.
+                  A real manager's tactical identity changes how your team actually plays &mdash; and its odds.
                 </p>
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <Button
                     variant="outline"
                     fullWidth
+                    disabled={spinningManager}
                     onClick={() => {
-                      const name = MANAGER_NAMES[Math.floor(Math.random() * MANAGER_NAMES.length)]!;
-                      setManagerName(name);
-                      setPostDraftStep("preseason");
+                      setSpinningManager(true);
+                      setError(null);
+                      void api
+                        .rollManager()
+                        .then((manager) => {
+                          setManagerPick(manager);
+                          setPostDraftStep("preseason");
+                        })
+                        .catch((err) => setError(err instanceof Error ? err.message : "Failed to draw a gaffer"))
+                        .finally(() => setSpinningManager(false));
                     }}
                   >
-                    Draw a gaffer
+                    {spinningManager ? "Drawing..." : "Draw a gaffer"}
                   </Button>
                   <Button
                     variant="ghost"
                     fullWidth
+                    disabled={spinningManager}
                     onClick={() => {
-                      setManagerName(null);
+                      setManagerPick(null);
                       setPostDraftStep("preseason");
                     }}
                   >
@@ -463,12 +486,31 @@ export function DraftPage() {
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-widest text-gold-400">Squad Complete</p>
                   <h2 className="mt-1 font-display text-2xl font-bold uppercase tracking-wide text-paper">
-                    {managerName ? `Under ${managerName}` : "Ready for kickoff"}
+                    {managerPick ? `Under ${managerPick.name}` : "Ready for kickoff"}
                   </h2>
                   <p className="mt-2 text-sm text-smoke-500">
                     Here&apos;s what the numbers say. Simulate the season to see if you beat it.
                   </p>
                 </div>
+
+                {managerPick && (
+                  <div className="notch space-y-3 border-2 border-ink-700 bg-ink-900/60 p-5 text-left">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-smoke-600">
+                      {managerPick.nationality}
+                    </p>
+                    {managerPick.philosophy && <p className="text-sm text-smoke-400">{managerPick.philosophy}</p>}
+                    <div className="flex flex-wrap gap-1.5">
+                      {tacticsBadges(managerPick).map((label) => (
+                        <span
+                          key={label}
+                          className="notch-sm border border-teal-500/40 bg-teal-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-teal-400"
+                        >
+                          {label}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="notch space-y-4 border-2 border-ink-700 bg-ink-900/60 p-5 text-left">
                   <p className="text-xs font-semibold uppercase tracking-widest text-smoke-600">Pre-season projection</p>

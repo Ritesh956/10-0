@@ -38,6 +38,7 @@ export class DraftService {
       formation: dto.formation,
       lineup,
       allPlayerSeasonIds: clubSeason.playerSeasons.map((p) => p.id),
+      refManagerId: dto.refManagerId,
     });
   }
 
@@ -66,6 +67,7 @@ export class DraftService {
       formation: dto.formation,
       lineup,
       allPlayerSeasonIds: dto.refPlayerSeasonIds,
+      refManagerId: dto.refManagerId,
     });
   }
 }

@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import type { Queue } from "bullmq";
 import type { PrismaClient } from "@futbol/db";
@@ -78,6 +79,10 @@ export class SeasonsService {
     });
     const pool = candidates.filter((c) => !usedRefClubSeasonIds.has(c.id));
 
+    // AI clubs get a random real manager unconditionally (invisible backend flavor) so the
+    // league is tactically varied regardless of whether the human user drafted one for themself.
+    const managerIds = (await this.prisma.refManager.findMany({ select: { id: true } })).map((m) => m.id);
+
     for (let i = 0; i < needed && i < pool.length; i++) {
       const clubSeason = pool[i];
       if (!clubSeason) continue;
@@ -95,6 +100,7 @@ export class SeasonsService {
         formation: AI_CLUB_FORMATION,
         lineup,
         allPlayerSeasonIds: clubSeason.playerSeasons.map((p) => p.id),
+        refManagerId: managerIds.length > 0 ? managerIds[randomInt(managerIds.length)] : undefined,
       });
     }
   }

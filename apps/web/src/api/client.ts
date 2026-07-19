@@ -4,6 +4,7 @@ import type {
   ClubSeasonDto,
   EraDto,
   LeagueDto,
+  ManagerDto,
   PlayerSeasonDto,
   SeasonDto,
   StandingsDto,
@@ -32,6 +33,7 @@ function toQuery(filter: CatalogFilter): string {
   if (filter.leagueIds?.length) params.set("leagueIds", filter.leagueIds.join(","));
   if (filter.positions?.length) params.set("positions", filter.positions.join(","));
   if (filter.clubSeasonId) params.set("clubSeasonId", filter.clubSeasonId);
+  if (filter.ratingsMode) params.set("ratingsMode", filter.ratingsMode);
   return params.toString();
 }
 
@@ -96,6 +98,10 @@ export const api = {
   listPlayerSeasons: (filter: CatalogFilter) =>
     request<PlayerSeasonDto[]>(`/catalog/player-seasons?${toQuery(filter)}`),
 
+  listManagers: () => request<ManagerDto[]>("/catalog/managers"),
+
+  rollManager: () => request<ManagerDto>("/catalog/roll-manager"),
+
   createWorld: (eraId: string) =>
     request<WorldDto>("/worlds", { method: "POST", body: JSON.stringify({ eraId, type: "SINGLE" }) }),
 
@@ -109,10 +115,16 @@ export const api = {
       body: JSON.stringify({ refClubSeasonId, formation }),
     }),
 
-  draftFantasy: (worldId: string, name: string, formation: string, refPlayerSeasonIds: string[]) =>
+  draftFantasy: (
+    worldId: string,
+    name: string,
+    formation: string,
+    refPlayerSeasonIds: string[],
+    refManagerId?: string,
+  ) =>
     request(`/worlds/${worldId}/draft/fantasy`, {
       method: "POST",
-      body: JSON.stringify({ name, formation, refPlayerSeasonIds }),
+      body: JSON.stringify({ name, formation, refPlayerSeasonIds, refManagerId }),
     }),
 
   createSeason: (worldId: string, competitionName: string, size: number) =>

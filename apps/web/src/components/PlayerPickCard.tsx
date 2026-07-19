@@ -24,7 +24,26 @@ export function PlayerPickCard({ player, showRatings, selected, disabled, muted,
         selected ? "border-gold-500 bg-gold-500/10" : "border-ink-700 bg-ink-900/40 hover:border-ink-600"
       } ${muted ? "opacity-60" : ""}`}
     >
-      {showRatings ? (
+      {player.player.photoUrl ? (
+        <span className="relative h-10 w-10 shrink-0">
+          <img
+            src={player.player.photoUrl}
+            alt=""
+            loading="lazy"
+            className="notch-sm h-10 w-10 object-cover"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
+          />
+          {showRatings && (
+            <span
+              className={`notch-sm absolute -bottom-1 -right-1 flex h-5 min-w-5 items-center justify-center px-0.5 font-display text-[10px] font-bold text-ink-950 ${GROUP_FILL[primaryGroup]}`}
+            >
+              {player.overall}
+            </span>
+          )}
+        </span>
+      ) : showRatings ? (
         <span
           className={`notch-sm flex h-10 w-10 shrink-0 items-center justify-center font-display text-sm font-bold text-ink-950 ${GROUP_FILL[primaryGroup]}`}
         >

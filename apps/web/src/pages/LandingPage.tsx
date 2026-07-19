@@ -70,15 +70,15 @@ export function LandingPage() {
             <dl className="mt-4 grid grid-cols-2 gap-4">
               <div>
                 <dt className="text-[10px] uppercase tracking-wide text-smoke-600">Leagues</dt>
-                <dd className="font-display text-3xl font-bold text-gold-400">6</dd>
+                <dd className="font-display text-3xl font-bold text-gold-400">12</dd>
               </div>
               <div>
                 <dt className="text-[10px] uppercase tracking-wide text-smoke-600">Countries</dt>
-                <dd className="font-display text-3xl font-bold text-gold-400">4</dd>
+                <dd className="font-display text-3xl font-bold text-gold-400">9</dd>
               </div>
               <div>
                 <dt className="text-[10px] uppercase tracking-wide text-smoke-600">Clubs</dt>
-                <dd className="font-display text-3xl font-bold text-paper">36</dd>
+                <dd className="font-display text-3xl font-bold text-paper">200+</dd>
               </div>
               <div>
                 <dt className="text-[10px] uppercase tracking-wide text-smoke-600">Seasons span</dt>

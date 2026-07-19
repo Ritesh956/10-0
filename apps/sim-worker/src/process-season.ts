@@ -1,10 +1,30 @@
 import { randomBytes } from "node:crypto";
 import type { PrismaClient } from "@futbol/db";
 import { simulate } from "@futbol/engine";
-import { matchSetup as matchSetupSchema, tactics as tacticsSchema, type SeasonSimJob } from "@futbol/domain";
+import { matchSetup as matchSetupSchema, tactics as tacticsSchema, type SeasonSimJob, type Tactics } from "@futbol/domain";
 import { buildSquad, type WorldClubRow, type WorldPlayerRow } from "./build-squad.js";
 
 const DEFAULT_TACTICS = tacticsSchema.parse({});
+
+interface RefManagerRow {
+  mentality: string;
+  tempo: string;
+  width: string;
+  pressing: string;
+  passingStyle: string;
+}
+
+/** Falls back to DEFAULT_TACTICS for manager-less clubs (e.g. the user declined a manager). */
+function tacticsForManager(manager: RefManagerRow | null): Tactics {
+  if (!manager) return DEFAULT_TACTICS;
+  return tacticsSchema.parse({
+    mentality: manager.mentality,
+    tempo: manager.tempo,
+    width: manager.width,
+    pressing: manager.pressing,
+    passingStyle: manager.passingStyle,
+  });
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -36,9 +56,11 @@ export async function processSeasonSimJob(prisma: PrismaClient, job: SeasonSimJo
 
   for (const fixture of fixtures) {
     const [homeClub, awayClub] = await Promise.all([
-      prisma.worldClub.findUniqueOrThrow({ where: { id: fixture.homeClubId } }),
-      prisma.worldClub.findUniqueOrThrow({ where: { id: fixture.awayClubId } }),
+      prisma.worldClub.findUniqueOrThrow({ where: { id: fixture.homeClubId }, include: { refManager: true } }),
+      prisma.worldClub.findUniqueOrThrow({ where: { id: fixture.awayClubId }, include: { refManager: true } }),
     ]);
+    const homeTactics = tacticsForManager(homeClub.refManager);
+    const awayTactics = tacticsForManager(awayClub.refManager);
     const [homePlayers, awayPlayers] = await Promise.all([
       prisma.worldPlayer.findMany({ where: { clubId: homeClub.id } }),
       prisma.worldPlayer.findMany({ where: { clubId: awayClub.id } }),
@@ -50,8 +72,8 @@ export async function processSeasonSimJob(prisma: PrismaClient, job: SeasonSimJo
     const setup = matchSetupSchema.parse({
       matchId: fixture.id,
       worldId,
-      home: { clubId: homeClub.id, squad: homeSquad, tactics: DEFAULT_TACTICS, isHome: true },
-      away: { clubId: awayClub.id, squad: awaySquad, tactics: DEFAULT_TACTICS, isHome: false },
+      home: { clubId: homeClub.id, squad: homeSquad, tactics: homeTactics, isHome: true },
+      away: { clubId: awayClub.id, squad: awaySquad, tactics: awayTactics, isHome: false },
       weather: "clear",
       importance: "league",
       neutralVenue: false,

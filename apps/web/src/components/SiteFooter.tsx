@@ -19,8 +19,11 @@ export function SiteFooter() {
       <p className="mt-6 text-xs text-ink-600">&copy; {new Date().getFullYear()} Futbol. All rights reserved.</p>
       <p className="mx-auto mt-4 max-w-2xl text-xs leading-relaxed text-ink-600">
         Futbol is an independent fan-made football draft and season simulator. It is not affiliated with,
-        endorsed by, sponsored by, or licensed by any club, competition, league, or governing body. All club
-        names, player names, and data used are fictional or used for informational and editorial purposes only.
+        endorsed by, sponsored by, or licensed by any club, competition, league, player, manager, or governing body.
+        Some club, player, and manager names reflect real people and real historical rosters (top-5 European
+        leagues, 2012–2024), included for factual reference; all overall ratings, attributes, tactical profiles,
+        and match outcomes are calculated independently by Futbol and are not sourced from, affiliated with, or
+        endorsed by any official rating system. Remaining content is fictional.
       </p>
     </footer>
   );

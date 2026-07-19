@@ -16,5 +16,7 @@ export const playerSeasonFilterSchema = z.object({
   leagueIds: commaList,
   clubSeasonId: z.string().optional(),
   positions: commaList,
+  /** "prime" swaps in each player's career-best season's rating/attributes, keeping the drawn club-season as display context. */
+  ratingsMode: z.enum(["season", "prime"]).optional(),
 });
 export type PlayerSeasonFilterDto = z.infer<typeof playerSeasonFilterSchema>;

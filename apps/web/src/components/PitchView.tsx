@@ -2,7 +2,7 @@ import { type Formation, POSITION_GROUP, positionLabel, slotsForFormation } from
 import { GROUP_FILL, GROUP_HALO, GROUP_TINT, initials } from "../lib/positionColors";
 
 export interface PitchSlotState {
-  filled?: { name: string; overall?: number };
+  filled?: { name: string; overall?: number; photoUrl?: string | null };
   ineligible?: boolean;
 }
 
@@ -57,7 +57,7 @@ export function PitchView({ formation, slotState = {}, activeSlotIndex, showRati
               )}
               <span
                 style={DIAMOND}
-                className={`relative flex items-center justify-center font-display font-bold transition ${markerSize} ${
+                className={`relative flex items-center justify-center overflow-hidden font-display font-bold transition ${markerSize} ${
                   state?.ineligible
                     ? "bg-ink-700 text-smoke-500"
                     : state?.filled
@@ -65,7 +65,18 @@ export function PitchView({ formation, slotState = {}, activeSlotIndex, showRati
                       : `${GROUP_TINT[group]} text-paper`
                 }`}
               >
-                {state?.filled ? initials(state.filled.name) : slot.position}
+                {state?.filled?.photoUrl && (
+                  <img
+                    src={state.filled.photoUrl}
+                    alt=""
+                    loading="lazy"
+                    className="absolute inset-0 h-full w-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
+                  />
+                )}
+                <span className="relative">{state?.filled ? initials(state.filled.name) : slot.position}</span>
               </span>
             </span>
             {!compact && (

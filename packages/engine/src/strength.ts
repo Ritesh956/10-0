@@ -90,13 +90,30 @@ const MENTALITY_MODIFIERS: Record<Mentality, { attack: number; defence: number }
   "very-attacking": { attack: 1.18, defence: 0.82 },
 };
 
-/** Shifts attack/defence balance per the manager's chosen mentality. */
+/** Wide play trades defensive solidity for creation; narrow is the inverse. */
+const WIDTH_MODIFIERS: Record<Tactics["width"], { creation: number; defence: number }> = {
+  narrow: { creation: 0.95, defence: 1.05 },
+  balanced: { creation: 1, defence: 1 },
+  wide: { creation: 1.06, defence: 0.96 },
+};
+
+/** Short/possession passing trades directness for creation reliability; direct is the inverse. */
+const PASSING_STYLE_MODIFIERS: Record<Tactics["passingStyle"], { creation: number; attack: number }> = {
+  short: { creation: 1.06, attack: 0.97 },
+  mixed: { creation: 1, attack: 1 },
+  direct: { creation: 0.94, attack: 1.05 },
+};
+
+/** Shifts unit ratings per the manager's chosen mentality/width/passing style. */
 export function applyTactics(ratings: UnitRatings, tactics: Tactics): UnitRatings {
-  const mod = MENTALITY_MODIFIERS[tactics.mentality];
+  const mentalityMod = MENTALITY_MODIFIERS[tactics.mentality];
+  const widthMod = WIDTH_MODIFIERS[tactics.width];
+  const passingMod = PASSING_STYLE_MODIFIERS[tactics.passingStyle];
   return {
     ...ratings,
-    attack: ratings.attack * mod.attack,
-    defence: ratings.defence * mod.defence,
+    attack: ratings.attack * mentalityMod.attack * passingMod.attack,
+    creation: ratings.creation * widthMod.creation * passingMod.creation,
+    defence: ratings.defence * mentalityMod.defence * widthMod.defence,
   };
 }
 

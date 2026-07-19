@@ -105,6 +105,7 @@ model RefPlayer {
   name        String
   nationality String
   dateOfBirth DateTime
+  photoUrl    String?
 
   playerSeasons RefPlayerSeason[]
 
@@ -135,11 +136,23 @@ model RefPlayerSeason {
   @@map("ref_player_seasons")
 }
 
+/// Tactical identity is our own classification of well-documented real playstyles (see
+/// packages/db/prisma/seed-managers.ts) — not copied from any proprietary rating system.
 model RefManager {
-  id          String  @id @default(cuid())
-  name        String
-  nationality String
-  philosophy  String?
+  id                String  @id @default(cuid())
+  name              String
+  nationality       String
+  /// Short human-readable blurb for UI display, e.g. "Fluid possession, intense counter-press".
+  philosophy        String?
+  mentality         String
+  tempo             String
+  width             String
+  pressing          String
+  passingStyle      String
+  /// One of the domain Tactics.managerPhilosophy enum values; display-only, no separate engine modifier.
+  managerPhilosophy String?
+
+  worldClubs WorldClub[]
 
   @@map("ref_managers")
 }
@@ -222,6 +235,8 @@ model WorldClub {
   name            String
   managedByUserId String? // null = AI-controlled
   formation       String?
+  /// Live reference to the reference catalog (not copied — a manager's tactics don't evolve during a world's life).
+  refManagerId    String?
   /// Array of {position, playerId} — exactly 11 once drafted. Domain Squad.startingXI shape.
   lineup          Json?
   /// Array of {position, playerId}, up to 12. Domain Squad.substitutes shape.
@@ -229,6 +244,7 @@ model WorldClub {
 
   world         World          @relation(fields: [worldId], references: [id])
   refClubSeason RefClubSeason? @relation(fields: [refClubSeasonId], references: [id])
+  refManager    RefManager?    @relation(fields: [refManagerId], references: [id])
   players       WorldPlayer[]
   contracts     Contract[]
   staff         Staff[]
@@ -246,6 +262,7 @@ model WorldPlayer {
   clubId            String
   refPlayerSeasonId String
   name              String
+  photoUrl          String?
   age               Int
   positions         String[]
   preferredFoot     String

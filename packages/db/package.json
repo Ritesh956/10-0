@@ -23,6 +23,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "seed": "tsx prisma/seed.ts",
+    "seed:real": "tsx prisma/seed-real.ts",
+    "seed:managers": "tsx prisma/seed-managers.ts",
     "typecheck:seed": "tsc -p tsconfig.scripts.json"
   },
   "dependencies": {

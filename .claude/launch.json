@@ -7,6 +7,12 @@
       "runtimeArgs": ["--filter", "@futbol/web", "dev"],
       "port": 5173,
       "autoPort": true
+    },
+    {
+      "name": "api",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@futbol/api", "dev"],
+      "port": 4000
     }
   ]
 }

@@ -12,6 +12,8 @@ export interface InstantiateWorldClubArgs {
   formation: string;
   lineup: Lineup;
   allPlayerSeasonIds: string[];
+  /** null/undefined = no manager (tactics fall back to DEFAULT_TACTICS at simulation time). */
+  refManagerId?: string | undefined;
 }
 
 /**
@@ -34,6 +36,7 @@ export async function instantiateWorldClub(prisma: PrismaClient, args: Instantia
         name: args.name,
         managedByUserId: args.managedByUserId ?? null,
         formation: args.formation,
+        refManagerId: args.refManagerId ?? null,
         lineup: [],
         bench: [],
       },
@@ -53,6 +56,7 @@ export async function instantiateWorldClub(prisma: PrismaClient, args: Instantia
           clubId: club.id,
           refPlayerSeasonId: ps.id,
           name: ps.player.name,
+          photoUrl: ps.player.photoUrl,
           age: Math.max(15, ps.seasonYear - ps.player.dateOfBirth.getUTCFullYear()),
           positions: ps.positions,
           preferredFoot: ps.preferredFoot,

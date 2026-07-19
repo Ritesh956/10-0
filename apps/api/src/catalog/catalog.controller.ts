@@ -33,4 +33,14 @@ export class CatalogController {
   rollClubSeason(@Query(new ZodValidationPipe(clubSeasonFilterSchema)) filter: ReturnType<typeof clubSeasonFilterSchema.parse>) {
     return this.catalog.rollClubSeason(filter);
   }
+
+  @Get("managers")
+  listManagers() {
+    return this.catalog.listManagers();
+  }
+
+  @Get("roll-manager")
+  rollManager() {
+    return this.catalog.rollManager();
+  }
 }
