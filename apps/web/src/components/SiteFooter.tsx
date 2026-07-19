@@ -1,0 +1,27 @@
+import { Link } from "react-router-dom";
+
+const NAV_LINKS: Array<{ label: string; to: string }> = [
+  { label: "Home", to: "/" },
+  { label: "Play", to: "/setup" },
+  { label: "Multiplayer", to: "/multiplayer" },
+];
+
+export function SiteFooter() {
+  return (
+    <footer className="border-t-2 border-ink-800 px-6 py-10 text-center text-sm text-smoke-500">
+      <nav className="flex flex-wrap justify-center gap-x-6 gap-y-2 font-display uppercase tracking-wide">
+        {NAV_LINKS.map((link) => (
+          <Link key={link.to} to={link.to} className="hover:text-gold-400">
+            {link.label}
+          </Link>
+        ))}
+      </nav>
+      <p className="mt-6 text-xs text-ink-600">&copy; {new Date().getFullYear()} Futbol. All rights reserved.</p>
+      <p className="mx-auto mt-4 max-w-2xl text-xs leading-relaxed text-ink-600">
+        Futbol is an independent fan-made football draft and season simulator. It is not affiliated with,
+        endorsed by, sponsored by, or licensed by any club, competition, league, or governing body. All club
+        names, player names, and data used are fictional or used for informational and editorial purposes only.
+      </p>
+    </footer>
+  );
+}

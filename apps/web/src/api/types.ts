@@ -43,7 +43,7 @@ export interface PlayerSeasonDto {
   positions: string[];
   overall: number;
   potential: number;
-  player: { name: string };
+  player: { name: string; nationality: string };
   clubSeason: { club: { name: string } };
 }
 
@@ -110,4 +110,5 @@ export interface CatalogFilter {
   eraId?: string;
   leagueIds?: string[];
   positions?: string[];
+  clubSeasonId?: string;
 }

@@ -5,3 +5,64 @@
 html {
   color-scheme: dark;
 }
+
+::selection {
+  background-color: rgba(214, 154, 52, 0.35);
+}
+
+/* Angular ticket-stub silhouette — the app's signature shape, used instead of rounded corners. */
+.notch {
+  clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+}
+
+.notch-sm {
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(74 64 51) transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: rgb(74 64 51);
+  border-radius: 9999px;
+}
+
+.range-thumb {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  appearance: none;
+  background: transparent;
+}
+
+.range-thumb::-webkit-slider-thumb {
+  appearance: none;
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+  background: rgb(214 154 52);
+  cursor: pointer;
+  margin-top: 0;
+}
+
+.range-thumb::-moz-range-thumb {
+  pointer-events: auto;
+  width: 16px;
+  height: 16px;
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+  background: rgb(214 154 52);
+  border: none;
+  cursor: pointer;
+}
+
+.range-thumb::-webkit-slider-runnable-track {
+  background: transparent;
+}

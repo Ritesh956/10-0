@@ -10,9 +10,9 @@ export function StandingsTable({ standings, clubs, highlightClubId }: Props) {
   const nameFor = (clubId: string) => clubs.find((c) => c.id === clubId)?.name ?? clubId;
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-800">
+    <div className="notch overflow-x-auto border-2 border-ink-700">
       <table className="w-full text-sm">
-        <thead className="bg-slate-900 text-left text-xs uppercase tracking-wide text-slate-500">
+        <thead className="bg-ink-900 text-left font-display text-xs uppercase tracking-widest text-smoke-600">
           <tr>
             <th className="px-3 py-2">#</th>
             <th className="px-3 py-2">Club</th>
@@ -26,22 +26,22 @@ export function StandingsTable({ standings, clubs, highlightClubId }: Props) {
             <th className="px-3 py-2 text-center font-bold">Pts</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-800">
+        <tbody className="divide-y divide-ink-800">
           {standings.rows.map((row, i) => (
             <tr
               key={row.clubId}
-              className={row.clubId === highlightClubId ? "bg-emerald-500/10" : i % 2 === 0 ? "bg-slate-950" : "bg-slate-900/40"}
+              className={row.clubId === highlightClubId ? "bg-gold-500/10" : i % 2 === 0 ? "bg-ink-950" : "bg-ink-900/40"}
             >
-              <td className="px-3 py-2 text-slate-500">{i + 1}</td>
-              <td className="px-3 py-2 font-medium">{nameFor(row.clubId)}</td>
-              <td className="px-3 py-2 text-center">{row.played}</td>
-              <td className="px-3 py-2 text-center">{row.won}</td>
-              <td className="px-3 py-2 text-center">{row.drawn}</td>
-              <td className="px-3 py-2 text-center">{row.lost}</td>
-              <td className="px-3 py-2 text-center">{row.goalsFor}</td>
-              <td className="px-3 py-2 text-center">{row.goalsAgainst}</td>
-              <td className="px-3 py-2 text-center">{row.goalsFor - row.goalsAgainst}</td>
-              <td className="px-3 py-2 text-center font-bold text-emerald-400">{row.points}</td>
+              <td className="px-3 py-2 text-smoke-600">{i + 1}</td>
+              <td className="px-3 py-2 font-medium text-paper">{nameFor(row.clubId)}</td>
+              <td className="px-3 py-2 text-center text-smoke-400">{row.played}</td>
+              <td className="px-3 py-2 text-center text-smoke-400">{row.won}</td>
+              <td className="px-3 py-2 text-center text-smoke-400">{row.drawn}</td>
+              <td className="px-3 py-2 text-center text-smoke-400">{row.lost}</td>
+              <td className="px-3 py-2 text-center text-smoke-400">{row.goalsFor}</td>
+              <td className="px-3 py-2 text-center text-smoke-400">{row.goalsAgainst}</td>
+              <td className="px-3 py-2 text-center text-smoke-400">{row.goalsFor - row.goalsAgainst}</td>
+              <td className="px-3 py-2 text-center font-bold text-gold-400">{row.points}</td>
             </tr>
           ))}
         </tbody>

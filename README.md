@@ -57,7 +57,7 @@ pnpm --filter @futbol/sim-worker dev   # consumes season-simulation jobs
 pnpm --filter @futbol/web dev          # http://localhost:5173
 ```
 
-Then in the browser: **enter a username and hit "Play now"** (no email/password required to start) → pick an era → draft a club (browse, roll, or fantasy-draft players) → create a season → simulate → view standings and the shareable result card. A "Save your progress" button appears in the header for guest sessions — it attaches an email/password to the same account so history persists across devices.
+Then in the browser: from the landing page, **Start a draft** → **Set the Rules** (pick a league or all of them, a formation, difficulty, and a few other options) → the **Draft Room**, where you spin a wheel for a random club-season, pick a player from that squad into an open position, and repeat until the XI is full → review **Your XI**, optionally draw a manager, see a pre-season projection → **Simulate Season** → view standings and the shareable result card. A guest username is only requested at that final confirm step (via a lightweight modal), not up front — browsing and drafting work with no account. A **Multiplayer** mode (`/multiplayer`) supports local pass-and-play head-to-head: two players each draft an XI under the same rules, then a two-leg fixture decides the winner. A "Save your progress" button appears in the header for guest sessions — it attaches an email/password to the same account so history persists across devices.
 
 ## Verifying the whole workspace
 
@@ -77,4 +77,4 @@ Beyond build/test/typecheck, the full user journey has been exercised against a 
 
 ## Known placeholder
 
-`packages/db/prisma/seed.ts` seeds a small **fictional** placeholder dataset (two made-up clubs, generated attributes) purely to exercise the pipeline end-to-end. The real historical player-season dataset (real clubs/players/eras) is a separate data-sourcing decision — see the architecture doc's licensing note and open question on dataset source.
+`packages/db/prisma/seed.ts` seeds a broader but still entirely **fictional** placeholder dataset — 6 made-up leagues across 4 countries (36 clubs, 2 seasons each spanning 1992-2025, ~1,300 generated player-seasons) — enough for the league picker and spin-the-wheel draft to have real variety, with zero licensing risk. The real historical player-season dataset (real clubs/players/eras) is a separate data-sourcing decision — see the architecture doc's licensing note and open question on dataset source.

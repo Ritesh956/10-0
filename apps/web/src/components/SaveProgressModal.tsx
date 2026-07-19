@@ -27,29 +27,29 @@ export function SaveProgressModal({ onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/60 px-6">
-      <div className="w-full max-w-sm rounded-xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
-        <h2 className="text-lg font-bold text-white">Save your progress</h2>
-        <p className="mt-1 text-sm text-slate-400">
+    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/70 px-6">
+      <div className="notch w-full max-w-sm border-2 border-ink-700 bg-ink-900 p-6 shadow-2xl">
+        <h2 className="font-display text-lg font-bold uppercase tracking-wide text-paper">Save your progress</h2>
+        <p className="mt-1 text-sm text-smoke-500">
           Add an email and password so your worlds and history stick around across devices.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div>
-            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Email</label>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-widest text-smoke-600">Email</label>
             <input
               type="email"
-              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+              className="notch-sm w-full border-2 border-ink-700 bg-ink-950 px-3 py-2 text-sm text-paper outline-none focus:border-gold-500"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">Password</label>
+            <label className="mb-1 block text-xs font-medium uppercase tracking-widest text-smoke-600">Password</label>
             <input
               type="password"
-              className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+              className="notch-sm w-full border-2 border-ink-700 bg-ink-950 px-3 py-2 text-sm text-paper outline-none focus:border-gold-500"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -57,20 +57,20 @@ export function SaveProgressModal({ onClose }: Props) {
             />
           </div>
 
-          {error && <p className="text-sm text-rose-400">{error}</p>}
+          {error && <p className="text-sm text-crimson-400">{error}</p>}
 
           <div className="flex gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 rounded-md border border-slate-700 py-2 text-sm text-slate-300 hover:border-slate-500"
+              className="notch-sm flex-1 border-2 border-ink-700 py-2 text-sm text-smoke-400 hover:border-ink-600"
             >
               Not now
             </button>
             <button
               type="submit"
               disabled={busy}
-              className="flex-1 rounded-md bg-emerald-500 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:opacity-50"
+              className="notch-sm flex-1 bg-gold-500 py-2 text-sm font-display font-semibold uppercase tracking-wide text-ink-950 transition hover:bg-gold-400 disabled:opacity-50"
             >
               {busy ? "Saving..." : "Save progress"}
             </button>

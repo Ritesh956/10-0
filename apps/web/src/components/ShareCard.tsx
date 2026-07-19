@@ -15,44 +15,44 @@ export function ShareCard({ summary }: Props) {
 
   return (
     <div
-      className={`relative overflow-hidden rounded-2xl border p-8 text-center shadow-2xl ${
+      className={`notch relative overflow-hidden border-2 p-8 text-center shadow-2xl ${
         unbeaten
-          ? "border-amber-400/60 bg-gradient-to-br from-amber-500/20 via-slate-900 to-slate-950"
-          : "border-slate-800 bg-gradient-to-br from-emerald-500/10 via-slate-900 to-slate-950"
+          ? "border-gold-400/70 bg-gradient-to-br from-gold-500/20 via-ink-900 to-ink-950"
+          : "border-ink-700 bg-gradient-to-br from-teal-500/10 via-ink-900 to-ink-950"
       }`}
     >
       {unbeaten && (
-        <div className="absolute right-4 top-4 rounded-full bg-amber-400 px-3 py-1 text-xs font-black uppercase tracking-wider text-slate-950">
+        <div className="notch-sm absolute right-4 top-4 border-2 border-gold-300 bg-gold-400 px-3 py-1 font-display text-xs font-bold uppercase tracking-wider text-ink-950">
           Unbeaten
         </div>
       )}
-      <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Season Result</p>
-      <h2 className="mt-2 text-3xl font-black tracking-tight text-white">{userClub.name}</h2>
-      <p className="mt-1 text-sm text-slate-400">Finished {position ? `#${position}` : "—"} in the table</p>
+      <p className="text-xs uppercase tracking-[0.3em] text-smoke-600">Season Result</p>
+      <h2 className="mt-2 font-display text-3xl font-bold uppercase tracking-tight text-paper">{userClub.name}</h2>
+      <p className="mt-1 text-sm text-smoke-500">Finished {position ? `#${position}` : "—"} in the table</p>
 
       <div className="mx-auto mt-6 grid max-w-xs grid-cols-3 gap-4 text-center">
         <div>
-          <div className="text-2xl font-black text-emerald-400">{userRow.won}</div>
-          <div className="text-xs uppercase text-slate-500">Won</div>
+          <div className="font-display text-2xl font-bold text-gold-400">{userRow.won}</div>
+          <div className="text-xs uppercase text-smoke-600">Won</div>
         </div>
         <div>
-          <div className="text-2xl font-black text-slate-300">{userRow.drawn}</div>
-          <div className="text-xs uppercase text-slate-500">Drawn</div>
+          <div className="font-display text-2xl font-bold text-smoke-400">{userRow.drawn}</div>
+          <div className="text-xs uppercase text-smoke-600">Drawn</div>
         </div>
         <div>
-          <div className="text-2xl font-black text-rose-400">{userRow.lost}</div>
-          <div className="text-xs uppercase text-slate-500">Lost</div>
+          <div className="font-display text-2xl font-bold text-crimson-400">{userRow.lost}</div>
+          <div className="text-xs uppercase text-smoke-600">Lost</div>
         </div>
       </div>
 
-      <p className="mt-6 text-lg font-bold text-white">
+      <p className="mt-6 text-lg font-bold text-paper">
         {userRow.goalsFor}-{userRow.goalsAgainst}{" "}
-        <span className="text-sm font-normal text-slate-400">goals for/against</span>
+        <span className="text-sm font-normal text-smoke-500">goals for/against</span>
       </p>
 
       <button
         onClick={copyToClipboard}
-        className="mt-8 rounded-md bg-white px-5 py-2 text-sm font-semibold text-slate-950 transition hover:bg-slate-200"
+        className="notch-sm mt-8 border-2 border-paper bg-paper px-5 py-2 text-sm font-display font-semibold uppercase tracking-wide text-ink-950 transition hover:bg-gold-300 hover:border-gold-300"
       >
         Copy result to share
       </button>

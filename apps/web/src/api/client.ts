@@ -31,6 +31,7 @@ function toQuery(filter: CatalogFilter): string {
   if (filter.eraId) params.set("eraId", filter.eraId);
   if (filter.leagueIds?.length) params.set("leagueIds", filter.leagueIds.join(","));
   if (filter.positions?.length) params.set("positions", filter.positions.join(","));
+  if (filter.clubSeasonId) params.set("clubSeasonId", filter.clubSeasonId);
   return params.toString();
 }
 
