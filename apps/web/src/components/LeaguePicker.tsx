@@ -34,7 +34,7 @@ export function LeaguePicker({ leagues, selectedIds, onChange, singleSelect = fa
           onClick={() => onChange([])}
           className={`notch-sm flex min-h-16 flex-col items-center justify-center gap-0.5 border-2 px-3 py-2.5 text-center text-sm font-semibold uppercase tracking-wide transition ${
             selectedIds.length === 0
-              ? "border-gold-500 bg-gold-500/10 text-gold-300"
+              ? "border-mint-500 bg-mint-500/10 text-mint-300"
               : "border-ink-700 bg-ink-900/40 text-paper hover:border-ink-600"
           }`}
         >
@@ -51,7 +51,7 @@ export function LeaguePicker({ leagues, selectedIds, onChange, singleSelect = fa
             onClick={() => toggle(league.id)}
             className={`notch-sm flex min-h-16 flex-col items-center justify-center gap-0.5 border-2 px-3 py-2.5 text-center text-sm transition ${
               active
-                ? "border-gold-500 bg-gold-500/10 text-gold-300"
+                ? "border-mint-500 bg-mint-500/10 text-mint-300"
                 : "border-ink-700 bg-ink-900/40 text-paper hover:border-ink-600"
             }`}
           >

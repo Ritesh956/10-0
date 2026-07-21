@@ -10,11 +10,19 @@ export function SiteFooter() {
   return (
     <footer className="border-t-2 border-ink-800 px-6 py-10 text-center text-sm text-smoke-500">
       <nav className="flex flex-wrap justify-center gap-x-6 gap-y-2 font-display uppercase tracking-wide">
-        {NAV_LINKS.map((link) => (
-          <Link key={link.to} to={link.to} className="hover:text-gold-400">
-            {link.label}
-          </Link>
-        ))}
+        {NAV_LINKS.map((link, i) => {
+          const hoverColor = [
+            "hover:text-mint-400",
+            "hover:text-teal-400",
+            "hover:text-plum-400",
+            "hover:text-crimson-400",
+          ][i % 4];
+          return (
+            <Link key={link.to} to={link.to} className={`transition-colors ${hoverColor}`}>
+              {link.label}
+            </Link>
+          );
+        })}
       </nav>
       <p className="mt-6 text-xs text-ink-600">&copy; {new Date().getFullYear()} Futbol. All rights reserved.</p>
       <p className="mx-auto mt-4 max-w-2xl text-xs leading-relaxed text-ink-600">

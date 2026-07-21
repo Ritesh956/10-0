@@ -85,13 +85,13 @@ const MatchCard = forwardRef<HTMLDivElement, { match: MatchSummaryDto; nameFor: 
         initial="initial"
         animate="animate"
         exit="exit"
-        className="notch mx-auto max-w-sm border-2 border-ink-700 bg-ink-900/70 p-6"
+        className="notch mx-auto max-w-sm border border-ink-800 bg-ink-900/70 p-6"
       >
         <div className="flex items-center justify-center gap-3">
           <span className="min-w-0 flex-1 truncate text-right font-display text-lg font-bold uppercase tracking-tight text-paper">
             {nameFor(match.homeClubId)}
           </span>
-          <span className="notch-sm shrink-0 border border-gold-500/40 bg-gold-500/10 px-3 py-1 font-display text-xl font-bold text-gold-400">
+          <span className="notch-sm shrink-0 border border-mint-500/40 bg-mint-500/10 px-3 py-1 font-display text-xl font-bold text-mint-400">
             {score.home}-{score.away}
           </span>
           <span className="min-w-0 flex-1 truncate text-left font-display text-lg font-bold uppercase tracking-tight text-paper">

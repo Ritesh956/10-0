@@ -2,10 +2,10 @@ import confetti from "canvas-confetti";
 import { prefersReducedMotion } from "./motion";
 
 /** Locked to the brand palette (tailwind.config.ts) — never free-hand new celebration colors. */
-const GOLD_TEAL_PAPER = ["#d69a34", "#e6b559", "#f0cd8a", "#3d8f82", "#5aada0", "#f3ede0"];
+const CELEBRATION_PALETTE = ["#1fbf75", "#3ed98f", "#d69a34", "#e6b559", "#4facc9", "#f4f4f6"];
 
 function burst(opts: confetti.Options) {
-  void confetti({ colors: GOLD_TEAL_PAPER, disableForReducedMotion: true, ...opts });
+  void confetti({ colors: CELEBRATION_PALETTE, disableForReducedMotion: true, ...opts });
 }
 
 /** A single modest burst — CL qualification. */

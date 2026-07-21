@@ -6,34 +6,34 @@ export default {
   theme: {
     extend: {
       colors: {
-        /** Neutral warm-charcoal chrome — the app shell, not the pitch. */
+        /** Neutral near-black chrome — the app shell, not the pitch. */
         ink: {
-          950: "#0a0908",
-          900: "#151310",
-          850: "#1b1814",
-          800: "#211d17",
-          700: "#332c23",
-          600: "#4a4033",
+          950: "#0a0a0b",
+          900: "#131316",
+          850: "#19191d",
+          800: "#202024",
+          700: "#2d2d33",
+          600: "#43434b",
         },
-        /** Muted warm-gray text scale. */
+        /** Neutral cool-gray text scale. */
         smoke: {
-          600: "#8a8074",
-          500: "#a89d8e",
-          400: "#c4bbab",
+          600: "#8b8b93",
+          500: "#a6a6ad",
+          400: "#c2c2c8",
         },
-        /** Warm off-white for headings — never pure white. */
-        paper: "#f3ede0",
-        /** Primary accent: trophy gold. Actions, selection, celebration. */
-        gold: {
-          500: "#d69a34",
-          400: "#e6b559",
-          300: "#f0cd8a",
+        /** Neutral off-white for headings. */
+        paper: "#f4f4f6",
+        /** Primary accent: fresh pitch mint. Actions, selection, primary CTAs. */
+        mint: {
+          500: "#1fbf75",
+          400: "#3ed98f",
+          300: "#7de8b6",
         },
-        /** Secondary accent: informational. */
+        /** Secondary accent: informational / cool contrast. */
         teal: {
-          500: "#3d8f82",
-          400: "#5aada0",
-          300: "#82c4b8",
+          500: "#2f8fb0",
+          400: "#4facc9",
+          300: "#7ec8dd",
         },
         /** Tertiary accent: social / blind-mode contexts. */
         plum: {
@@ -43,9 +43,16 @@ export default {
         },
         /** Danger / loss. */
         crimson: {
-          500: "#b3452f",
-          400: "#c8624a",
-          300: "#dd8b78",
+          500: "#e5484d",
+          400: "#ef7176",
+          300: "#f5a3a6",
+        },
+        /** Celebration / trophy accent — used sparingly (Golden Boot, medal moments), not the
+            app's primary color anymore. */
+        amber: {
+          500: "#d69a34",
+          400: "#e6b559",
+          300: "#f0cd8a",
         },
         /** The literal grass — only ever used for the pitch graphic itself. */
         grass: {
@@ -62,21 +69,21 @@ export default {
       },
       backgroundImage: {
         "grass-lines":
-          "radial-gradient(circle at 50% 0%, rgba(214,154,52,0.06), transparent 55%), linear-gradient(180deg, rgba(10,9,8,0.4), rgba(10,9,8,0.9))",
+          "radial-gradient(circle at 50% 0%, rgba(31,191,117,0.07), transparent 55%), linear-gradient(180deg, rgba(10,10,11,0.4), rgba(10,10,11,0.9))",
       },
       keyframes: {
         "pop-in": {
           "0%": { opacity: "0", transform: "scale(0.92) translateY(6px)" },
           "100%": { opacity: "1", transform: "scale(1) translateY(0)" },
         },
-        "gold-pulse": {
+        "mint-pulse": {
           "0%, 100%": { opacity: "0.5" },
           "50%": { opacity: "1" },
         },
       },
       animation: {
         "pop-in": "pop-in 0.25s ease-out",
-        "gold-pulse": "gold-pulse 1s ease-in-out infinite",
+        "mint-pulse": "mint-pulse 1s ease-in-out infinite",
       },
     },
   },

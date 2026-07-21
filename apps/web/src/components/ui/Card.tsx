@@ -9,10 +9,10 @@ interface Props extends HTMLAttributes<HTMLDivElement> {
 export function Card({ interactive, selected, className = "", children, ...rest }: Props) {
   return (
     <div
-      className={`notch border-2 p-5 transition ${
+      className={`notch border-2 p-5 shadow-lg shadow-black/30 transition ${
         selected
-          ? "border-gold-500 bg-gold-500/10"
-          : "border-ink-700 bg-ink-900/60" + (interactive ? " hover:border-ink-600" : "")
+          ? "border-mint-500 bg-mint-500/10 shadow-mint-500/10"
+          : "border-ink-700 bg-ink-900/60" + (interactive ? " hover:border-ink-600 hover:shadow-black/50" : "")
       } ${className}`}
       {...rest}
     >

@@ -96,7 +96,7 @@ export function SlotReel({
   return (
     <div className="min-w-0 flex-1">
       <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-smoke-600">{label}</p>
-      <div className="notch-sm relative mt-2 h-36 overflow-hidden border-2 border-ink-700 bg-ink-950/60">
+      <div className="notch-sm relative mt-2 h-36 overflow-hidden border border-ink-800 bg-ink-950/60">
         <motion.div style={{ y }}>
           {strip.map((item, i) => {
             const isFinal = i === strip.length - 1;
@@ -116,7 +116,7 @@ export function SlotReel({
           })}
         </motion.div>
         {/* Center-row marker + edge fade — the classic slot-machine window chrome. */}
-        <div className="pointer-events-none absolute inset-x-0 top-1/3 h-1/3 border-y-2 border-gold-500/30 bg-gold-500/5" />
+        <div className="pointer-events-none absolute inset-x-0 top-1/3 h-1/3 border-y-2 border-mint-500/30 bg-mint-500/5" />
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-ink-950 via-transparent to-ink-950" />
       </div>
     </div>

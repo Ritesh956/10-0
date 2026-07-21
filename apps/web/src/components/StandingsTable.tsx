@@ -12,7 +12,7 @@ export function StandingsTable({ standings, clubs, highlightClubId }: Props) {
   const nameFor = (clubId: string) => clubs.find((c) => c.id === clubId)?.name ?? clubId;
 
   return (
-    <div className="notch overflow-x-auto border-2 border-ink-700">
+    <div className="notch overflow-x-auto border border-ink-800">
       <table className="w-full text-sm">
         <thead className="bg-ink-900 text-left font-display text-xs uppercase tracking-widest text-smoke-600">
           <tr>
@@ -35,27 +35,36 @@ export function StandingsTable({ standings, clubs, highlightClubId }: Props) {
           transition={{ staggerChildren: 0.03 }}
           className="divide-y divide-ink-800"
         >
-          {standings.rows.map((row, i) => (
-            <motion.tr
-              key={row.clubId}
-              variants={staggerItem}
-              className={row.clubId === highlightClubId ? "bg-gold-500/10" : i % 2 === 0 ? "bg-ink-950" : "bg-ink-900/40"}
-            >
-              <td className="px-3 py-2 text-smoke-600">{i + 1}</td>
-              <td className="px-3 py-2 font-medium text-paper">
-                {nameFor(row.clubId)}
-                {row.clubId === highlightClubId && <span className="ml-1.5 text-xs font-normal text-gold-400">(You)</span>}
-              </td>
-              <td className="px-3 py-2 text-center text-smoke-400">{row.played}</td>
-              <td className="px-3 py-2 text-center text-smoke-400">{row.won}</td>
-              <td className="px-3 py-2 text-center text-smoke-400">{row.drawn}</td>
-              <td className="px-3 py-2 text-center text-smoke-400">{row.lost}</td>
-              <td className="px-3 py-2 text-center text-smoke-400">{row.goalsFor}</td>
-              <td className="px-3 py-2 text-center text-smoke-400">{row.goalsAgainst}</td>
-              <td className="px-3 py-2 text-center text-smoke-400">{row.goalsFor - row.goalsAgainst}</td>
-              <td className="px-3 py-2 text-center font-bold text-gold-400">{row.points}</td>
-            </motion.tr>
-          ))}
+          {standings.rows.map((row, i) => {
+            const gd = row.goalsFor - row.goalsAgainst;
+            return (
+              <motion.tr
+                key={row.clubId}
+                variants={staggerItem}
+                className={row.clubId === highlightClubId ? "bg-mint-500/10" : i % 2 === 0 ? "bg-ink-950" : "bg-ink-900/40"}
+              >
+                <td className="px-3 py-2 text-smoke-600">{i + 1}</td>
+                <td className="px-3 py-2 font-medium text-paper">
+                  {nameFor(row.clubId)}
+                  {row.clubId === highlightClubId && <span className="ml-1.5 text-xs font-normal text-mint-400">(You)</span>}
+                </td>
+                <td className="px-3 py-2 text-center text-smoke-400">{row.played}</td>
+                <td className="px-3 py-2 text-center font-semibold text-teal-400">{row.won}</td>
+                <td className="px-3 py-2 text-center text-smoke-400">{row.drawn}</td>
+                <td className="px-3 py-2 text-center font-semibold text-crimson-400">{row.lost}</td>
+                <td className="px-3 py-2 text-center text-smoke-400">{row.goalsFor}</td>
+                <td className="px-3 py-2 text-center text-smoke-400">{row.goalsAgainst}</td>
+                <td
+                  className={`px-3 py-2 text-center font-medium ${
+                    gd > 0 ? "text-teal-400" : gd < 0 ? "text-crimson-400" : "text-smoke-400"
+                  }`}
+                >
+                  {gd > 0 ? `+${gd}` : gd}
+                </td>
+                <td className="px-3 py-2 text-center font-bold text-mint-400">{row.points}</td>
+              </motion.tr>
+            );
+          })}
         </motion.tbody>
       </table>
     </div>

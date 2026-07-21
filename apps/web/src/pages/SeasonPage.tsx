@@ -16,6 +16,7 @@ import type {
 } from "../api/types";
 import { CompetitionStatsPanel } from "../components/CompetitionStatsPanel";
 import { KnockoutBracket } from "../components/KnockoutBracket";
+import { MatchLog } from "../components/MatchLog";
 import { MatchPopupReel } from "../components/MatchPopupReel";
 import { ShareCard } from "../components/ShareCard";
 import { StandingsTable } from "../components/StandingsTable";
@@ -62,6 +63,9 @@ interface CachedStatsHub {
   allTies: KnockoutTieDto[];
   champion: string | null;
   summary: SummaryDto;
+  /** Optional for backward compat with cache entries saved before the persistent match log existed. */
+  domesticMatches?: MatchSummaryDto[];
+  europeMatches?: MatchSummaryDto[];
 }
 
 // A finished run's standings/stats are cached per-world so leaving /season and coming back (or
@@ -114,6 +118,10 @@ export function SeasonPage() {
   const [resolvedTies, setResolvedTies] = useState<KnockoutTieDto[]>([]);
   const [champion, setChampion] = useState<string | null>(null);
   const [allTies, setAllTies] = useState<KnockoutTieDto[]>([]);
+  // Every europe match across the league phase + all knockout rounds, for the persistent match
+  // log on the stats hub — unlike `knockoutMatches` (which the pipeline overwrites each round for
+  // the replay), this accumulates across the whole campaign.
+  const [europeAllMatches, setEuropeAllMatches] = useState<MatchSummaryDto[]>([]);
 
   // Final stats hub: league and (if qualified) Champions League stats live side by side behind a
   // tab toggle instead of a one-shot "summary" screen, so the user can freely flip between them
@@ -167,6 +175,8 @@ export function SeasonPage() {
         setAllTies(cached.allTies);
         setChampion(cached.champion);
         setSummary(cached.summary);
+        setDomesticMatches(cached.domesticMatches ?? []);
+        setEuropeAllMatches(cached.europeMatches ?? []);
         setStatsTab(cached.qualified ? "europe" : "league");
         setPhase("stats-hub");
       })
@@ -253,6 +263,8 @@ export function SeasonPage() {
         allTies: [],
         champion: null,
         summary: summaryRes,
+        domesticMatches: matches,
+        europeMatches: [],
       });
       return;
     }
@@ -288,7 +300,13 @@ export function SeasonPage() {
     setPhase("simulating");
     setSimulatingLabel("Setting up the knockouts…");
     const qf = await api.startEuropeKnockouts(wId, competitionId, leaguePhaseSeasonId);
-    const { champion: finalChampion, ties: finalTies } = await runKnockoutRound(wId, competitionId, qf);
+    const {
+      champion: finalChampion,
+      ties: finalTies,
+      matches: knockoutHistory,
+    } = await runKnockoutRound(wId, competitionId, qf);
+    const europeMatches = [...leagueMatches, ...knockoutHistory];
+    setEuropeAllMatches(europeMatches);
 
     const [summaryRes, europeStats, europeTeam] = await Promise.all([
       api.getSummary(wId, domesticSeasonId),
@@ -311,6 +329,8 @@ export function SeasonPage() {
       allTies: finalTies,
       champion: finalChampion,
       summary: summaryRes,
+      domesticMatches: matches,
+      europeMatches,
     });
   }
 
@@ -324,7 +344,8 @@ export function SeasonPage() {
     competitionId: string,
     round: EuropeRoundDto,
     tiesSoFar: KnockoutTieDto[] = [],
-  ): Promise<{ champion: string; ties: KnockoutTieDto[] }> {
+    matchesSoFar: MatchSummaryDto[] = [],
+  ): Promise<{ champion: string; ties: KnockoutTieDto[]; matches: MatchSummaryDto[] }> {
     setKnockoutRound(round.round);
     // Same reasoning as the league-phase transition above — this covers both the first entry
     // into the knockout stage and every recursive SF/FINAL call, so no round-to-round transition
@@ -335,8 +356,9 @@ export function SeasonPage() {
     setAllTies(ties);
     await pollUntilCompleted(wId, round.seasonId);
 
-    const matches = await api.getMatchesWithEvents(wId, round.seasonId);
-    setKnockoutMatches(matches);
+    const roundMatches = await api.getMatchesWithEvents(wId, round.seasonId);
+    const matches = [...matchesSoFar, ...roundMatches];
+    setKnockoutMatches(roundMatches);
     setPhase("europe-knockout-replay");
     await waitForReplay();
 
@@ -354,11 +376,11 @@ export function SeasonPage() {
       setChampion(result.champion);
       setPhase("europe-champion");
       await pause(3200);
-      return { champion: result.champion, ties: resolvedTies };
+      return { champion: result.champion, ties: resolvedTies, matches };
     }
 
     if (result.next) {
-      return runKnockoutRound(wId, competitionId, result.next, resolvedTies);
+      return runKnockoutRound(wId, competitionId, result.next, resolvedTies, matches);
     }
 
     throw new Error("Knockout stage ended without a champion");
@@ -374,6 +396,12 @@ export function SeasonPage() {
   // matches (or every other tie in a knockout round) just to see their own team's results roll in.
   const onlyMine = (list: MatchSummaryDto[]) =>
     userClub ? list.filter((m) => m.homeClubId === userClub.id || m.awayClubId === userClub.id) : list;
+  // Pulls the user's own W/D/L/Pts out of a standings table for TeamStatsPanel's record row —
+  // TeamStatsPanel itself only carries goals/squad stats, not the league record.
+  const recordFor = (table: StandingsDto | null) => {
+    const row = table?.rows.find((r) => r.clubId === userClub?.id);
+    return row ? { won: row.won, drawn: row.drawn, lost: row.lost, points: row.points } : undefined;
+  };
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 px-6 py-12">
@@ -393,7 +421,7 @@ export function SeasonPage() {
       )}
 
       {phase === "simulating" && (
-        <p className="animate-gold-pulse text-center text-sm text-smoke-500">{simulatingLabel}</p>
+        <p className="animate-mint-pulse text-center text-sm text-smoke-500">{simulatingLabel}</p>
       )}
 
       {phase === "domestic-replay" && (
@@ -419,7 +447,7 @@ export function SeasonPage() {
           <h2 className="text-center font-display text-lg font-semibold uppercase tracking-wide text-paper">
             {userClub?.name}&apos;s season
           </h2>
-          <TeamStatsPanel stats={teamStats} />
+          <TeamStatsPanel stats={teamStats} record={recordFor(standings)} />
           <div className="text-center">
             <Button variant="ghost" size="sm" onClick={skipPause}>
               Continue &rarr;
@@ -433,7 +461,7 @@ export function SeasonPage() {
           variants={staggerContainer}
           initial="initial"
           animate="animate"
-          className="notch space-y-3 border-2 border-gold-400/60 bg-gradient-to-br from-gold-500/15 via-ink-900 to-ink-950 p-8 text-center"
+          className="notch space-y-3 border-2 border-mint-400/60 bg-gradient-to-br from-mint-500/15 via-ink-900 to-ink-950 p-8 text-center"
         >
           <motion.p variants={staggerItemBounce} className="text-3xl">
             &#127942;
@@ -502,7 +530,7 @@ export function SeasonPage() {
           variants={staggerContainer}
           initial="initial"
           animate="animate"
-          className="notch space-y-3 border-2 border-gold-400/70 bg-gradient-to-br from-gold-500/20 via-ink-900 to-ink-950 p-8 text-center"
+          className="notch space-y-3 border-2 border-amber-400/70 bg-gradient-to-br from-amber-500/20 via-ink-900 to-ink-950 p-8 text-center"
         >
           <motion.p variants={staggerItemBounce} className="text-3xl">
             &#127942;
@@ -524,7 +552,7 @@ export function SeasonPage() {
       {phase === "stats-hub" && summary && (
         <div className="mx-auto max-w-2xl space-y-6">
           {qualified && champion && (
-            <p className="text-center text-sm text-gold-400">
+            <p className="text-center text-sm text-amber-400">
               {champion === userClub?.id
                 ? "European champions this season — the treble of storylines complete!"
                 : `${nameFor(champion)} lifted the Champions League this season.`}
@@ -557,7 +585,15 @@ export function SeasonPage() {
                   <h3 className="text-center font-display text-base font-semibold uppercase tracking-wide text-paper">
                     {userClub?.name}&apos;s league season
                   </h3>
-                  <TeamStatsPanel stats={teamStats} />
+                  <TeamStatsPanel stats={teamStats} record={recordFor(standings)} />
+                </>
+              )}
+              {domesticMatches.length > 0 && (
+                <>
+                  <h3 className="text-center font-display text-base font-semibold uppercase tracking-wide text-paper">
+                    Season Results
+                  </h3>
+                  <MatchLog matches={onlyMine(domesticMatches)} clubs={world.clubs} userClubId={userClub?.id} />
                 </>
               )}
             </div>
@@ -580,7 +616,15 @@ export function SeasonPage() {
                   <h3 className="text-center font-display text-base font-semibold uppercase tracking-wide text-paper">
                     {userClub?.name}&apos;s Champions League run
                   </h3>
-                  <TeamStatsPanel stats={europeTeamStats} />
+                  <TeamStatsPanel stats={europeTeamStats} record={recordFor(europeLeagueStandings)} />
+                </>
+              )}
+              {europeAllMatches.length > 0 && (
+                <>
+                  <h3 className="text-center font-display text-base font-semibold uppercase tracking-wide text-paper">
+                    Campaign Results
+                  </h3>
+                  <MatchLog matches={onlyMine(europeAllMatches)} clubs={world.clubs} userClubId={userClub?.id} />
                 </>
               )}
             </div>

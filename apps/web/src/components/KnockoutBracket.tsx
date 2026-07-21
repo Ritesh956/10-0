@@ -32,23 +32,29 @@ export function KnockoutBracket({ ties, clubs, highlightClubId }: Props) {
                   variants={staggerItem}
                   className={`notch-sm flex items-center justify-between gap-2 border-2 px-3 py-2 text-sm ${
                     tie.homeClubId === highlightClubId || tie.awayClubId === highlightClubId
-                      ? "border-gold-500/50 bg-gold-500/5"
+                      ? "border-mint-500/50 bg-mint-500/5"
                       : "border-ink-700 bg-ink-900/40"
                   }`}
                 >
-                  <span className={`min-w-0 flex-1 truncate ${homeWon ? "font-bold text-gold-300" : "text-paper"}`}>
+                  <span className={`min-w-0 flex-1 truncate ${homeWon ? "font-bold text-mint-300" : "text-paper"}`}>
                     {nameFor(tie.homeClubId)}
-                    {tie.homeClubId === highlightClubId && <span className="ml-1 text-[10px] font-normal text-gold-400">(You)</span>}
+                    {tie.homeClubId === highlightClubId && <span className="ml-1 text-[10px] font-normal text-mint-400">(You)</span>}
                   </span>
                   <span className="shrink-0 text-[10px] uppercase text-smoke-600">
                     {round === "FINAL" ? "final" : "vs"}
                   </span>
-                  <span className={`min-w-0 flex-1 truncate text-right ${awayWon ? "font-bold text-gold-300" : "text-paper"}`}>
-                    {tie.awayClubId === highlightClubId && <span className="mr-1 text-[10px] font-normal text-gold-400">(You)</span>}
+                  <span className={`min-w-0 flex-1 truncate text-right ${awayWon ? "font-bold text-mint-300" : "text-paper"}`}>
+                    {tie.awayClubId === highlightClubId && <span className="mr-1 text-[10px] font-normal text-mint-400">(You)</span>}
                     {nameFor(tie.awayClubId)}
                   </span>
                   {tie.winnerClubId && (
-                    <span className="shrink-0 notch-sm border border-ink-700 bg-ink-800 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-smoke-500">
+                    <span
+                      className={`shrink-0 notch-sm border px-1.5 py-0.5 text-[9px] uppercase tracking-wide ${
+                        tie.wentToPenalties
+                          ? "border-crimson-500/40 bg-crimson-500/10 text-crimson-300"
+                          : "border-teal-500/40 bg-teal-500/10 text-teal-300"
+                      }`}
+                    >
                       {tie.wentToPenalties ? "pens" : "won"}
                     </span>
                   )}

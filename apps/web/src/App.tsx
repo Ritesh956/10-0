@@ -19,7 +19,14 @@ function Shell() {
   const location = useLocation();
 
   return (
-    <div className="min-h-screen bg-ink-950">
+    <div className="relative min-h-screen bg-ink-950">
+      {/* Stadium-floodlight atmosphere: flat ink-950 everywhere read as dull, so every page gets a
+          faint layered glow (mint top, teal bottom-right, grass bottom-left) instead of solid black.
+          Fixed + behind everything + very low opacity, so it never competes with content contrast. */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(ellipse_70%_45%_at_50%_-8%,rgba(31,191,117,0.10),transparent),radial-gradient(ellipse_55%_40%_at_105%_15%,rgba(61,143,130,0.08),transparent),radial-gradient(ellipse_60%_45%_at_-5%_100%,rgba(22,101,52,0.10),transparent)]"
+      />
       <SiteHeader onRequestSaveProgress={isAuthenticated ? () => setShowSaveModal(true) : undefined} />
       <main>
         <AnimatePresence mode="wait">

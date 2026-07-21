@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { SPRING_SNAPPY } from "../../lib/motion";
 
-export type ToggleAccent = "gold" | "teal" | "crimson";
+export type ToggleAccent = "mint" | "teal" | "crimson";
 
 interface Props {
   label: string;
@@ -12,12 +12,12 @@ interface Props {
 }
 
 const ACCENT_CLASSES: Record<ToggleAccent, { border: string; bg: string; text: string }> = {
-  gold: { border: "border-gold-500/50", bg: "bg-gold-500", text: "text-gold-400" },
+  mint: { border: "border-mint-500/50", bg: "bg-mint-500", text: "text-mint-400" },
   teal: { border: "border-teal-500/50", bg: "bg-teal-500", text: "text-teal-400" },
   crimson: { border: "border-crimson-500/50", bg: "bg-crimson-500", text: "text-crimson-400" },
 };
 
-export function Toggle({ label, description, checked, onChange, accent = "gold" }: Props) {
+export function Toggle({ label, description, checked, onChange, accent = "mint" }: Props) {
   const accentClasses = ACCENT_CLASSES[accent];
   return (
     <motion.button
@@ -31,16 +31,14 @@ export function Toggle({ label, description, checked, onChange, accent = "gold" 
       }`}
     >
       <span
-        className={`relative inline-flex h-6 w-11 shrink-0 items-center transition ${
+        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ${
           checked ? accentClasses.bg : "bg-ink-700"
         }`}
-        style={{ clipPath: "polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px)" }}
       >
         <motion.span
           animate={{ x: checked ? 20 : 2 }}
           transition={SPRING_SNAPPY}
-          className="inline-block h-5 w-5 bg-paper shadow"
-          style={{ clipPath: "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)" }}
+          className="inline-block h-5 w-5 rounded-full bg-paper shadow"
         />
       </span>
       <span>

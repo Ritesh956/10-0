@@ -13,7 +13,7 @@ interface Props {
 }
 
 const TAG_TONE: Record<string, string> = {
-  recommended: "border-gold-500/40 bg-gold-500/10 text-gold-300",
+  recommended: "border-mint-500/40 bg-mint-500/10 text-mint-300",
   "already in your XI": "border-ink-700 bg-ink-800 text-smoke-500",
 };
 
@@ -26,10 +26,10 @@ export function PlayerPickCard({ player, showRatings, selected, disabled, muted,
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`notch-sm flex w-full items-center gap-3 border-2 px-3 py-2.5 text-left text-sm transition disabled:cursor-not-allowed disabled:opacity-40 ${
+      className={`notch-sm flex w-full items-center gap-3 border px-3 py-2.5 text-left text-sm transition disabled:cursor-not-allowed disabled:opacity-40 ${
         selected
-          ? "border-gold-500 bg-gold-500/10"
-          : "border-ink-700 bg-ink-900/40 hover:border-ink-600 hover:bg-ink-900/70"
+          ? "border-mint-500 bg-mint-500/10"
+          : "border-transparent bg-ink-900/50 hover:bg-ink-900/80"
       } ${muted ? "opacity-60" : ""}`}
     >
       {player.player.photoUrl ? (
@@ -58,7 +58,7 @@ export function PlayerPickCard({ player, showRatings, selected, disabled, muted,
           {player.overall}
         </span>
       ) : (
-        <span className="notch-sm flex h-11 w-11 shrink-0 items-center justify-center border-2 border-ink-700 bg-ink-800 text-smoke-500">
+        <span className="notch-sm flex h-11 w-11 shrink-0 items-center justify-center border border-ink-800 bg-ink-800 text-smoke-500">
           ?
         </span>
       )}

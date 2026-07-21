@@ -1,6 +1,6 @@
 import type { PlayerSeasonDto } from "../api/types";
 import type { Position, PositionGroup } from "../lib/formations";
-import { GROUP_TEXT, GROUP_TINT } from "../lib/positionColors";
+import { GROUP_FILL, GROUP_TEXT, GROUP_TINT } from "../lib/positionColors";
 
 interface Props {
   position: Position;
@@ -11,7 +11,7 @@ interface Props {
 
 export function DraftedPlayerRow({ position, group, player, showRatings }: Props) {
   return (
-    <div className="notch-sm flex items-center gap-3 border-2 border-ink-700 bg-ink-900/40 px-3 py-2.5">
+    <div className="notch-sm flex items-center gap-3 bg-ink-900/50 px-3 py-2.5">
       <span
         className={`notch-sm shrink-0 px-2 py-1 text-[10px] font-bold ${GROUP_TINT[group]} ${GROUP_TEXT[group]}`}
       >
@@ -35,7 +35,13 @@ export function DraftedPlayerRow({ position, group, player, showRatings }: Props
       <span className="shrink-0 text-right text-xs text-smoke-500">
         {player.clubSeason.club.name} <span className="text-smoke-600">{player.seasonYear}</span>
       </span>
-      {showRatings && <span className="shrink-0 font-display font-bold text-gold-400">{player.overall}</span>}
+      {showRatings && (
+        <span
+          className={`notch-sm shrink-0 px-1.5 py-0.5 font-display text-xs font-bold text-ink-950 ${GROUP_FILL[group]}`}
+        >
+          {player.overall}
+        </span>
+      )}
     </div>
   );
 }

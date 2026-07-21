@@ -80,7 +80,7 @@ function SquadDraftPanel({
         <input
           value={squadName}
           onChange={(e) => setSquadName(e.target.value)}
-          className="notch-sm mt-2 w-full max-w-xs border-2 border-ink-700 bg-ink-950 px-3 py-2 text-center text-sm text-paper outline-none focus:border-gold-500"
+          className="notch-sm mt-2 w-full max-w-xs border border-ink-800 bg-ink-950 px-3 py-2 text-center text-sm text-paper outline-none focus:border-mint-500"
         />
       </div>
 
@@ -210,12 +210,18 @@ export function MultiplayerPage() {
         </p>
 
         <div className="space-y-3 text-left">
-          <p className="text-xs font-semibold uppercase tracking-widest text-smoke-600">Shared league</p>
+          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-smoke-500">
+            <span className="h-1.5 w-1.5 shrink-0 bg-teal-400 rounded-full" />
+            Shared league
+          </p>
           <LeaguePicker leagues={leagues} selectedIds={leagueIds} onChange={setLeagueIds} />
         </div>
 
         <div className="space-y-3 text-left">
-          <p className="text-xs font-semibold uppercase tracking-widest text-smoke-600">Shared formation</p>
+          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-smoke-500">
+            <span className="h-1.5 w-1.5 shrink-0 bg-plum-400 rounded-full" />
+            Shared formation
+          </p>
           <FormationPicker value={formation} onChange={setFormation} />
         </div>
 
@@ -303,16 +309,29 @@ export function MultiplayerPage() {
           {winner === "Draw" ? "It's a draw!" : `${winner} wins!`}
         </h1>
         <div className="grid grid-cols-2 gap-4">
-          {rows.map(({ clubName, row }) => (
-            <div key={clubName} className="notch border-2 border-ink-700 bg-ink-900/60 p-5">
-              <p className="font-semibold text-paper">{clubName}</p>
-              <p className="mt-2 font-display text-3xl font-bold text-gold-400">{row.points}</p>
-              <p className="text-xs text-smoke-500">points</p>
-              <p className="mt-3 text-xs text-smoke-500">
-                {row.won}W {row.drawn}D {row.lost}L &middot; {row.goalsFor}-{row.goalsAgainst}
-              </p>
-            </div>
-          ))}
+          {rows.map(({ clubName, row }) => {
+            const isWinner = clubName === winner;
+            return (
+              <div
+                key={clubName}
+                className={`notch border-2 p-5 ${
+                  isWinner
+                    ? "border-mint-400/70 bg-gradient-to-br from-mint-500/15 via-ink-900 to-ink-950 shadow-lg shadow-mint-500/10"
+                    : "border-ink-700 bg-ink-900/60"
+                }`}
+              >
+                <p className="font-semibold text-paper">{clubName}</p>
+                <p className={`mt-2 font-display text-3xl font-bold ${isWinner ? "text-mint-400" : "text-smoke-400"}`}>
+                  {row.points}
+                </p>
+                <p className="text-xs text-smoke-500">points</p>
+                <p className="mt-3 text-xs text-smoke-500">
+                  <span className="text-teal-400">{row.won}W</span> {row.drawn}D{" "}
+                  <span className="text-crimson-400">{row.lost}L</span> &middot; {row.goalsFor}-{row.goalsAgainst}
+                </p>
+              </div>
+            );
+          })}
         </div>
         <Button
           onClick={() => {

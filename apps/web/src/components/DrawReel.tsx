@@ -67,10 +67,10 @@ export function DrawReel({
     <div className="mx-auto max-w-sm space-y-5 text-center">
       <div
         className={`notch relative border-2 bg-ink-900/70 p-5 transition-colors ${
-          spinning ? "border-gold-500/60" : "border-ink-700"
+          spinning ? "border-mint-500/60" : "border-ink-700"
         }`}
       >
-        {spinning && <span aria-hidden className="absolute inset-0 animate-gold-pulse bg-gold-500/5" />}
+        {spinning && <span aria-hidden className="absolute inset-0 animate-mint-pulse bg-mint-500/5" />}
 
         <div className="relative flex items-end gap-3">
           <SlotReel
@@ -89,7 +89,7 @@ export function DrawReel({
             winnerLabel={target ? String(target.year) : null}
             spinToken={spinToken}
             spinning={spinning}
-            landedClass="text-gold-400"
+            landedClass="text-mint-400"
             settleDelayMs={200}
             onSettled={handleSeasonSettled}
           />

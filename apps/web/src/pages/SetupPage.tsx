@@ -14,17 +14,40 @@ import { isFormation } from "../lib/formations";
 import { isRealCountry } from "../lib/leagues";
 import { useDraft, type Difficulty, type DraftMode, type PlayerRatingsMode } from "../state/DraftContext";
 
+type SectionAccent = "mint" | "teal" | "plum" | "crimson";
+
 interface SectionProps {
   title: string;
   children: ReactNode;
   right?: ReactNode;
+  /** Ties each section header back to the accent color its own control below it already uses
+      (e.g. Difficulty's SegmentedControl is crimson) — previously every section header was the
+      same flat gray, which made a long settings page read as one undifferentiated wall. */
+  accent?: SectionAccent;
 }
 
-function Section({ title, children, right }: SectionProps) {
+const SECTION_ACCENT_DOT: Record<SectionAccent, string> = {
+  mint: "bg-mint-400",
+  teal: "bg-teal-400",
+  plum: "bg-plum-400",
+  crimson: "bg-crimson-400",
+};
+
+const SECTION_ACCENT_BORDER: Record<SectionAccent, string> = {
+  mint: "border-mint-500/30",
+  teal: "border-teal-500/30",
+  plum: "border-plum-500/30",
+  crimson: "border-crimson-500/30",
+};
+
+function Section({ title, children, right, accent = "mint" }: SectionProps) {
   return (
     <section className="space-y-3">
-      <div className="flex items-center justify-between border-b border-ink-800 pb-2">
-        <h2 className="font-display text-xs font-semibold uppercase tracking-widest text-smoke-600">{title}</h2>
+      <div className={`flex items-center justify-between border-b pb-2 ${SECTION_ACCENT_BORDER[accent]}`}>
+        <h2 className="flex items-center gap-2 font-display text-xs font-semibold uppercase tracking-widest text-smoke-500">
+          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${SECTION_ACCENT_DOT[accent]}`} />
+          {title}
+        </h2>
         {right}
       </div>
       {children}
@@ -112,7 +135,7 @@ export function SetupPage() {
 
       {error && <p className="text-center text-sm text-crimson-400">{error}</p>}
 
-      <Section title="League">
+      <Section title="League" accent="mint">
         <LeaguePicker
           leagues={leagues}
           selectedIds={config.leagueIds}
@@ -121,14 +144,14 @@ export function SetupPage() {
         />
       </Section>
 
-      <Section title="Formation">
+      <Section title="Formation" accent="teal">
         <FormationPicker
           value={config.formation}
           onChange={(formation) => isFormation(formation) && setConfig({ formation })}
         />
       </Section>
 
-      <Section title="Difficulty">
+      <Section title="Difficulty" accent="crimson">
         <SegmentedControl<Difficulty>
           accent="crimson"
           columns={3}
@@ -144,7 +167,7 @@ export function SetupPage() {
         />
       </Section>
 
-      <Section title="Show Ratings">
+      <Section title="Show Ratings" accent="plum">
         <SegmentedControl<"on" | "off">
           accent="plum"
           columns={2}
@@ -157,9 +180,9 @@ export function SetupPage() {
         />
       </Section>
 
-      <Section title="Draft Mode">
+      <Section title="Draft Mode" accent="mint">
         <SegmentedControl<DraftMode>
-          accent="gold"
+          accent="mint"
           columns={2}
           value={config.draftMode}
           onChange={(draftMode) => setConfig({ draftMode })}
@@ -178,7 +201,7 @@ export function SetupPage() {
         />
       </Section>
 
-      <Section title="Player Ratings">
+      <Section title="Player Ratings" accent="teal">
         <SegmentedControl<PlayerRatingsMode>
           accent="teal"
           columns={2}
@@ -191,7 +214,7 @@ export function SetupPage() {
         />
       </Section>
 
-      <Section title="Era">
+      <Section title="Era" accent="plum">
         <div className="flex flex-wrap gap-2">
           {ERA_PRESETS.map((preset) => (
             <Chip
@@ -217,6 +240,7 @@ export function SetupPage() {
 
       <Section
         title="Advanced"
+        accent="crimson"
         right={
           <button
             type="button"
@@ -230,7 +254,7 @@ export function SetupPage() {
         {advancedOpen && (
           <div className="space-y-3">
             <Toggle
-              accent="gold"
+              accent="mint"
               label="Managers (Gaffers)"
               description="After the draft, appoint a gaffer for the story. Off = no manager."
               checked={config.managers}

@@ -17,7 +17,7 @@ export function RangeSlider({ min, max, valueMin, valueMax, onChange, formatLabe
       <div className="relative h-6">
         <div className="absolute top-1/2 h-1.5 w-full -translate-y-1/2 bg-ink-700" />
         <div
-          className="absolute top-1/2 h-1.5 -translate-y-1/2 bg-gold-500"
+          className="absolute top-1/2 h-1.5 -translate-y-1/2 bg-mint-500"
           style={{ left: `${leftPct}%`, right: `${100 - rightPct}%` }}
         />
         <input
@@ -38,8 +38,8 @@ export function RangeSlider({ min, max, valueMin, valueMax, onChange, formatLabe
         />
       </div>
       <div className="mt-1 flex justify-between text-xs">
-        <span className="font-medium text-gold-400">{formatLabel(valueMin)}</span>
-        <span className="font-medium text-gold-400">{formatLabel(valueMax)}</span>
+        <span className="font-medium text-mint-400">{formatLabel(valueMin)}</span>
+        <span className="font-medium text-mint-400">{formatLabel(valueMax)}</span>
       </div>
     </div>
   );

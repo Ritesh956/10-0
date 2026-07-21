@@ -10,7 +10,7 @@ import {
   fireUnbeatenBurst,
 } from "./confetti";
 
-const BRAND_COLORS = ["#d69a34", "#e6b559", "#f0cd8a", "#3d8f82", "#5aada0", "#f3ede0"];
+const BRAND_COLORS = ["#1fbf75", "#3ed98f", "#d69a34", "#e6b559", "#4facc9", "#f4f4f6"];
 
 function mockReducedMotion(matches: boolean) {
   window.matchMedia = ((query: string) => ({

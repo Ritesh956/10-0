@@ -25,8 +25,8 @@ interface Props extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, MotionConf
 }
 
 const VARIANT_CLASSES: Record<Variant, string> = {
-  primary: "bg-gold-500 text-ink-950 hover:bg-gold-400 shadow-lg shadow-gold-500/10 disabled:shadow-none",
-  outline: "border-2 border-ink-600 text-paper hover:border-gold-500/60 hover:bg-ink-800/60",
+  primary: "bg-mint-500 text-ink-950 hover:bg-mint-400 shadow-lg shadow-mint-500/10 disabled:shadow-none",
+  outline: "border-2 border-ink-600 text-paper hover:border-mint-500/60 hover:bg-ink-800/60",
   ghost: "text-smoke-500 hover:text-paper hover:bg-ink-800/60",
   danger: "bg-crimson-500 text-paper hover:bg-crimson-400",
 };

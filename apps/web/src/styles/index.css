@@ -7,21 +7,23 @@ html {
 }
 
 ::selection {
-  background-color: rgba(214, 154, 52, 0.35);
+  background-color: rgba(31, 191, 117, 0.35);
 }
 
-/* Angular ticket-stub silhouette — the app's signature shape, used instead of rounded corners. */
+/* Soft rounded-corner shape language (replaced the old angular notched/clip-path silhouette) —
+   kept as the same .notch/.notch-sm class names so every component that already applies them
+   picks up the new shape with zero per-component edits. */
 .notch {
-  clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+  border-radius: 14px;
 }
 
 .notch-sm {
-  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  border-radius: 9px;
 }
 
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: rgb(74 64 51) transparent;
+  scrollbar-color: rgb(67 67 75) transparent;
 }
 
 .scrollbar-thin::-webkit-scrollbar {
@@ -29,7 +31,7 @@ html {
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background-color: rgb(74 64 51);
+  background-color: rgb(67 67 75);
   border-radius: 9999px;
 }
 
@@ -47,8 +49,8 @@ html {
   pointer-events: auto;
   width: 16px;
   height: 16px;
-  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
-  background: rgb(214 154 52);
+  border-radius: 9999px;
+  background: rgb(31 191 117);
   cursor: pointer;
   margin-top: 0;
 }
@@ -57,8 +59,8 @@ html {
   pointer-events: auto;
   width: 16px;
   height: 16px;
-  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
-  background: rgb(214 154 52);
+  border-radius: 9999px;
+  background: rgb(31 191 117);
   border: none;
   cursor: pointer;
 }

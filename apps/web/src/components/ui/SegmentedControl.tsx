@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { SPRING_SNAPPY } from "../../lib/motion";
 
-export type SegmentedAccent = "gold" | "crimson" | "plum" | "teal";
+export type SegmentedAccent = "mint" | "crimson" | "plum" | "teal";
 
 export interface SegmentedOption<T extends string> {
   value: T;
@@ -19,7 +19,7 @@ interface Props<T extends string> {
 
 /** Full literal class strings so Tailwind's JIT scanner picks them up. */
 const ACCENT_CLASSES: Record<SegmentedAccent, { border: string; bg: string; text: string }> = {
-  gold: { border: "border-gold-500", bg: "bg-gold-500/10", text: "text-gold-400" },
+  mint: { border: "border-mint-500", bg: "bg-mint-500/10", text: "text-mint-400" },
   crimson: { border: "border-crimson-500", bg: "bg-crimson-500/10", text: "text-crimson-400" },
   plum: { border: "border-plum-500", bg: "bg-plum-500/10", text: "text-plum-400" },
   teal: { border: "border-teal-500", bg: "bg-teal-500/10", text: "text-teal-400" },
@@ -29,7 +29,7 @@ export function SegmentedControl<T extends string>({
   options,
   value,
   onChange,
-  accent = "gold",
+  accent = "mint",
   columns = options.length as 2 | 3 | 4,
 }: Props<T>) {
   const accentClasses = ACCENT_CLASSES[accent];

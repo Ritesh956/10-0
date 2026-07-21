@@ -28,7 +28,7 @@ export function ShareCard({ summary }: Props) {
     <div
       className={`notch relative overflow-hidden border-2 p-8 text-center shadow-2xl ${
         unbeaten
-          ? "border-gold-400/70 bg-gradient-to-br from-gold-500/20 via-ink-900 to-ink-950"
+          ? "border-amber-400/70 bg-gradient-to-br from-amber-500/20 via-ink-900 to-ink-950"
           : "border-ink-700 bg-gradient-to-br from-teal-500/10 via-ink-900 to-ink-950"
       }`}
     >
@@ -37,7 +37,7 @@ export function ShareCard({ summary }: Props) {
           initial={{ opacity: 0, scale: 0.5, rotate: -8 }}
           animate={{ opacity: 1, scale: 1, rotate: 0 }}
           transition={SPRING_BOUNCY}
-          className="notch-sm absolute right-4 top-4 border-2 border-gold-300 bg-gold-400 px-3 py-1 font-display text-xs font-bold uppercase tracking-wider text-ink-950"
+          className="notch-sm absolute right-4 top-4 border-2 border-amber-300 bg-amber-400 px-3 py-1 font-display text-xs font-bold uppercase tracking-wider text-ink-950"
         >
           Unbeaten
         </motion.div>
@@ -48,7 +48,7 @@ export function ShareCard({ summary }: Props) {
 
       <div className="mx-auto mt-6 grid max-w-xs grid-cols-3 gap-4 text-center">
         <div>
-          <div className="font-display text-2xl font-bold text-gold-400">{userRow.won}</div>
+          <div className="font-display text-2xl font-bold text-teal-400">{userRow.won}</div>
           <div className="text-xs uppercase text-smoke-600">Won</div>
         </div>
         <div>
@@ -68,7 +68,7 @@ export function ShareCard({ summary }: Props) {
 
       <button
         onClick={copyToClipboard}
-        className="notch-sm mt-8 border-2 border-paper bg-paper px-5 py-2 text-sm font-display font-semibold uppercase tracking-wide text-ink-950 transition hover:bg-gold-300 hover:border-gold-300"
+        className="notch-sm mt-8 border-2 border-paper bg-paper px-5 py-2 text-sm font-display font-semibold uppercase tracking-wide text-ink-950 transition hover:bg-mint-300 hover:border-mint-300"
       >
         Copy result to share
       </button>

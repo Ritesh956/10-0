@@ -7,15 +7,32 @@ interface Props {
   highlightClubId?: string | undefined;
 }
 
-function AwardChip({ label, value, sub, isYou }: { label: string; value: string; sub?: string; isYou?: boolean }) {
+function AwardChip({
+  label,
+  value,
+  sub,
+  isYou,
+  accent = "amber",
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  isYou?: boolean;
+  /** "amber" is reserved for the Golden Boot specifically — it's the one award that's literally
+      named after the color, so it keeps the trophy-mint accent even though mint is now primary
+      everywhere else. MVP uses plum instead. */
+  accent?: "amber" | "plum";
+}) {
+  const border = accent === "amber" ? "border-amber-500/40 bg-amber-500/5" : "border-plum-500/40 bg-plum-500/5";
+  const text = accent === "amber" ? "text-amber-400" : "text-plum-400";
   return (
-    <div className="notch-sm border-2 border-gold-500/40 bg-gold-500/5 px-4 py-3 text-center">
+    <div className={`notch-sm border-2 px-4 py-3 text-center ${border}`}>
       <p className="text-[10px] uppercase tracking-wide text-smoke-600">{label}</p>
-      <p className="truncate font-display text-lg font-bold text-gold-400">{value}</p>
+      <p className={`truncate font-display text-lg font-bold ${text}`}>{value}</p>
       {sub && (
         <p className="truncate text-xs text-smoke-500">
           {sub}
-          {isYou && <span className="ml-1 text-gold-400">(You)</span>}
+          {isYou && <span className={`ml-1 ${text}`}>(You)</span>}
         </p>
       )}
     </div>
@@ -45,13 +62,14 @@ export function CompetitionStatsPanel({ stats, highlightClubId }: Props) {
               value={`${stats.mvp.name} — ${stats.mvp.avgRating.toFixed(1)}`}
               sub={stats.mvp.clubName}
               isYou={stats.mvp.clubId === highlightClubId}
+              accent="plum"
             />
           )}
         </div>
       )}
 
       {stats.topScorers.length > 0 && (
-        <div className="notch overflow-x-auto border-2 border-ink-700">
+        <div className="notch overflow-x-auto border border-ink-800">
           <table className="w-full text-sm">
             <thead className="bg-ink-900 text-left font-display text-xs uppercase tracking-widest text-smoke-600">
               <tr>
@@ -74,14 +92,14 @@ export function CompetitionStatsPanel({ stats, highlightClubId }: Props) {
                   key={row.playerId}
                   variants={staggerItem}
                   className={`${i % 2 === 0 ? "bg-ink-950" : "bg-ink-900/40"} ${
-                    row.clubId === highlightClubId ? "text-gold-400" : ""
+                    row.clubId === highlightClubId ? "text-mint-400" : ""
                   }`}
                 >
                   <td className="px-3 py-2 text-smoke-500">{i + 1}</td>
                   <td className="px-3 py-2 font-medium text-paper">{row.name}</td>
                   <td className="px-3 py-2 text-smoke-400">
                     {row.clubName}
-                    {row.clubId === highlightClubId && <span className="ml-1 text-gold-400">(You)</span>}
+                    {row.clubId === highlightClubId && <span className="ml-1 text-mint-400">(You)</span>}
                   </td>
                   <td className="px-3 py-2 text-center text-smoke-400">{row.goals}</td>
                   <td className="px-3 py-2 text-center text-smoke-400">{row.assists}</td>

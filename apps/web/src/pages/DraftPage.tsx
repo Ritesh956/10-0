@@ -516,7 +516,7 @@ export function DraftPage() {
       <div className="mb-8 border-b border-ink-800 pb-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <span className="notch-sm inline-flex items-center gap-2 border-2 border-ink-700 bg-ink-900 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-smoke-500">
+            <span className="notch-sm inline-flex items-center gap-2 border-2 border-mint-500/30 bg-mint-500/5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-smoke-400">
               Building your XI
             </span>
             <h1 className="mt-4 font-display text-3xl font-bold uppercase leading-tight tracking-tight text-paper sm:text-4xl">
@@ -542,20 +542,20 @@ export function DraftPage() {
         </div>
 
         <dl className="mt-5 grid grid-cols-3 gap-3 sm:max-w-md">
-          <div className="notch-sm border-2 border-ink-700 bg-ink-900/40 px-3 py-2">
+          <div className="notch-sm border-2 border-teal-500/25 bg-ink-900/40 px-3 py-2">
             <dt className="text-[10px] uppercase tracking-wide text-smoke-600">Formation</dt>
-            <dd className="font-display text-lg font-bold text-paper">{config.formation}</dd>
+            <dd className="font-display text-lg font-bold text-teal-400">{config.formation}</dd>
           </div>
-          <div className="notch-sm border-2 border-ink-700 bg-ink-900/40 px-3 py-2">
+          <div className="notch-sm border-2 border-mint-500/25 bg-ink-900/40 px-3 py-2">
             <dt className="text-[10px] uppercase tracking-wide text-smoke-600">Filled</dt>
-            <dd className="font-display text-lg font-bold text-gold-400">
+            <dd className="font-display text-lg font-bold text-mint-400">
               {filledCount}
               <span className="text-smoke-500">/{slots.length}</span>
             </dd>
           </div>
-          <div className="notch-sm border-2 border-ink-700 bg-ink-900/40 px-3 py-2">
+          <div className="notch-sm border-2 border-plum-500/25 bg-ink-900/40 px-3 py-2">
             <dt className="text-[10px] uppercase tracking-wide text-smoke-600">Redraws</dt>
-            <dd className="font-display text-lg font-bold text-paper">{rerollsRemaining}</dd>
+            <dd className="font-display text-lg font-bold text-plum-400">{rerollsRemaining}</dd>
           </div>
         </dl>
       </div>
@@ -598,7 +598,7 @@ export function DraftPage() {
               <span className="h-2 w-2 rounded-full bg-plum-400" /> Keeper
             </span>
             <span className="inline-flex items-center gap-1">
-              <span className="h-2 w-2 rounded-full bg-gold-400" /> Defence
+              <span className="h-2 w-2 rounded-full bg-mint-400" /> Defence
             </span>
             <span className="inline-flex items-center gap-1">
               <span className="h-2 w-2 rounded-full bg-teal-400" /> Midfield
@@ -612,14 +612,14 @@ export function DraftPage() {
           </div>
 
           {allFilled && config.showRatings && (
-            <div className="notch mt-4 space-y-3 border-2 border-ink-700 bg-ink-900/50 p-4">
+            <div className="notch mt-4 space-y-3 border border-ink-800 bg-ink-900/50 p-4">
               <div>
                 <p className="text-xs uppercase tracking-widest text-smoke-600">Overall</p>
                 <p className="font-display text-3xl font-bold text-paper">{overallRating}</p>
               </div>
               <RatingBar label="Attack" value={squadRatings.attack} colorClass="bg-crimson-400" />
               <RatingBar label="Midfield" value={squadRatings.midfield} colorClass="bg-teal-400" />
-              <RatingBar label="Defence" value={squadRatings.defence} colorClass="bg-gold-400" />
+              <RatingBar label="Defence" value={squadRatings.defence} colorClass="bg-mint-400" />
               <RatingBar label="Goalkeeping" value={squadRatings.gk} colorClass="bg-plum-400" />
             </div>
           )}
@@ -636,7 +636,7 @@ export function DraftPage() {
             postDraftStep === "review" ? (
               <div className="space-y-4">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-widest text-gold-400">Squad complete</p>
+                  <p className="text-xs font-semibold uppercase tracking-widest text-mint-400">Squad complete</p>
                   <h2 className="mt-1 font-display text-xl font-bold uppercase tracking-wide text-paper">Your XI</h2>
                   <p className="text-sm text-smoke-500">
                     {config.formation} &middot; Overall {overallRating}
@@ -666,7 +666,7 @@ export function DraftPage() {
                 </Button>
               </div>
             ) : postDraftStep === "manager" ? (
-              <div className="notch space-y-4 border-2 border-ink-700 bg-ink-900/50 p-6 text-center">
+              <div className="notch space-y-4 border border-ink-800 bg-ink-900/50 p-6 text-center">
                 <p className="text-xs font-semibold uppercase tracking-widest text-smoke-600">Optional</p>
                 <h2 className="font-display text-xl font-bold uppercase tracking-wide text-paper">Add a manager?</h2>
                 <p className="text-sm text-smoke-500">
@@ -674,10 +674,10 @@ export function DraftPage() {
                 </p>
                 <div
                   className={`notch relative mx-auto max-w-xs border-2 bg-ink-900/70 p-5 transition-colors ${
-                    spinningManager ? "border-gold-500/60" : "border-ink-700"
+                    spinningManager ? "border-mint-500/60" : "border-ink-700"
                   }`}
                 >
-                  {spinningManager && <span aria-hidden className="absolute inset-0 animate-gold-pulse bg-gold-500/5" />}
+                  {spinningManager && <span aria-hidden className="absolute inset-0 animate-mint-pulse bg-mint-500/5" />}
                   <SlotReel
                     label="Manager"
                     decorativeItems={managerCandidates}
@@ -707,7 +707,7 @@ export function DraftPage() {
             ) : (
               <div className="space-y-5 text-center">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-widest text-gold-400">Squad Complete</p>
+                  <p className="text-xs font-semibold uppercase tracking-widest text-mint-400">Squad Complete</p>
                   <h2 className="mt-1 font-display text-2xl font-bold uppercase tracking-wide text-paper">
                     {managerPick ? `Under ${managerPick.name}` : "Ready for kickoff"}
                   </h2>
@@ -717,7 +717,7 @@ export function DraftPage() {
                 </div>
 
                 {managerPick && (
-                  <div className="notch space-y-3 border-2 border-ink-700 bg-ink-900/60 p-5 text-left">
+                  <div className="notch space-y-3 border border-ink-800 bg-ink-900/60 p-5 text-left">
                     <p className="text-xs font-semibold uppercase tracking-widest text-smoke-600">
                       {managerPick.nationality}
                     </p>
@@ -735,7 +735,7 @@ export function DraftPage() {
                   </div>
                 )}
 
-                <div className="notch space-y-4 border-2 border-ink-700 bg-ink-900/60 p-5 text-left">
+                <div className="notch space-y-4 border-2 border-mint-500/25 bg-gradient-to-br from-mint-500/[0.06] via-ink-900/60 to-ink-900/60 p-5 text-left">
                   <p className="text-xs font-semibold uppercase tracking-widest text-smoke-600">Pre-season projection</p>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -747,11 +747,11 @@ export function DraftPage() {
                     </div>
                     <div>
                       <p className="text-[10px] uppercase text-smoke-600">Expected points</p>
-                      <p className="font-display text-2xl font-bold text-gold-400">{odds.expectedPoints}</p>
+                      <p className="font-display text-2xl font-bold text-mint-400">{odds.expectedPoints}</p>
                     </div>
                   </div>
                   <div className="space-y-2 border-t border-ink-800 pt-3">
-                    <OddsBar label="Win the league" pct={odds.winPct} colorClass="bg-gold-400" />
+                    <OddsBar label="Win the league" pct={odds.winPct} colorClass="bg-mint-400" />
                     <OddsBar label="Top 4 (Europe)" pct={odds.top4Pct} colorClass="bg-teal-400" />
                     <OddsBar label="Relegation" pct={odds.relegationPct} colorClass="bg-crimson-400" />
                   </div>
@@ -763,7 +763,7 @@ export function DraftPage() {
                 <input
                   value={effectiveSquadName}
                   onChange={(e) => setSquadName(e.target.value)}
-                  className="notch-sm w-full border-2 border-ink-700 bg-ink-950 px-3 py-2 text-center text-sm text-paper outline-none focus:border-gold-500"
+                  className="notch-sm w-full border border-ink-800 bg-ink-950 px-3 py-2 text-center text-sm text-paper outline-none focus:border-mint-500"
                   placeholder="Name your XI"
                 />
 
@@ -808,13 +808,19 @@ export function DraftPage() {
                   onSettled={handleSpinSettled}
                 />
               ) : (
-                <div className="notch border-2 border-ink-700 bg-ink-900/60 p-5">
+                <div className="notch border border-ink-800 bg-ink-900/60 p-5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="notch-sm border border-gold-500/40 bg-gold-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-gold-400">
+                      <span className="notch-sm border border-mint-500/40 bg-mint-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-mint-400">
                         Squad Drawn
                       </span>
-                      <span className="notch-sm border border-ink-700 bg-ink-800 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-smoke-400">
+                      <span
+                        className={`notch-sm border px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${
+                          config.playerRatings === "prime"
+                            ? "border-plum-500/40 bg-plum-500/10 text-plum-300"
+                            : "border-ink-700 bg-ink-800 text-smoke-400"
+                        }`}
+                      >
                         {config.playerRatings === "prime" ? "Prime" : "Season"}
                       </span>
                       <span className="text-xs text-smoke-500">{slots.length - filledCount} slots left</span>
@@ -823,7 +829,7 @@ export function DraftPage() {
                       variant="outline"
                       size="sm"
                       disabled={rerollsRemaining <= 0}
-                      className={rerollsRemaining > 0 ? "border-gold-500/50 text-gold-300 hover:border-gold-400" : ""}
+                      className={rerollsRemaining > 0 ? "border-mint-500/50 text-mint-300 hover:border-mint-400" : ""}
                       onClick={handleReroll}
                     >
                       &#8635; Redraw ({rerollsRemaining} left)
@@ -831,7 +837,7 @@ export function DraftPage() {
                   </div>
                   <div className="mt-3 border-t border-ink-800 pt-3">
                     <p className="font-display text-xl font-bold uppercase tracking-wide text-paper">
-                      {currentClub.club.name} <span className="text-gold-400">{currentClub.seasonYear}</span>
+                      {currentClub.club.name} <span className="text-mint-400">{currentClub.seasonYear}</span>
                     </p>
                     <p className="text-xs text-smoke-500">{currentClub.league.name}</p>
                   </div>
@@ -859,7 +865,7 @@ export function DraftPage() {
                           onClick={() => setSortMode(mode)}
                           className={`notch-sm px-2.5 py-1 font-semibold transition ${
                             sortMode === mode
-                              ? "bg-gold-500/15 text-gold-300"
+                              ? "bg-mint-500/15 text-mint-300"
                               : "text-smoke-600 hover:text-smoke-400"
                           }`}
                         >

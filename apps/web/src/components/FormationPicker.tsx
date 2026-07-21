@@ -19,7 +19,7 @@ export function FormationPicker({ value, onChange }: Props) {
               onClick={() => onChange(formation)}
               className={`notch-sm border-2 px-2 py-2.5 text-center text-sm font-display font-semibold transition ${
                 active
-                  ? "border-gold-500 bg-gold-500/10 text-gold-400"
+                  ? "border-mint-500 bg-mint-500/10 text-mint-400"
                   : "border-ink-700 bg-ink-900/40 text-paper hover:border-ink-600"
               }`}
             >

@@ -30,14 +30,17 @@ export function GuestGateModal({ onDone, onCancel }: Props) {
 
   return (
     <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/70 px-6">
-      <div className="notch w-full max-w-sm border-2 border-ink-700 bg-ink-900 p-6 shadow-2xl">
+      <div className="notch w-full max-w-sm border-2 border-mint-500/30 bg-ink-900 p-6 shadow-2xl shadow-mint-500/5">
+        <span className="notch-sm mb-3 flex h-9 w-9 items-center justify-center border-2 border-mint-500/50 bg-mint-500/10 text-base">
+          &#9917;
+        </span>
         <h2 className="font-display text-lg font-bold uppercase tracking-wide text-paper">One more thing</h2>
         <p className="mt-1 text-sm text-smoke-500">Pick a username so we know whose XI this is. No password needed.</p>
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <input
             autoFocus
-            className="notch-sm w-full border-2 border-ink-700 bg-ink-950 px-3 py-2 text-sm text-paper outline-none focus:border-gold-500"
+            className="notch-sm w-full border border-ink-800 bg-ink-950 px-3 py-2 text-sm text-paper outline-none focus:border-mint-500"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             placeholder="e.g. GoalMachine22"

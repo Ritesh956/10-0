@@ -36,7 +36,7 @@ interface Props {
   compact?: boolean | undefined;
 }
 
-const DIAMOND = { clipPath: "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)" };
+const MARKER_SHAPE = { borderRadius: "9999px" };
 
 export function PitchView({ formation, slotState = {}, activeSlotIndex, showRatings = true, onSlotClick, compact }: Props) {
   const slots = slotsForFormation(formation);
@@ -75,11 +75,11 @@ export function PitchView({ formation, slotState = {}, activeSlotIndex, showRati
                 <span
                   aria-hidden
                   className={`absolute -inset-1.5 animate-pulse ${GROUP_HALO[group]}`}
-                  style={DIAMOND}
+                  style={MARKER_SHAPE}
                 />
               )}
               <span
-                style={DIAMOND}
+                style={MARKER_SHAPE}
                 className={`relative flex items-center justify-center overflow-hidden font-display font-bold transition ${markerSize} ${
                   state?.ineligible
                     ? "bg-ink-700 text-smoke-500"
@@ -101,7 +101,7 @@ export function PitchView({ formation, slotState = {}, activeSlotIndex, showRati
                   <>
                     <span className="block max-w-[72px] truncate font-medium text-paper">{state.filled.name}</span>
                     {showRatings && state.filled.overall !== undefined && (
-                      <span className="block text-center text-gold-400">{state.filled.overall}</span>
+                      <span className="block text-center text-mint-400">{state.filled.overall}</span>
                     )}
                   </>
                 ) : (
