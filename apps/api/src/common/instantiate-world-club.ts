@@ -45,30 +45,36 @@ export async function instantiateWorldClub(prisma: PrismaClient, args: Instantia
     // WorldPlayer rows get their own generated ids, distinct from the
     // RefPlayerSeason ids in `args.lineup` — the stored lineup/bench JSON
     // must reference those new ids, not the reference-catalog ones.
-    const refToWorldPlayerId = new Map<string, string>();
-
-    for (const slot of [...args.lineup.starters, ...args.lineup.bench]) {
+    // A single bulk insert (instead of one `create` per player) cuts this from
+    // ~20 sequential round trips to a remote DB down to one — that N+1 was slow
+    // enough on its own to make season creation look hung for a 19-AI-club league.
+    const slots = [...args.lineup.starters, ...args.lineup.bench];
+    const playersData = slots.map((slot) => {
       const ps = byId.get(slot.refPlayerSeasonId);
       if (!ps) throw new BadRequestException(`Missing player season ${slot.refPlayerSeasonId}`);
-      const worldPlayer = await tx.worldPlayer.create({
-        data: {
-          worldId: args.worldId,
-          clubId: club.id,
-          refPlayerSeasonId: ps.id,
-          name: ps.player.name,
-          photoUrl: ps.player.photoUrl,
-          age: Math.max(15, ps.seasonYear - ps.player.dateOfBirth.getUTCFullYear()),
-          positions: ps.positions,
-          preferredFoot: ps.preferredFoot,
-          weakFoot: ps.weakFoot,
-          attributes: ps.attributes as object,
-          overall: ps.overall,
-          potential: ps.potential,
-          traits: ps.traits,
-        },
-      });
-      refToWorldPlayerId.set(slot.refPlayerSeasonId, worldPlayer.id);
-    }
+      return {
+        worldId: args.worldId,
+        clubId: club.id,
+        refPlayerSeasonId: ps.id,
+        name: ps.player.name,
+        photoUrl: ps.player.photoUrl,
+        age: Math.max(15, ps.seasonYear - ps.player.dateOfBirth.getUTCFullYear()),
+        positions: ps.positions,
+        preferredFoot: ps.preferredFoot,
+        weakFoot: ps.weakFoot,
+        attributes: ps.attributes as object,
+        overall: ps.overall,
+        potential: ps.potential,
+        traits: ps.traits,
+      };
+    });
+
+    await tx.worldPlayer.createMany({ data: playersData });
+    const createdPlayers = await tx.worldPlayer.findMany({
+      where: { clubId: club.id },
+      select: { id: true, refPlayerSeasonId: true },
+    });
+    const refToWorldPlayerId = new Map(createdPlayers.map((p) => [p.refPlayerSeasonId, p.id]));
 
     const toSlot = (s: { position: string; refPlayerSeasonId: string }) => ({
       position: s.position,

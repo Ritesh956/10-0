@@ -1,4 +1,6 @@
+import { motion } from "framer-motion";
 import type { KnockoutRound, KnockoutTieDto, WorldClubDto } from "../api/types";
+import { staggerContainer, staggerItem } from "../lib/motion";
 
 interface Props {
   ties: KnockoutTieDto[];
@@ -20,13 +22,14 @@ export function KnockoutBracket({ ties, clubs, highlightClubId }: Props) {
       {rounds.map(({ round, ties: roundTies }) => (
         <div key={round}>
           <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-smoke-600">{ROUND_LABEL[round]}</p>
-          <div className="space-y-2">
+          <motion.div variants={staggerContainer} initial="initial" animate="animate" className="space-y-2">
             {roundTies.map((tie) => {
               const homeWon = tie.winnerClubId === tie.homeClubId;
               const awayWon = tie.winnerClubId === tie.awayClubId;
               return (
-                <div
+                <motion.div
                   key={tie.id}
+                  variants={staggerItem}
                   className={`notch-sm flex items-center justify-between gap-2 border-2 px-3 py-2 text-sm ${
                     tie.homeClubId === highlightClubId || tie.awayClubId === highlightClubId
                       ? "border-gold-500/50 bg-gold-500/5"
@@ -47,10 +50,10 @@ export function KnockoutBracket({ ties, clubs, highlightClubId }: Props) {
                       {tie.wentToPenalties ? "pens" : "won"}
                     </span>
                   )}
-                </div>
+                </motion.div>
               );
             })}
-          </div>
+          </motion.div>
         </div>
       ))}
     </div>

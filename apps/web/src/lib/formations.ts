@@ -73,9 +73,9 @@ export function positionLabel(position: Position): string {
  */
 export const POSITION_COMPATIBILITY: Record<Position, Position[]> = {
   GK: ["GK"],
-  CB: ["CB"],
-  LB: ["LB", "LWB"],
-  RB: ["RB", "RWB"],
+  CB: ["CB", "LB", "RB"],
+  LB: ["LB", "LWB", "CB"],
+  RB: ["RB", "RWB", "CB"],
   LWB: ["LWB", "LB", "LM"],
   RWB: ["RWB", "RB", "RM"],
   CDM: ["CDM", "CM"],

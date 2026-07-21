@@ -1,4 +1,6 @@
+import { motion } from "framer-motion";
 import type { StandingsDto, WorldClubDto } from "../api/types";
+import { staggerContainer, staggerItem } from "../lib/motion";
 
 interface Props {
   standings: StandingsDto;
@@ -26,10 +28,17 @@ export function StandingsTable({ standings, clubs, highlightClubId }: Props) {
             <th className="px-3 py-2 text-center font-bold">Pts</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-ink-800">
+        <motion.tbody
+          variants={staggerContainer}
+          initial="initial"
+          animate="animate"
+          transition={{ staggerChildren: 0.03 }}
+          className="divide-y divide-ink-800"
+        >
           {standings.rows.map((row, i) => (
-            <tr
+            <motion.tr
               key={row.clubId}
+              variants={staggerItem}
               className={row.clubId === highlightClubId ? "bg-gold-500/10" : i % 2 === 0 ? "bg-ink-950" : "bg-ink-900/40"}
             >
               <td className="px-3 py-2 text-smoke-600">{i + 1}</td>
@@ -42,9 +51,9 @@ export function StandingsTable({ standings, clubs, highlightClubId }: Props) {
               <td className="px-3 py-2 text-center text-smoke-400">{row.goalsAgainst}</td>
               <td className="px-3 py-2 text-center text-smoke-400">{row.goalsFor - row.goalsAgainst}</td>
               <td className="px-3 py-2 text-center font-bold text-gold-400">{row.points}</td>
-            </tr>
+            </motion.tr>
           ))}
-        </tbody>
+        </motion.tbody>
       </table>
     </div>
   );

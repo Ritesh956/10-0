@@ -1,3 +1,6 @@
+import { motion } from "framer-motion";
+import { SPRING_SNAPPY } from "../../lib/motion";
+
 export type SegmentedAccent = "gold" | "crimson" | "plum" | "teal";
 
 export interface SegmentedOption<T extends string> {
@@ -37,9 +40,11 @@ export function SegmentedControl<T extends string>({
       {options.map((option) => {
         const active = option.value === value;
         return (
-          <button
+          <motion.button
             key={option.value}
             type="button"
+            whileTap={{ scale: 0.97 }}
+            transition={SPRING_SNAPPY}
             onClick={() => onChange(option.value)}
             className={`notch border-2 p-4 text-left transition ${
               active
@@ -51,7 +56,7 @@ export function SegmentedControl<T extends string>({
               {option.label}
             </div>
             {option.description && <div className="mt-0.5 text-xs text-smoke-500">{option.description}</div>}
-          </button>
+          </motion.button>
         );
       })}
     </div>

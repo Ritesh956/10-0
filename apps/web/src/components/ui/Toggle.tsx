@@ -1,3 +1,6 @@
+import { motion } from "framer-motion";
+import { SPRING_SNAPPY } from "../../lib/motion";
+
 export type ToggleAccent = "gold" | "teal" | "crimson";
 
 interface Props {
@@ -17,8 +20,10 @@ const ACCENT_CLASSES: Record<ToggleAccent, { border: string; bg: string; text: s
 export function Toggle({ label, description, checked, onChange, accent = "gold" }: Props) {
   const accentClasses = ACCENT_CLASSES[accent];
   return (
-    <button
+    <motion.button
       type="button"
+      whileTap={{ scale: 0.98 }}
+      transition={SPRING_SNAPPY}
       onClick={() => onChange(!checked)}
       aria-pressed={checked}
       className={`notch-sm flex w-full items-center gap-4 border-2 p-4 text-left transition ${
@@ -31,10 +36,10 @@ export function Toggle({ label, description, checked, onChange, accent = "gold" 
         }`}
         style={{ clipPath: "polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px)" }}
       >
-        <span
-          className={`inline-block h-5 w-5 -translate-y-0 transform bg-paper shadow transition ${
-            checked ? "translate-x-5" : "translate-x-0.5"
-          }`}
+        <motion.span
+          animate={{ x: checked ? 20 : 2 }}
+          transition={SPRING_SNAPPY}
+          className="inline-block h-5 w-5 bg-paper shadow"
           style={{ clipPath: "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)" }}
         />
       </span>
@@ -44,6 +49,6 @@ export function Toggle({ label, description, checked, onChange, accent = "gold" 
         </span>
         {description && <span className="mt-0.5 block text-xs text-smoke-500">{description}</span>}
       </span>
-    </button>
+    </motion.button>
   );
 }

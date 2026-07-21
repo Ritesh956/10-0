@@ -1,9 +1,23 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { motion } from "framer-motion";
+import { SPRING_SNAPPY } from "../../lib/motion";
 
 type Variant = "primary" | "outline" | "ghost" | "danger";
 type Size = "sm" | "md" | "lg";
 
-interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
+/** Native props framer-motion's HTMLMotionProps redefines with an incompatible signature
+    (drag gestures, its own animation lifecycle) — omitted since Button never uses them natively. */
+type MotionConflictingProps =
+  | "style"
+  | "onDrag"
+  | "onDragStart"
+  | "onDragEnd"
+  | "onAnimationStart"
+  | "onAnimationEnd"
+  | "onAnimationIteration"
+  | "onTransitionEnd";
+
+interface Props extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, MotionConflictingProps> {
   variant?: Variant;
   size?: Size;
   fullWidth?: boolean;
@@ -32,11 +46,13 @@ export function Button({
   ...rest
 }: Props) {
   return (
-    <button
+    <motion.button
+      whileTap={{ scale: 0.96 }}
+      transition={SPRING_SNAPPY}
       className={`notch-sm inline-flex items-center justify-center gap-2 font-display font-semibold uppercase tracking-wide transition disabled:cursor-not-allowed disabled:opacity-40 ${VARIANT_CLASSES[variant]} ${SIZE_CLASSES[size]} ${fullWidth ? "w-full" : ""} ${className}`}
       {...rest}
     >
       {children}
-    </button>
+    </motion.button>
   );
 }

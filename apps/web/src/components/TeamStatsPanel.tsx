@@ -1,4 +1,6 @@
+import { motion } from "framer-motion";
 import type { TeamStatsDto } from "../api/types";
+import { staggerContainer, staggerItem } from "../lib/motion";
 
 interface Props {
   stats: TeamStatsDto;
@@ -41,16 +43,22 @@ export function TeamStatsPanel({ stats }: Props) {
               <th className="px-3 py-2 text-center">A</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-ink-800">
+          <motion.tbody
+            variants={staggerContainer}
+            initial="initial"
+            animate="animate"
+            transition={{ staggerChildren: 0.03 }}
+            className="divide-y divide-ink-800"
+          >
             {stats.squad.map((row, i) => (
-              <tr key={row.playerId} className={i % 2 === 0 ? "bg-ink-950" : "bg-ink-900/40"}>
+              <motion.tr key={row.playerId} variants={staggerItem} className={i % 2 === 0 ? "bg-ink-950" : "bg-ink-900/40"}>
                 <td className="px-3 py-2 font-medium text-paper">{row.name}</td>
                 <td className="px-3 py-2 text-center text-smoke-400">{row.matchesPlayed}</td>
                 <td className="px-3 py-2 text-center text-smoke-400">{row.goals}</td>
                 <td className="px-3 py-2 text-center text-smoke-400">{row.assists}</td>
-              </tr>
+              </motion.tr>
             ))}
-          </tbody>
+          </motion.tbody>
         </table>
       </div>
     </div>

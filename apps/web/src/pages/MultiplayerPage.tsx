@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import type { ClubSeasonDto, EraDto, LeagueDto, PlayerSeasonDto, StandingsRowDto } from "../api/types";
-import { DrawReel } from "../components/DrawReel";
+import { DrawReel, type ReelCandidate } from "../components/DrawReel";
 import { FormationPicker } from "../components/FormationPicker";
 import { GuestGateModal } from "../components/GuestGateModal";
 import { LeaguePicker } from "../components/LeaguePicker";
@@ -31,15 +31,28 @@ function SquadDraftPanel({
   const [squadName, setSquadName] = useState(`${label}'s XI`);
   const [clubSeason, setClubSeason] = useState<ClubSeasonDto | null>(null);
   const [spinning, setSpinning] = useState(false);
+  const [spinTarget, setSpinTarget] = useState<ReelCandidate | null>(null);
+  const [spinToken, setSpinToken] = useState(0);
+  const settleResolveRef = useRef<(() => void) | null>(null);
   const [players, setPlayers] = useState<PlayerSeasonDto[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+
+  function handleSettled() {
+    settleResolveRef.current?.();
+    settleResolveRef.current = null;
+  }
 
   async function spin() {
     setSpinning(true);
     setError(null);
     try {
       const club = await api.rollClubSeason({ eraId, leagueIds });
+      setSpinTarget({ club: club.club.name, year: club.seasonYear });
+      setSpinToken((t) => t + 1);
+      await new Promise<void>((resolve) => {
+        settleResolveRef.current = resolve;
+      });
       setClubSeason(club);
       const pool = await api.listPlayerSeasons({ clubSeasonId: club.id });
       setPlayers(pool);
@@ -74,7 +87,13 @@ function SquadDraftPanel({
       {error && <p className="text-center text-sm text-crimson-400">{error}</p>}
 
       {!clubSeason ? (
-        <DrawReel spinning={spinning} onSpin={() => void spin()} />
+        <DrawReel
+          target={spinTarget ?? undefined}
+          spinToken={spinToken}
+          spinning={spinning}
+          onSpin={() => void spin()}
+          onSettled={handleSettled}
+        />
       ) : (
         <div className="space-y-3">
           <p className="text-center text-sm text-smoke-500">

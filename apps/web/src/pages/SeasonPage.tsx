@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import { api } from "../api/client";
 import type {
   EuropeRoundDto,
@@ -18,6 +19,8 @@ import { ShareCard } from "../components/ShareCard";
 import { StandingsTable } from "../components/StandingsTable";
 import { TeamStatsPanel } from "../components/TeamStatsPanel";
 import { Button } from "../components/ui/Button";
+import { fireChampionShower, fireQualificationBurst } from "../lib/confetti";
+import { staggerContainer, staggerItem, staggerItemBounce } from "../lib/motion";
 import { useDraft } from "../state/DraftContext";
 
 type Phase =
@@ -55,6 +58,7 @@ export function SeasonPage() {
   const [busy, setBusy] = useState(false);
 
   const [phase, setPhase] = useState<Phase>("no-season");
+  const [simulatingLabel, setSimulatingLabel] = useState("Kicking off the season…");
   const [domesticMatches, setDomesticMatches] = useState<MatchSummaryDto[]>([]);
   const [standings, setStandings] = useState<StandingsDto | null>(null);
   const [teamStats, setTeamStats] = useState<TeamStatsDto | null>(null);
@@ -100,6 +104,16 @@ export function SeasonPage() {
     }
     void api.getWorld(worldId).then(setWorld).catch((err) => setError(err instanceof Error ? err.message : "Failed to load world"));
   }, [worldId, navigate]);
+
+  useEffect(() => {
+    if (phase === "europe-transition") fireQualificationBurst();
+  }, [phase]);
+
+  useEffect(() => {
+    if (phase !== "europe-champion" || !champion || !world) return;
+    const userClubId = world.clubs.find((c) => c.managedByUserId)?.id;
+    if (champion === userClubId) fireChampionShower();
+  }, [phase, champion, world]);
 
   async function handleCreateSeason() {
     if (!worldId) return;
@@ -169,6 +183,12 @@ export function SeasonPage() {
     setPhase("europe-transition");
     await pause(3000);
 
+    // Clicking past a pause immediately kicks off a real backend call + polling wait with no
+    // MatchPopupReel/animation to fill the gap — without an explicit loading phase here, the
+    // screen just sits on the same stale content with the same "Continue" button still showing,
+    // which reads as "Continue did nothing" even though the pipeline is actually progressing.
+    setPhase("simulating");
+    setSimulatingLabel("Kicking off the Champions League…");
     const { competitionId, seasonId: leaguePhaseSeasonId } = await api.startEuropeLeaguePhase(wId, domesticSeasonId);
     setEuropeCompetitionId(competitionId);
     await pollUntilCompleted(wId, leaguePhaseSeasonId);
@@ -185,6 +205,8 @@ export function SeasonPage() {
     setPhase("europe-league-standings");
     await pause(4000);
 
+    setPhase("simulating");
+    setSimulatingLabel("Setting up the knockouts…");
     const qf = await api.startEuropeKnockouts(wId, competitionId, leaguePhaseSeasonId);
     await runKnockoutRound(wId, competitionId, qf);
 
@@ -195,6 +217,11 @@ export function SeasonPage() {
 
   async function runKnockoutRound(wId: string, competitionId: string, round: EuropeRoundDto) {
     setKnockoutRound(round.round);
+    // Same reasoning as the league-phase transition above — this covers both the first entry
+    // into the knockout stage and every recursive SF/FINAL call, so no round-to-round transition
+    // is ever left showing the previous round's stale result screen during the polling wait.
+    setPhase("simulating");
+    setSimulatingLabel(`Simulating the ${ROUND_LABEL[round.round]}…`);
     setAllTies((prev) => [...prev, ...round.ties]);
     await pollUntilCompleted(wId, round.seasonId);
 
@@ -257,7 +284,7 @@ export function SeasonPage() {
       )}
 
       {phase === "simulating" && (
-        <p className="text-center text-sm text-smoke-500">Kicking off the season&hellip;</p>
+        <p className="animate-gold-pulse text-center text-sm text-smoke-500">{simulatingLabel}</p>
       )}
 
       {phase === "domestic-replay" && (
@@ -293,16 +320,27 @@ export function SeasonPage() {
       )}
 
       {phase === "europe-transition" && (
-        <div className="notch space-y-3 border-2 border-gold-400/60 bg-gradient-to-br from-gold-500/15 via-ink-900 to-ink-950 p-8 text-center">
-          <p className="text-3xl">&#127942;</p>
-          <h2 className="font-display text-2xl font-bold uppercase tracking-wide text-paper">
+        <motion.div
+          variants={staggerContainer}
+          initial="initial"
+          animate="animate"
+          className="notch space-y-3 border-2 border-gold-400/60 bg-gradient-to-br from-gold-500/15 via-ink-900 to-ink-950 p-8 text-center"
+        >
+          <motion.p variants={staggerItemBounce} className="text-3xl">
+            &#127942;
+          </motion.p>
+          <motion.h2 variants={staggerItem} className="font-display text-2xl font-bold uppercase tracking-wide text-paper">
             Congratulations! {userClub?.name} qualified for the Champions League
-          </h2>
-          <p className="text-sm text-smoke-400">Continuing into the European campaign&hellip;</p>
-          <Button variant="ghost" size="sm" onClick={skipPause}>
-            Continue &rarr;
-          </Button>
-        </div>
+          </motion.h2>
+          <motion.p variants={staggerItem} className="text-sm text-smoke-400">
+            Continuing into the European campaign&hellip;
+          </motion.p>
+          <motion.div variants={staggerItem}>
+            <Button variant="ghost" size="sm" onClick={skipPause}>
+              Continue &rarr;
+            </Button>
+          </motion.div>
+        </motion.div>
       )}
 
       {phase === "europe-league-replay" && (
@@ -354,15 +392,32 @@ export function SeasonPage() {
       )}
 
       {phase === "europe-champion" && champion && (
-        <div className="notch space-y-3 border-2 border-gold-400/70 bg-gradient-to-br from-gold-500/20 via-ink-900 to-ink-950 p-8 text-center">
-          <p className="text-3xl">&#127942;</p>
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-smoke-600">Champions League Winners</p>
-          <h2 className="font-display text-3xl font-bold uppercase tracking-tight text-paper">{nameFor(champion)}</h2>
-          {allTies.length > 0 && <KnockoutBracket ties={allTies} clubs={world.clubs} highlightClubId={userClub?.id} />}
-          <Button variant="ghost" size="sm" onClick={skipPause}>
-            Continue &rarr;
-          </Button>
-        </div>
+        <motion.div
+          variants={staggerContainer}
+          initial="initial"
+          animate="animate"
+          className="notch space-y-3 border-2 border-gold-400/70 bg-gradient-to-br from-gold-500/20 via-ink-900 to-ink-950 p-8 text-center"
+        >
+          <motion.p variants={staggerItemBounce} className="text-3xl">
+            &#127942;
+          </motion.p>
+          <motion.p variants={staggerItem} className="text-xs font-semibold uppercase tracking-[0.3em] text-smoke-600">
+            Champions League Winners
+          </motion.p>
+          <motion.h2 variants={staggerItem} className="font-display text-3xl font-bold uppercase tracking-tight text-paper">
+            {nameFor(champion)}
+          </motion.h2>
+          {allTies.length > 0 && (
+            <motion.div variants={staggerItem}>
+              <KnockoutBracket ties={allTies} clubs={world.clubs} highlightClubId={userClub?.id} />
+            </motion.div>
+          )}
+          <motion.div variants={staggerItem}>
+            <Button variant="ghost" size="sm" onClick={skipPause}>
+              Continue &rarr;
+            </Button>
+          </motion.div>
+        </motion.div>
       )}
 
       {phase === "summary" && summary && (

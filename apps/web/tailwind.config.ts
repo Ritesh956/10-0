@@ -69,17 +69,6 @@ export default {
           "0%": { opacity: "0", transform: "scale(0.92) translateY(6px)" },
           "100%": { opacity: "1", transform: "scale(1) translateY(0)" },
         },
-        "reel-cycle": {
-          "0%, 100%": { transform: "translateY(0)" },
-          "50%": { transform: "translateY(-6%)" },
-        },
-        /* Duplicating the reel list exactly 2x and animating to -50% (of the animated
-           element's OWN height, per the CSS transform spec) always lands exactly one
-           full original-list-height later, so the loop is seamless at any list length. */
-        "reel-scroll": {
-          "0%": { transform: "translateY(0)" },
-          "100%": { transform: "translateY(-50%)" },
-        },
         "gold-pulse": {
           "0%, 100%": { opacity: "0.5" },
           "50%": { opacity: "1" },
@@ -87,8 +76,6 @@ export default {
       },
       animation: {
         "pop-in": "pop-in 0.25s ease-out",
-        "reel-cycle": "reel-cycle 0.12s linear infinite",
-        "reel-scroll": "reel-scroll 0.6s linear infinite",
         "gold-pulse": "gold-pulse 1s ease-in-out infinite",
       },
     },

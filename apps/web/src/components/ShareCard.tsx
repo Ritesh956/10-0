@@ -1,4 +1,8 @@
+import { useEffect } from "react";
+import { motion } from "framer-motion";
 import type { SummaryDto } from "../api/types";
+import { fireTitleBurst, fireUnbeatenBurst } from "../lib/confetti";
+import { SPRING_BOUNCY } from "../lib/motion";
 
 interface Props {
   summary: SummaryDto;
@@ -6,6 +10,13 @@ interface Props {
 
 export function ShareCard({ summary }: Props) {
   const { userClub, userRow, position, unbeaten, shareText } = summary;
+
+  useEffect(() => {
+    if (!userClub || !userRow) return;
+    if (unbeaten) fireUnbeatenBurst();
+    else if (position === 1) fireTitleBurst();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function copyToClipboard() {
     if (shareText) await navigator.clipboard.writeText(shareText);
@@ -22,9 +33,14 @@ export function ShareCard({ summary }: Props) {
       }`}
     >
       {unbeaten && (
-        <div className="notch-sm absolute right-4 top-4 border-2 border-gold-300 bg-gold-400 px-3 py-1 font-display text-xs font-bold uppercase tracking-wider text-ink-950">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.5, rotate: -8 }}
+          animate={{ opacity: 1, scale: 1, rotate: 0 }}
+          transition={SPRING_BOUNCY}
+          className="notch-sm absolute right-4 top-4 border-2 border-gold-300 bg-gold-400 px-3 py-1 font-display text-xs font-bold uppercase tracking-wider text-ink-950"
+        >
           Unbeaten
-        </div>
+        </motion.div>
       )}
       <p className="text-xs uppercase tracking-[0.3em] text-smoke-600">Season Result</p>
       <h2 className="mt-2 font-display text-3xl font-bold uppercase tracking-tight text-paper">{userClub.name}</h2>

@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Button } from "./ui/Button";
+import { SlotReel } from "./SlotReel";
 
 export interface ReelCandidate {
   club: string;
@@ -7,64 +8,49 @@ export interface ReelCandidate {
 }
 
 interface Props {
-  clubName?: string | undefined;
-  seasonYear?: number | undefined;
+  /** The winner to land on, decided before the spin starts — undefined only in the idle (not-yet-spun) state. */
+  target?: ReelCandidate | undefined;
   leagueName?: string | undefined;
   /** Real candidates for the current pool — the club/season reels spin through these independently. */
   candidates?: ReelCandidate[] | undefined;
+  /** Bump this every time a new spin should start (alongside a new `target`). */
+  spinToken: number;
   spinning: boolean;
   disabled?: boolean | undefined;
   onSpin: () => void;
+  /** Fires once both columns have visually landed on `target`. */
+  onSettled?: () => void;
 }
 
-/** One spinning (or landed) column — shared by the Club and Season reels. */
-function ReelColumn({
-  label,
-  items,
-  landedValue,
-  landedClass = "text-paper",
+export function DrawReel({
+  target,
+  leagueName,
+  candidates,
+  spinToken,
   spinning,
-}: {
-  label: string;
-  items: string[];
-  landedValue: string;
-  landedClass?: string;
-  spinning: boolean;
-}) {
-  return (
-    <div className="min-w-0 flex-1">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-smoke-600">{label}</p>
-      <div
-        className={`notch-sm relative mt-2 h-12 overflow-hidden border-2 bg-ink-950/60 transition-colors ${
-          spinning ? "border-gold-500/50" : "border-ink-700"
-        }`}
-      >
-        {spinning ? (
-          <div className="animate-reel-scroll blur-[0.5px]">
-            {[...items, ...items].map((item, i) => (
-              <p
-                key={i}
-                className="flex h-12 items-center justify-center truncate whitespace-nowrap px-2 font-display text-base font-bold uppercase tracking-tight text-smoke-500"
-              >
-                {item}
-              </p>
-            ))}
-          </div>
-        ) : (
-          <p
-            className={`animate-pop-in flex h-12 items-center justify-center truncate whitespace-nowrap px-2 text-center font-display text-base font-bold uppercase tracking-tight ${landedClass}`}
-          >
-            {landedValue}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-export function DrawReel({ clubName, seasonYear, leagueName, candidates, spinning, disabled, onSpin }: Props) {
+  disabled,
+  onSpin,
+  onSettled,
+}: Props) {
   const clubItems = candidates?.length ? candidates.map((c) => c.club) : ["SCANNING", "ARCHIVES", "RECORDS"];
   const yearItems = candidates?.length ? candidates.map((c) => String(c.year)) : ["----", "----", "----"];
+
+  const clubSettled = useRef(false);
+  const seasonSettled = useRef(false);
+
+  useEffect(() => {
+    clubSettled.current = false;
+    seasonSettled.current = false;
+  }, [spinToken]);
+
+  function handleClubSettled() {
+    clubSettled.current = true;
+    if (seasonSettled.current) onSettled?.();
+  }
+  function handleSeasonSettled() {
+    seasonSettled.current = true;
+    if (clubSettled.current) onSettled?.();
+  }
 
   useEffect(() => {
     function handleKeydown(e: KeyboardEvent) {
@@ -87,14 +73,25 @@ export function DrawReel({ clubName, seasonYear, leagueName, candidates, spinnin
         {spinning && <span aria-hidden className="absolute inset-0 animate-gold-pulse bg-gold-500/5" />}
 
         <div className="relative flex items-end gap-3">
-          <ReelColumn label="Club" items={clubItems} landedValue={clubName ?? "— UNDRAWN —"} spinning={spinning} />
-          <span className="mb-3 font-display text-lg text-ink-600">&times;</span>
-          <ReelColumn
-            label="Season"
-            items={yearItems}
-            landedValue={seasonYear !== undefined ? String(seasonYear) : "—"}
-            landedClass="text-gold-400"
+          <SlotReel
+            label="Club"
+            decorativeItems={clubItems}
+            winnerLabel={target?.club ?? null}
+            spinToken={spinToken}
             spinning={spinning}
+            landedClass="text-paper"
+            onSettled={handleClubSettled}
+          />
+          <span className="mb-3 font-display text-lg text-ink-600">&times;</span>
+          <SlotReel
+            label="Season"
+            decorativeItems={yearItems}
+            winnerLabel={target ? String(target.year) : null}
+            spinToken={spinToken}
+            spinning={spinning}
+            landedClass="text-gold-400"
+            settleDelayMs={200}
+            onSettled={handleSeasonSettled}
           />
         </div>
 

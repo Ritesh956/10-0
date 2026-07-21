@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import { api } from "../api/client";
 import type { ClubSeasonDto, ManagerDto, PlayerSeasonDto } from "../api/types";
 import { DraftedPlayerRow } from "../components/DraftedPlayerRow";
@@ -7,8 +8,10 @@ import { DrawReel, type ReelCandidate } from "../components/DrawReel";
 import { GuestGateModal } from "../components/GuestGateModal";
 import { PitchView, type PitchSlotState } from "../components/PitchView";
 import { PlayerPickCard } from "../components/PlayerPickCard";
+import { SlotReel } from "../components/SlotReel";
 import { Button } from "../components/ui/Button";
 import { RatingBar } from "../components/ui/RatingBar";
+import { SPRING_SMOOTH } from "../lib/motion";
 import {
   canPlayPosition,
   POSITION_GROUP,
@@ -67,6 +70,48 @@ function average(values: number[]): number {
   return values.length ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : 0;
 }
 
+export interface PreseasonOdds {
+  seasonSize: number;
+  expectedPoints: number;
+  winPct: number;
+  top4Pct: number;
+  relegationPct: number;
+  projectedFinish: number;
+}
+
+/** Pre-season projection shown on the confirm screen. Every stat is derived from ONE continuous
+    expected-finish position (via a logistic rank distribution) rather than separate hand-tuned
+    curves per stat — those used to disagree with each other (e.g. a squad "projected 7th" could
+    simultaneously show ~40% to win the league, which makes no sense together). */
+export function computePreseasonOdds(overallRating: number): PreseasonOdds {
+  // SEASON_SIZE mirrors the real top-flight-sized league SeasonPage actually simulates
+  // (see apps/web/src/pages/SeasonPage.tsx's createSeason call) — keep the two in sync.
+  const seasonSize = 20;
+  const matches = (seasonSize - 1) * 2;
+  // A hard 55-90 clamp saturated `strength` to 1 for almost any good squad (overall 90+
+  // is common), making every strong draft show the same "90% to win it" numbers. A logistic
+  // curve centered on a realistic "mid-table top-flight XI" benchmark keeps differentiating
+  // squads all the way up near the top of the rating scale instead of flatlining early.
+  const MID_OVERALL = 75;
+  const SPREAD = 8;
+  const strength = 1 / (1 + Math.exp(-(overallRating - MID_OVERALL) / SPREAD));
+  const ppg = 0.6 + strength * 2; // ~0.6 (relegation form) to ~2.6 (title-winning pace) points/game
+
+  const meanRank = seasonSize - strength * (seasonSize - 1); // continuous, e.g. ~6.6 for a strong-but-not-dominant XI
+  const RANK_SPREAD = 3.5; // typical +/- finish-position swing a team of given quality sees season to season
+  const LOGISTIC_SCALE = RANK_SPREAD / 1.814; // logistic-distribution scale matching that spread's std dev
+  const rankCdf = (threshold: number) => 1 / (1 + Math.exp((meanRank - threshold) / LOGISTIC_SCALE));
+
+  return {
+    seasonSize,
+    expectedPoints: Math.round(ppg * matches),
+    winPct: Math.max(1, Math.min(95, Math.round(rankCdf(1) * 100))),
+    top4Pct: Math.max(1, Math.min(99, Math.round(rankCdf(4) * 100))),
+    relegationPct: Math.max(0, Math.min(90, Math.round((1 - rankCdf(seasonSize - 3)) * 100))),
+    projectedFinish: Math.max(1, Math.min(seasonSize, Math.round(meanRank))),
+  };
+}
+
 function sortPlayers(list: PlayerSeasonDto[], mode: SortMode): PlayerSeasonDto[] {
   const copy = [...list];
   if (mode === "rating") {
@@ -91,7 +136,12 @@ function OddsBar({ label, pct, colorClass }: { label: string; pct: number; color
         <span className="font-display font-bold text-paper">{pct}%</span>
       </div>
       <div className="mt-1 h-1.5 w-full bg-ink-800">
-        <div className={`h-full ${colorClass}`} style={{ width: `${pct}%` }} />
+        <motion.div
+          className={`h-full ${colorClass}`}
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={SPRING_SMOOTH}
+        />
       </div>
     </div>
   );
@@ -133,6 +183,9 @@ export function DraftPage() {
 
   const [currentClub, setCurrentClub] = useState<ClubSeasonDto | null>(null);
   const [spinning, setSpinning] = useState(false);
+  const [spinTarget, setSpinTarget] = useState<ReelCandidate | null>(null);
+  const [spinToken, setSpinToken] = useState(0);
+  const spinSettleResolveRef = useRef<(() => void) | null>(null);
   const [reelCandidates, setReelCandidates] = useState<ReelCandidate[]>([]);
   const [playerPool, setPlayerPool] = useState<PlayerSeasonDto[]>([]);
   const [loadingPlayers, setLoadingPlayers] = useState(false);
@@ -146,6 +199,10 @@ export function DraftPage() {
   const [postDraftStep, setPostDraftStep] = useState<PostDraftStep>("review");
   const [managerPick, setManagerPick] = useState<ManagerDto | null>(null);
   const [spinningManager, setSpinningManager] = useState(false);
+  const [managerCandidates, setManagerCandidates] = useState<string[]>([]);
+  const [managerSpinTarget, setManagerSpinTarget] = useState<string | null>(null);
+  const [managerSpinToken, setManagerSpinToken] = useState(0);
+  const managerSettleResolveRef = useRef<(() => void) | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [showGuestGate, setShowGuestGate] = useState(false);
@@ -177,41 +234,117 @@ export function DraftPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.eraId, config.leagueIds.join(","), config.eraYearMin, config.eraYearMax]);
 
-  async function loadPlayersFor(club: ClubSeasonDto) {
+  async function loadPlayersFor(club: ClubSeasonDto): Promise<PlayerSeasonDto[] | null> {
     setLoadingPlayers(true);
     try {
       const players = await api.listPlayerSeasons({ clubSeasonId: club.id, ratingsMode: config.playerRatings });
       setPlayerPool(players);
+      return players;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load players");
+      return null;
     } finally {
       setLoadingPlayers(false);
     }
   }
 
-  async function doSpin(excludeId?: string) {
+  function handleSpinSettled() {
+    spinSettleResolveRef.current?.();
+    spinSettleResolveRef.current = null;
+  }
+
+  // A drawn club whose entire pool has nobody eligible for the slot(s) still open would
+  // otherwise deadlock the user — nobody to pick, but no redraw left to escape it either.
+  // Cap how many consecutive free auto-rerolls we'll silently burn through so a pathologically
+  // narrow filtered pool (every club in it missing the needed position) can't loop forever.
+  const MAX_AUTO_REROLL_ATTEMPTS = 8;
+
+  async function doSpin(excludeIds?: Set<string>, autoRerollAttempt = 0) {
     if (!pool || pool.length === 0) {
       setError("No club seasons match your league and era filters — go back and widen them.");
       return;
     }
     setError(null);
-    setSpinning(true);
     setPendingPlayer(null);
     setPlayerPool([]);
-    const candidates = excludeId ? pool.filter((cs) => cs.id !== excludeId) : pool;
+    const candidates = excludeIds && excludeIds.size > 0 ? pool.filter((cs) => !excludeIds.has(cs.id)) : pool;
     const source = candidates.length > 0 ? candidates : pool;
-    setReelCandidates(sampleReelCandidates(source));
-    await new Promise((resolve) => setTimeout(resolve, 1200));
+    // Decide the winner up front so the reel animates deterministically to a known target
+    // instead of freezing after an arbitrary delay and revealing the answer afterwards.
     const club = source[Math.floor(Math.random() * source.length)]!;
+    setReelCandidates(sampleReelCandidates(source));
+    setSpinTarget({ club: club.club.name, year: club.seasonYear });
+    setSpinToken((t) => t + 1);
+    setSpinning(true);
+    await new Promise<void>((resolve) => {
+      spinSettleResolveRef.current = resolve;
+    });
     setCurrentClub(club);
     setSpinning(false);
-    await loadPlayersFor(club);
+    const players = await loadPlayersFor(club);
+    if (players === null) return; // load failed — error already surfaced, nothing more to do here
+
+    const usable = effectiveSlot
+      ? players.some((p) => canPlayPosition(p.positions, effectiveSlot.position))
+      : players.some((p) => isUsableAnywhere(p));
+
+    if (!usable) {
+      if (autoRerollAttempt >= MAX_AUTO_REROLL_ATTEMPTS) {
+        setError(
+          "None of the last several draws had anyone who could fill this slot — try widening your league or era filters.",
+        );
+        return;
+      }
+      const nextExcluded = new Set(excludeIds);
+      nextExcluded.add(club.id);
+      await doSpin(nextExcluded, autoRerollAttempt + 1);
+    }
   }
 
   function handleReroll() {
     if (rerollsRemaining <= 0 || !currentClub) return;
     useReroll();
-    void doSpin(currentClub.id);
+    void doSpin(new Set([currentClub.id]));
+  }
+
+  useEffect(() => {
+    if (postDraftStep !== "manager") return;
+    let cancelled = false;
+    void api
+      .listManagers()
+      .then((managers) => {
+        if (!cancelled) setManagerCandidates(managers.map((m) => m.name));
+      })
+      .catch(() => {
+        // decorative-only — a failed prefetch just falls back to the SlotReel's own placeholder
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [postDraftStep]);
+
+  function handleManagerSpinSettled() {
+    managerSettleResolveRef.current?.();
+    managerSettleResolveRef.current = null;
+  }
+
+  async function doManagerSpin() {
+    setSpinningManager(true);
+    setError(null);
+    try {
+      const manager = await api.rollManager();
+      setManagerSpinTarget(manager.name);
+      setManagerSpinToken((t) => t + 1);
+      await new Promise<void>((resolve) => {
+        managerSettleResolveRef.current = resolve;
+      });
+      setManagerPick(manager);
+      setPostDraftStep("preseason");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to draw a gaffer");
+    } finally {
+      setSpinningManager(false);
+    }
   }
 
   function resetSpinState() {
@@ -365,28 +498,7 @@ export function DraftPage() {
 
   const overallRating = useMemo(() => average(Object.values(picks).map((p) => p.overall)), [picks]);
 
-  const odds = useMemo(() => {
-    // SEASON_SIZE mirrors the real top-flight-sized league SeasonPage actually simulates
-    // (see apps/web/src/pages/SeasonPage.tsx's createSeason call) — keep the two in sync.
-    const seasonSize = 20;
-    const matches = (seasonSize - 1) * 2;
-    // A hard 55-90 clamp saturated `strength` to 1 for almost any good squad (overall 90+
-    // is common), making every strong draft show the same "90% to win it" numbers. A logistic
-    // curve centered on a realistic "mid-table top-flight XI" benchmark keeps differentiating
-    // squads all the way up near the top of the rating scale instead of flatlining early.
-    const MID_OVERALL = 75;
-    const SPREAD = 8;
-    const strength = 1 / (1 + Math.exp(-(overallRating - MID_OVERALL) / SPREAD));
-    const ppg = 0.6 + strength * 2; // ~0.6 (relegation form) to ~2.6 (title-winning pace) points/game
-    return {
-      seasonSize,
-      expectedPoints: Math.round(ppg * matches),
-      winPct: Math.max(1, Math.min(95, Math.round(strength ** 2.2 * 90))),
-      top4Pct: Math.max(2, Math.min(99, Math.round(15 + strength * 82))),
-      relegationPct: Math.max(0, Math.min(70, Math.round((1 - strength) ** 2.3 * 50))),
-      projectedFinish: Math.max(1, Math.min(seasonSize, Math.round(seasonSize - strength * (seasonSize - 1)))),
-    };
-  }, [overallRating]);
+  const odds = useMemo(() => computePreseasonOdds(overallRating), [overallRating]);
 
   const pitchClickable = moveMode
     ? handlePitchSlotClick
@@ -557,24 +669,23 @@ export function DraftPage() {
                 <p className="text-sm text-smoke-500">
                   A real manager's tactical identity changes how your team actually plays &mdash; and its odds.
                 </p>
+                <div
+                  className={`notch relative mx-auto max-w-xs border-2 bg-ink-900/70 p-5 transition-colors ${
+                    spinningManager ? "border-gold-500/60" : "border-ink-700"
+                  }`}
+                >
+                  {spinningManager && <span aria-hidden className="absolute inset-0 animate-gold-pulse bg-gold-500/5" />}
+                  <SlotReel
+                    label="Manager"
+                    decorativeItems={managerCandidates}
+                    winnerLabel={managerSpinTarget}
+                    spinToken={managerSpinToken}
+                    spinning={spinningManager}
+                    onSettled={handleManagerSpinSettled}
+                  />
+                </div>
                 <div className="flex flex-col gap-3 sm:flex-row">
-                  <Button
-                    variant="outline"
-                    fullWidth
-                    disabled={spinningManager}
-                    onClick={() => {
-                      setSpinningManager(true);
-                      setError(null);
-                      void api
-                        .rollManager()
-                        .then((manager) => {
-                          setManagerPick(manager);
-                          setPostDraftStep("preseason");
-                        })
-                        .catch((err) => setError(err instanceof Error ? err.message : "Failed to draw a gaffer"))
-                        .finally(() => setSpinningManager(false));
-                    }}
-                  >
+                  <Button variant="outline" fullWidth disabled={spinningManager} onClick={() => void doManagerSpin()}>
                     {spinningManager ? "Drawing..." : "Draw a gaffer"}
                   </Button>
                   <Button
@@ -666,7 +777,14 @@ export function DraftPage() {
                   <span className="font-semibold text-paper">{positionLabel(targetSlot.position)}</span> (
                   {targetSlot.position})
                 </p>
-                <DrawReel spinning={spinning} candidates={reelCandidates} onSpin={() => void doSpin()} />
+                <DrawReel
+                  target={spinTarget ?? undefined}
+                  spinToken={spinToken}
+                  spinning={spinning}
+                  candidates={reelCandidates}
+                  onSpin={() => void doSpin()}
+                  onSettled={handleSpinSettled}
+                />
               </div>
             ) : (
               <div className="notch border-2 border-dashed border-ink-700 p-8 text-center text-sm text-smoke-500">
@@ -677,13 +795,14 @@ export function DraftPage() {
             <div className="space-y-4">
               {spinning || !currentClub ? (
                 <DrawReel
-                  clubName={currentClub?.club.name}
-                  seasonYear={currentClub?.seasonYear}
+                  target={spinTarget ?? undefined}
                   leagueName={currentClub?.league.name}
                   candidates={reelCandidates}
+                  spinToken={spinToken}
                   spinning={spinning}
                   disabled
                   onSpin={() => void doSpin()}
+                  onSettled={handleSpinSettled}
                 />
               ) : (
                 <div className="notch border-2 border-ink-700 bg-ink-900/60 p-5">
@@ -782,7 +901,14 @@ export function DraftPage() {
               )}
             </div>
           ) : (
-            <DrawReel spinning={spinning} candidates={reelCandidates} onSpin={() => void doSpin()} />
+            <DrawReel
+              target={spinTarget ?? undefined}
+              spinToken={spinToken}
+              spinning={spinning}
+              candidates={reelCandidates}
+              onSpin={() => void doSpin()}
+              onSettled={handleSpinSettled}
+            />
           )}
         </div>
       </div>

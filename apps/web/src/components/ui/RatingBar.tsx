@@ -1,3 +1,6 @@
+import { motion } from "framer-motion";
+import { SPRING_SMOOTH } from "../../lib/motion";
+
 interface Props {
   label: string;
   value: number;
@@ -14,7 +17,12 @@ export function RatingBar({ label, value, max = 99, colorClass }: Props) {
         <span className="font-display font-bold text-paper">{value}</span>
       </div>
       <div className="mt-1 h-1.5 w-full bg-ink-800">
-        <div className={`h-full ${colorClass}`} style={{ width: `${pct}%` }} />
+        <motion.div
+          className={`h-full ${colorClass}`}
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={SPRING_SMOOTH}
+        />
       </div>
     </div>
   );
