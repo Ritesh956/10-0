@@ -4,12 +4,21 @@ interface Props {
   leagues: LeagueDto[];
   selectedIds: string[];
   onChange: (ids: string[]) => void;
+  /** Exactly one league required, no "All Leagues" escape hatch — used by the single-player draft
+      flow now that AI-fill needs one specific real league to build a recognizable current table
+      around (see SeasonsService.fillAiClubsFromLeague). Multiplayer's roll-a-club flow still uses
+      the default multi-select "All Leagues" mode, unaffected. */
+  singleSelect?: boolean;
 }
 
-export function LeaguePicker({ leagues, selectedIds, onChange }: Props) {
+export function LeaguePicker({ leagues, selectedIds, onChange, singleSelect = false }: Props) {
   const sorted = [...leagues].sort((a, b) => a.tier - b.tier || a.name.localeCompare(b.name));
 
   function toggle(id: string) {
+    if (singleSelect) {
+      onChange([id]);
+      return;
+    }
     onChange(selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]);
   }
 
@@ -19,17 +28,19 @@ export function LeaguePicker({ leagues, selectedIds, onChange }: Props) {
 
   return (
     <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-      <button
-        type="button"
-        onClick={() => onChange([])}
-        className={`notch-sm flex min-h-16 flex-col items-center justify-center gap-0.5 border-2 px-3 py-2.5 text-center text-sm font-semibold uppercase tracking-wide transition ${
-          selectedIds.length === 0
-            ? "border-gold-500 bg-gold-500/10 text-gold-300"
-            : "border-ink-700 bg-ink-900/40 text-paper hover:border-ink-600"
-        }`}
-      >
-        All Leagues
-      </button>
+      {!singleSelect && (
+        <button
+          type="button"
+          onClick={() => onChange([])}
+          className={`notch-sm flex min-h-16 flex-col items-center justify-center gap-0.5 border-2 px-3 py-2.5 text-center text-sm font-semibold uppercase tracking-wide transition ${
+            selectedIds.length === 0
+              ? "border-gold-500 bg-gold-500/10 text-gold-300"
+              : "border-ink-700 bg-ink-900/40 text-paper hover:border-ink-600"
+          }`}
+        >
+          All Leagues
+        </button>
+      )}
 
       {sorted.map((league) => {
         const active = selectedIds.includes(league.id);

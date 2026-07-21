@@ -2,6 +2,7 @@ import type {
   AuthResponse,
   CatalogFilter,
   ClubSeasonDto,
+  CompetitionStatsDto,
   EraDto,
   EuropeAdvanceResultDto,
   EuropeLeaguePhaseDto,
@@ -135,10 +136,10 @@ export const api = {
       body: JSON.stringify({ name, formation, refPlayerSeasonIds, refManagerId }),
     }),
 
-  createSeason: (worldId: string, competitionName: string, size: number) =>
+  createSeason: (worldId: string, competitionName: string, opts: { size?: number; leagueId?: string | undefined }) =>
     request<SeasonDto>(`/worlds/${worldId}/seasons`, {
       method: "POST",
-      body: JSON.stringify({ competitionName, size }),
+      body: JSON.stringify({ competitionName, ...opts }),
     }),
 
   simulateSeason: (worldId: string, seasonId: string) =>
@@ -157,6 +158,12 @@ export const api = {
 
   getTeamStats: (worldId: string, seasonId: string, clubId: string) =>
     request<TeamStatsDto>(`/worlds/${worldId}/seasons/${seasonId}/team-stats?clubId=${clubId}`),
+
+  getCompetitionStats: (worldId: string, competitionId: string) =>
+    request<CompetitionStatsDto>(`/worlds/${worldId}/seasons/competitions/${competitionId}/stats`),
+
+  getTeamStatsForCompetition: (worldId: string, competitionId: string, clubId: string) =>
+    request<TeamStatsDto>(`/worlds/${worldId}/seasons/competitions/${competitionId}/team-stats?clubId=${clubId}`),
 
   getEuropeStatus: (worldId: string, domesticSeasonId: string) =>
     request<EuropeStatusDto>(`/worlds/${worldId}/europe/status?domesticSeasonId=${domesticSeasonId}`),

@@ -70,4 +70,23 @@ export class SeasonsController {
   ) {
     return this.seasons.getTeamStats(worldId, seasonId, clubId, user.sub);
   }
+
+  @Get("competitions/:competitionId/stats")
+  competitionStats(
+    @CurrentUser() user: AuthTokenPayload,
+    @Param("worldId") worldId: string,
+    @Param("competitionId") competitionId: string,
+  ) {
+    return this.seasons.getCompetitionStats(worldId, competitionId, user.sub);
+  }
+
+  @Get("competitions/:competitionId/team-stats")
+  competitionTeamStats(
+    @CurrentUser() user: AuthTokenPayload,
+    @Param("worldId") worldId: string,
+    @Param("competitionId") competitionId: string,
+    @Query("clubId") clubId: string,
+  ) {
+    return this.seasons.getTeamStatsForCompetition(worldId, competitionId, clubId, user.sub);
+  }
 }

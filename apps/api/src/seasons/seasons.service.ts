@@ -13,6 +13,16 @@ import type { CreateSeasonDto } from "./seasons.schemas.js";
 
 const AI_CLUB_FORMATION = "4-4-2";
 
+/**
+ * Mirrors apps/web/src/lib/leagues.ts's REAL_LEAGUE_COUNTRIES — the draft flow already restricts
+ * the human's own club-season pool to these five real leagues, but AI-filled clubs pulled from
+ * every era-scoped RefClubSeason regardless of country, which let fictional placeholder clubs
+ * (fake names, generated attributes) end up seeded into the league table and, worse, into the
+ * Champions League qualification spots right alongside the user's real club. Keep this list in
+ * sync with the frontend one if the real dataset's country coverage ever changes.
+ */
+const REAL_LEAGUE_COUNTRIES = ["England", "Spain", "Italy", "Germany", "France"];
+
 @Injectable()
 export class SeasonsService {
   constructor(
@@ -27,10 +37,18 @@ export class SeasonsService {
       throw new BadRequestException("Draft a club before creating a season");
     }
 
-    await this.fillAiClubs(worldId, world.eraId, world.clubs, dto.size);
+    if (dto.leagueId) {
+      const league = await this.prisma.refLeague.findUnique({ where: { id: dto.leagueId } });
+      if (!league || !REAL_LEAGUE_COUNTRIES.includes(league.country)) {
+        throw new BadRequestException("Choose a real league to build a season around");
+      }
+      await this.fillAiClubsFromLeague(worldId, world.clubs, dto.leagueId);
+    } else {
+      await this.fillAiClubs(worldId, world.eraId, world.clubs, dto.size);
+    }
     const clubs = await this.prisma.worldClub.findMany({ where: { worldId } });
     if (clubs.length < 2) {
-      throw new BadRequestException("Not enough clubs available in this era to form a season");
+      throw new BadRequestException("Not enough clubs available to form a season");
     }
 
     const competition = await this.prisma.competition.create({
@@ -73,7 +91,7 @@ export class SeasonsService {
       existingClubs.map((c) => c.refClubSeasonId).filter((id): id is string => id !== null),
     );
     const candidates = await this.prisma.refClubSeason.findMany({
-      where: { league: { eraId } },
+      where: { league: { eraId, country: { in: REAL_LEAGUE_COUNTRIES } } },
       include: { club: true, playerSeasons: true },
       take: needed * 3 + usedRefClubSeasonIds.size,
     });
@@ -89,6 +107,84 @@ export class SeasonsService {
     const toCreate = pool.slice(0, needed);
     await Promise.all(
       toCreate.map((clubSeason) => {
+        const draftPool: DraftCandidate[] = clubSeason.playerSeasons.map((ps) => ({
+          refPlayerSeasonId: ps.id,
+          positions: ps.positions as Position[],
+          overall: ps.overall,
+        }));
+        const lineup = buildLineup(AI_CLUB_FORMATION, draftPool);
+        return instantiateWorldClub(this.prisma, {
+          worldId,
+          name: clubSeason.club.name,
+          refClubSeasonId: clubSeason.id,
+          managedByUserId: undefined,
+          formation: AI_CLUB_FORMATION,
+          lineup,
+          allPlayerSeasonIds: clubSeason.playerSeasons.map((p) => p.id),
+          refManagerId: managerIds.length > 0 ? managerIds[randomInt(managerIds.length)] : undefined,
+        });
+      }),
+    );
+  }
+
+  /**
+   * Fills the rest of the league with exactly this real league's actual current clubs — "current"
+   * meaning the most recent season year the dataset has for it — instead of an arbitrary grab-bag
+   * across every real league and era, which previously produced nonsense: the same handful of real
+   * clubs (whichever happened to sort first) repeated 8-10 times over at different historical
+   * seasons, next to one or two others, rather than a single recognizable current table. The
+   * league's own real size (20 for the Premier League/LaLiga/Serie A, 18 for the Bundesliga/Ligue 1)
+   * comes directly from how many distinct clubs that latest year actually has — no hardcoding.
+   */
+  private async fillAiClubsFromLeague(
+    worldId: string,
+    existingClubs: { refClubSeasonId: string | null }[],
+    leagueId: string,
+  ): Promise<void> {
+    const yearAgg = await this.prisma.refClubSeason.aggregate({ where: { leagueId }, _max: { seasonYear: true } });
+    const latestYear = yearAgg._max.seasonYear;
+    if (latestYear == null) return;
+
+    const candidates = await this.prisma.refClubSeason.findMany({
+      where: { leagueId, seasonYear: latestYear },
+      include: { club: true, playerSeasons: true },
+    });
+
+    // The dataset should already be one row per club per year, but dedupe defensively so a data
+    // quirk can't seed the same real club twice into one league table.
+    const seenClubIds = new Set<string>();
+    const distinctClubSeasons = candidates.filter((c) => {
+      if (seenClubIds.has(c.clubId)) return false;
+      seenClubIds.add(c.clubId);
+      return true;
+    });
+
+    // If the user's own club IS one of this league's real clubs (a squad-first draft of an
+    // existing club-season), exclude that same real club from the AI pool — otherwise it would
+    // appear twice: once as the user, once as an AI-controlled duplicate of itself.
+    const usedRefClubSeasonIds = existingClubs.map((c) => c.refClubSeasonId).filter((id): id is string => id !== null);
+    const usedClubIds = new Set(
+      usedRefClubSeasonIds.length > 0
+        ? (
+            await this.prisma.refClubSeason.findMany({
+              where: { id: { in: usedRefClubSeasonIds } },
+              select: { clubId: true },
+            })
+          ).map((c) => c.clubId)
+        : [],
+    );
+
+    // Total season size = this league's own real current size — every existing club (the user's,
+    // and any other humans in a multiplayer world) takes one of those real slots regardless of
+    // whether it happens to map to one of this league's actual clubs.
+    const needed = distinctClubSeasons.length - existingClubs.length;
+    if (needed <= 0) return;
+
+    const pool = distinctClubSeasons.filter((c) => !usedClubIds.has(c.clubId)).slice(0, needed);
+    const managerIds = (await this.prisma.refManager.findMany({ select: { id: true } })).map((m) => m.id);
+
+    await Promise.all(
+      pool.map((clubSeason) => {
         const draftPool: DraftCandidate[] = clubSeason.playerSeasons.map((ps) => ({
           refPlayerSeasonId: ps.id,
           positions: ps.positions as Position[],
@@ -238,12 +334,13 @@ export class SeasonsService {
   }
 
   /**
-   * Aggregates PlayerMatchStat across every completed fixture a club played in this season —
-   * top scorer/assister, goals for/against, and a full squad breakdown for the "your team" screen.
+   * Aggregates PlayerMatchStat across every completed fixture a club played across the given
+   * seasons — top scorer/assister, goals for/against, and a full squad breakdown for the "your
+   * team" screen. Shared by getTeamStats (one season — the domestic league) and
+   * getTeamStatsForCompetition (every season under a competition — Champions League spans a
+   * separate Season row per stage: league phase, QF, SF, Final).
    */
-  async getTeamStats(worldId: string, seasonId: string, clubId: string, userId: string) {
-    await this.worlds.assertOwnership(worldId, userId);
-
+  private async aggregateTeamStats(worldId: string, seasonIds: string[], clubId: string) {
     // PlayerMatchStat has no clubId of its own — every match's rows cover BOTH sides' full squads,
     // so without this the opposing team's players would get folded into "our" squad totals below.
     const clubPlayers = await this.prisma.worldPlayer.findMany({ where: { clubId }, select: { id: true, name: true } });
@@ -253,7 +350,7 @@ export class SeasonsService {
     const fixtures = await this.prisma.fixture.findMany({
       where: {
         worldId,
-        seasonId,
+        seasonId: { in: seasonIds },
         status: "COMPLETED",
         OR: [{ homeClubId: clubId }, { awayClubId: clubId }],
       },
@@ -295,5 +392,93 @@ export class SeasonsService {
       topAssist: topAssist && topAssist.assists > 0 ? topAssist : undefined,
       squad,
     };
+  }
+
+  async getTeamStats(worldId: string, seasonId: string, clubId: string, userId: string) {
+    await this.worlds.assertOwnership(worldId, userId);
+    return this.aggregateTeamStats(worldId, [seasonId], clubId);
+  }
+
+  /** Same as getTeamStats, but rolled up across every Season row under a competition (the Champions
+      League's league phase + QF + SF + Final are each a separate Season sharing one competitionId). */
+  async getTeamStatsForCompetition(worldId: string, competitionId: string, clubId: string, userId: string) {
+    await this.worlds.assertOwnership(worldId, userId);
+    const seasons = await this.prisma.season.findMany({ where: { worldId, competitionId }, select: { id: true } });
+    return this.aggregateTeamStats(worldId, seasons.map((s) => s.id), clubId);
+  }
+
+  /**
+   * Competition-wide (not just "my club") leaderboard: every player's goals/assists/average rating
+   * across every completed fixture in every season under this competition — powers the Golden Boot,
+   * MVP, and top-scorers list on the post-season stats page. `mvp` requires a minimum match count
+   * (a quarter of whatever the most-used player logged) so a single standout cameo can't win it.
+   */
+  async getCompetitionStats(worldId: string, competitionId: string, userId: string) {
+    await this.worlds.assertOwnership(worldId, userId);
+
+    const seasons = await this.prisma.season.findMany({ where: { worldId, competitionId }, select: { id: true } });
+    const seasonIds = seasons.map((s) => s.id);
+    if (seasonIds.length === 0) return { topScorers: [], goldenBoot: undefined, mvp: undefined };
+
+    const fixtures = await this.prisma.fixture.findMany({
+      where: { worldId, seasonId: { in: seasonIds }, status: "COMPLETED" },
+      include: { match: { include: { playerStats: true } } },
+    });
+
+    const totals = new Map<string, { goals: number; assists: number; matchesPlayed: number; ratingSum: number }>();
+    for (const fixture of fixtures) {
+      if (!fixture.match) continue;
+      for (const stat of fixture.match.playerStats) {
+        const entry = totals.get(stat.playerId) ?? { goals: 0, assists: 0, matchesPlayed: 0, ratingSum: 0 };
+        entry.goals += stat.goals;
+        entry.assists += stat.assists;
+        if (stat.minutesPlayed > 0) {
+          entry.matchesPlayed += 1;
+          entry.ratingSum += stat.rating;
+        }
+        totals.set(stat.playerId, entry);
+      }
+    }
+
+    const playerIds = [...totals.keys()];
+    const players = await this.prisma.worldPlayer.findMany({
+      where: { id: { in: playerIds } },
+      select: { id: true, name: true, clubId: true },
+    });
+    const clubs = await this.prisma.worldClub.findMany({
+      where: { id: { in: [...new Set(players.map((p) => p.clubId))] } },
+      select: { id: true, name: true },
+    });
+    const clubNameById = new Map(clubs.map((c) => [c.id, c.name]));
+    const playerMetaById = new Map(players.map((p) => [p.id, p]));
+
+    const rows = playerIds.map((playerId) => {
+      const meta = playerMetaById.get(playerId);
+      const stat = totals.get(playerId)!;
+      return {
+        playerId,
+        name: meta?.name ?? "Unknown",
+        clubId: meta?.clubId ?? "",
+        clubName: meta ? (clubNameById.get(meta.clubId) ?? "Unknown") : "Unknown",
+        goals: stat.goals,
+        assists: stat.assists,
+        matchesPlayed: stat.matchesPlayed,
+        avgRating: stat.matchesPlayed > 0 ? stat.ratingSum / stat.matchesPlayed : 0,
+      };
+    });
+
+    const topScorers = rows
+      .filter((r) => r.goals > 0)
+      .sort((a, b) => b.goals - a.goals || b.assists - a.assists)
+      .slice(0, 10);
+    const goldenBoot = topScorers[0];
+
+    const maxMatches = Math.max(0, ...rows.map((r) => r.matchesPlayed));
+    const mvpThreshold = Math.max(1, Math.floor(maxMatches * 0.25));
+    const mvp = rows
+      .filter((r) => r.matchesPlayed >= mvpThreshold)
+      .sort((a, b) => b.avgRating - a.avgRating)[0];
+
+    return { topScorers, goldenBoot, mvp };
   }
 }

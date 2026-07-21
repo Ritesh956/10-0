@@ -13,6 +13,11 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@futbol/api", "dev"],
       "port": 4000
+    },
+    {
+      "name": "sim-worker",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@futbol/sim-worker", "dev"]
     }
   ]
 }

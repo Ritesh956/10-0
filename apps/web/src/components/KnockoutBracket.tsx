@@ -38,11 +38,13 @@ export function KnockoutBracket({ ties, clubs, highlightClubId }: Props) {
                 >
                   <span className={`min-w-0 flex-1 truncate ${homeWon ? "font-bold text-gold-300" : "text-paper"}`}>
                     {nameFor(tie.homeClubId)}
+                    {tie.homeClubId === highlightClubId && <span className="ml-1 text-[10px] font-normal text-gold-400">(You)</span>}
                   </span>
                   <span className="shrink-0 text-[10px] uppercase text-smoke-600">
                     {round === "FINAL" ? "final" : "vs"}
                   </span>
                   <span className={`min-w-0 flex-1 truncate text-right ${awayWon ? "font-bold text-gold-300" : "text-paper"}`}>
+                    {tie.awayClubId === highlightClubId && <span className="mr-1 text-[10px] font-normal text-gold-400">(You)</span>}
                     {nameFor(tie.awayClubId)}
                   </span>
                   {tie.winnerClubId && (

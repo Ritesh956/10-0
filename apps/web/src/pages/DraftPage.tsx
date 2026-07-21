@@ -149,7 +149,7 @@ function OddsBar({ label, pct, colorClass }: { label: string; pct: number; color
 
 export function DraftPage() {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const {
     config,
     picks,
@@ -162,6 +162,9 @@ export function DraftPage() {
     setSquadName,
     setWorldId,
   } = useDraft();
+  // Untouched squadName defaults to the user's own name instead of a generic placeholder —
+  // falls back further to "My Fantasy XI" only for the rare case of no signed-in display name.
+  const effectiveSquadName = squadName || user?.displayName || "My Fantasy XI";
 
   const slots = slotsForFormation(config.formation);
   const filledCount = Object.keys(picks).length;
@@ -419,7 +422,7 @@ export function DraftPage() {
       const world = await api.createWorld(config.eraId);
       setWorldId(world.id);
       const refPlayerSeasonIds = slots.map((_, i) => picks[i]?.id).filter((id): id is string => Boolean(id));
-      await api.draftFantasy(world.id, squadName, config.formation, refPlayerSeasonIds, managerPick?.id);
+      await api.draftFantasy(world.id, effectiveSquadName, config.formation, refPlayerSeasonIds, managerPick?.id);
       navigate("/season");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to confirm your XI");
@@ -758,7 +761,7 @@ export function DraftPage() {
                 </div>
 
                 <input
-                  value={squadName}
+                  value={effectiveSquadName}
                   onChange={(e) => setSquadName(e.target.value)}
                   className="notch-sm w-full border-2 border-ink-700 bg-ink-950 px-3 py-2 text-center text-sm text-paper outline-none focus:border-gold-500"
                   placeholder="Name your XI"

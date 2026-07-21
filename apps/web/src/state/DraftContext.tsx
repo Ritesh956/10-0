@@ -59,12 +59,26 @@ interface DraftContextValue {
 
 const DraftContext = createContext<DraftContextValue | undefined>(undefined);
 
+const WORLD_ID_STORAGE_KEY = "futbol_world_id";
+
 export function DraftProvider({ children }: { children: ReactNode }) {
   const [config, setConfigState] = useState<DraftConfig>(DEFAULT_CONFIG);
   const [picks, setPicks] = useState<Record<number, PlayerSeasonDto>>({});
   const [rerollsUsed, setRerollsUsed] = useState(0);
-  const [squadName, setSquadName] = useState("My Fantasy XI");
-  const [worldId, setWorldId] = useState<string | null>(null);
+  // Empty by default rather than a generic "My Fantasy XI" placeholder — DraftPage falls back to
+  // the signed-in user's own name for both display and submission whenever this is still untouched.
+  const [squadName, setSquadName] = useState("");
+  // Persisted (unlike the rest of this context) so a page reload — or just leaving /season and
+  // coming back — doesn't strand the user on Setup with no way back to a world that already
+  // exists server-side. A fresh draft naturally overwrites this with a new id, so an old run is
+  // never resurrected once you've moved on to building a new team.
+  const [worldId, setWorldIdState] = useState<string | null>(() => localStorage.getItem(WORLD_ID_STORAGE_KEY));
+
+  const setWorldId = useCallback((id: string | null) => {
+    if (id) localStorage.setItem(WORLD_ID_STORAGE_KEY, id);
+    else localStorage.removeItem(WORLD_ID_STORAGE_KEY);
+    setWorldIdState(id);
+  }, []);
 
   const setConfig = useCallback((patch: Partial<DraftConfig>) => {
     setConfigState((prev) => ({ ...prev, ...patch }));

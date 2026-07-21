@@ -166,7 +166,7 @@ export function MultiplayerPage() {
       await api.draftFantasy(world.id, a.squadName, formation, a.refPlayerSeasonIds);
       await api.draftFantasy(world.id, b.squadName, formation, b.refPlayerSeasonIds);
       const refreshedWorld = await api.getWorld(world.id);
-      const season = await api.createSeason(world.id, "Head-to-Head", 2);
+      const season = await api.createSeason(world.id, "Head-to-Head", { size: 2 });
       await api.simulateSeason(world.id, season.id);
       let latest = season;
       for (;;) {

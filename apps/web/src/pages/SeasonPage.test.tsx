@@ -22,6 +22,8 @@ const api = vi.hoisted(() => ({
   getMatchesWithEvents: vi.fn(),
   getStandings: vi.fn(),
   getTeamStats: vi.fn(),
+  getCompetitionStats: vi.fn(),
+  getTeamStatsForCompetition: vi.fn(),
   getEuropeStatus: vi.fn(),
   startEuropeLeaguePhase: vi.fn(),
   startEuropeKnockouts: vi.fn(),
@@ -52,7 +54,7 @@ const standings: StandingsDto = {
 const teamStats: TeamStatsDto = { clubId: "user-club", goalsFor: 90, goalsAgainst: 30, squad: [] };
 
 function setup() {
-  useDraftMock.mockReturnValue({ worldId: "w1" });
+  useDraftMock.mockReturnValue({ worldId: "w1", config: { leagueIds: ["league-1"] } });
   api.getWorld.mockResolvedValue(world);
   api.createSeason.mockResolvedValue(season);
   api.simulateSeason.mockResolvedValue({ status: "ok" });
@@ -60,11 +62,17 @@ function setup() {
   api.getMatchesWithEvents.mockResolvedValue([]); // empty on purpose — exercises the fixed empty-list path fast
   api.getStandings.mockResolvedValue(standings);
   api.getTeamStats.mockResolvedValue(teamStats);
+  api.getCompetitionStats.mockResolvedValue({ topScorers: [], goldenBoot: undefined, mvp: undefined });
+  api.getTeamStatsForCompetition.mockResolvedValue(teamStats);
 }
 
 describe("SeasonPage — qualification confetti wiring", () => {
   afterEach(() => {
     vi.clearAllMocks();
+    // SeasonPage caches a finished run's stats to real localStorage keyed by worldId (see
+    // saveStatsHubCache) — every test here reuses "w1", so a later test would otherwise load an
+    // earlier test's cached run and skip straight to the stats hub instead of exercising the flow.
+    localStorage.clear();
   });
 
   it("fires the qualification confetti exactly once when reaching the europe-transition phase", async () => {
@@ -78,9 +86,6 @@ describe("SeasonPage — qualification confetti wiring", () => {
     );
 
     await waitFor(() => expect(api.getWorld).toHaveBeenCalled());
-    getByRole("button", { name: /create season/i }).click();
-
-    await findByText(/simulate season/i);
     getByRole("button", { name: /simulate season/i }).click();
 
     // domestic-standings pause — skip it instead of waiting out the real 4s.
@@ -107,8 +112,6 @@ describe("SeasonPage — qualification confetti wiring", () => {
     );
 
     await waitFor(() => expect(api.getWorld).toHaveBeenCalled());
-    getByRole("button", { name: /create season/i }).click();
-    await findByText(/simulate season/i);
     getByRole("button", { name: /simulate season/i }).click();
 
     await findByText(/continue/i, {}, { timeout: 5000 });
@@ -121,12 +124,16 @@ describe("SeasonPage — qualification confetti wiring", () => {
   }, 15000);
 });
 
-describe("SeasonPage — every 'Continue' button through the full knockout gauntlet", () => {
+describe("SeasonPage — one required Continue press carries the whole knockout stage through", () => {
   afterEach(() => {
     vi.clearAllMocks();
+    // SeasonPage caches a finished run's stats to real localStorage keyed by worldId (see
+    // saveStatsHubCache) — every test here reuses "w1", so a later test would otherwise load an
+    // earlier test's cached run and skip straight to the stats hub instead of exercising the flow.
+    localStorage.clear();
   });
 
-  it("advances through domestic standings, team stats, Europe transition, league standings, every knockout round result, and the champion screen, via real clicks on every Continue button", async () => {
+  it("requires a Continue click through domestic standings, team stats, and Europe transition, one more into the knockouts, then auto-advances through every round result and the champion screen with no further clicks", async () => {
     setup();
     api.getEuropeStatus.mockResolvedValue({ qualified: true, position: 1, qualifierCount: 8, ties: [] });
     api.startEuropeLeaguePhase.mockResolvedValue({ competitionId: "euro-c1", seasonId: "s-league" });
@@ -144,15 +151,13 @@ describe("SeasonPage — every 'Continue' button through the full knockout gaunt
     });
     api.getSummary.mockResolvedValue({ standings, userClub: { id: "user-club", name: "Our XI" }, userRow: standings.rows[0], position: 1, unbeaten: false });
 
-    const { getByRole, findByText, findByRole } = render(
+    const { getByRole, findByText, findByRole, queryByRole } = render(
       <MemoryRouter>
         <SeasonPage />
       </MemoryRouter>,
     );
 
     await waitFor(() => expect(api.getWorld).toHaveBeenCalled());
-    getByRole("button", { name: /create season/i }).click();
-    await findByText(/simulate season/i);
     getByRole("button", { name: /simulate season/i }).click();
 
     // domestic-standings
@@ -167,24 +172,25 @@ describe("SeasonPage — every 'Continue' button through the full knockout gaunt
     await findByRole("button", { name: /^continue/i }, { timeout: 5000 });
     getByRole("button", { name: /^continue/i }).click();
 
-    // europe-league-standings — "Continue to Knockouts"
+    // europe-league-standings — "Continue to Knockouts" is the last press needed; everything
+    // from here on (QF -> SF -> Final -> champion) auto-advances with no button of its own.
     await findByRole("button", { name: /continue to knockouts/i }, { timeout: 5000 });
     getByRole("button", { name: /continue to knockouts/i }).click();
 
-    // europe-round-result (QF)
+    // europe-round-result (QF) — no button; auto-advances into SF after a short pause
     await findByText(/quarter-final results/i, {}, { timeout: 5000 });
-    getByRole("button", { name: /^continue/i }).click();
+    expect(queryByRole("button", { name: /^continue/i })).toBeNull();
 
-    // europe-round-result (SF)
+    // europe-round-result (SF) — likewise auto-advances into the Final
     await findByText(/semi-final results/i, {}, { timeout: 5000 });
-    getByRole("button", { name: /^continue/i }).click();
+    expect(queryByRole("button", { name: /^continue/i })).toBeNull();
 
-    // europe-champion
+    // europe-champion — auto-advances straight into fetching the stats hub, no click needed
     await findByText(/champions league winners/i, {}, { timeout: 15000 });
-    getByRole("button", { name: /^continue/i }).click();
+    expect(queryByRole("button", { name: /^continue/i })).toBeNull();
 
-    // summary
-    await waitFor(() => expect(api.getSummary).toHaveBeenCalled(), { timeout: 5000, interval: 50 });
-    await findByText(/season result/i, {}, { timeout: 5000 });
+    // stats-hub
+    await waitFor(() => expect(api.getSummary).toHaveBeenCalled(), { timeout: 10000, interval: 50 });
+    await findByText(/season result/i, {}, { timeout: 10000 });
   }, 30000);
 });

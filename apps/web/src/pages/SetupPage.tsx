@@ -80,8 +80,18 @@ export function SetupPage() {
     if (!config.eraId) return;
     void api
       .listLeagues(config.eraId)
-      .then((list) => setLeagues(list.filter((l) => isRealCountry(l.country))))
+      .then((list) => {
+        const real = list.filter((l) => isRealCountry(l.country));
+        setLeagues(real);
+        // A specific league is required now (no "All Leagues") — AI-fill builds the season out of
+        // that league's own current clubs, so default to the first one rather than leave it unset.
+        if (config.leagueIds.length === 0 && real.length > 0) {
+          const sorted = [...real].sort((a, b) => a.tier - b.tier || a.name.localeCompare(b.name));
+          setConfig({ leagueIds: [sorted[0]!.id] });
+        }
+      })
       .catch(() => setLeagues([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.eraId]);
 
   const activeEra = eras.find((e) => e.id === config.eraId);
@@ -107,6 +117,7 @@ export function SetupPage() {
           leagues={leagues}
           selectedIds={config.leagueIds}
           onChange={(leagueIds) => setConfig({ leagueIds })}
+          singleSelect
         />
       </Section>
 

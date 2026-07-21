@@ -161,6 +161,23 @@ export interface TeamStatsDto {
   squad: SquadStatRowDto[];
 }
 
+export interface CompetitionScorerRowDto {
+  playerId: string;
+  name: string;
+  clubId: string;
+  clubName: string;
+  goals: number;
+  assists: number;
+  matchesPlayed: number;
+  avgRating: number;
+}
+
+export interface CompetitionStatsDto {
+  topScorers: CompetitionScorerRowDto[];
+  goldenBoot?: CompetitionScorerRowDto;
+  mvp?: CompetitionScorerRowDto;
+}
+
 export type KnockoutRound = "QF" | "SF" | "FINAL";
 
 export interface KnockoutTieDto {

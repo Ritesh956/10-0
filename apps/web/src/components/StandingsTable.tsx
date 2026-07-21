@@ -42,7 +42,10 @@ export function StandingsTable({ standings, clubs, highlightClubId }: Props) {
               className={row.clubId === highlightClubId ? "bg-gold-500/10" : i % 2 === 0 ? "bg-ink-950" : "bg-ink-900/40"}
             >
               <td className="px-3 py-2 text-smoke-600">{i + 1}</td>
-              <td className="px-3 py-2 font-medium text-paper">{nameFor(row.clubId)}</td>
+              <td className="px-3 py-2 font-medium text-paper">
+                {nameFor(row.clubId)}
+                {row.clubId === highlightClubId && <span className="ml-1.5 text-xs font-normal text-gold-400">(You)</span>}
+              </td>
               <td className="px-3 py-2 text-center text-smoke-400">{row.played}</td>
               <td className="px-3 py-2 text-center text-smoke-400">{row.won}</td>
               <td className="px-3 py-2 text-center text-smoke-400">{row.drawn}</td>
