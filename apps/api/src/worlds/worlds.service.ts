@@ -35,4 +35,46 @@ export class WorldsService {
   async assertOwnership(worldId: string, userId: string): Promise<void> {
     await this.getWorld(worldId, userId);
   }
+
+  /**
+   * Per-world summary for the "Your history" page: club name/formation (already on WorldClub, no
+   * extra query), a headline points total (from the WorldRecord SeasonsService.finalizeRun
+   * persists), and unlocked trophies (from Achievement). Worlds whose run was never finalized
+   * (still in progress, or the user never reached the stats hub) simply show no points/trophies —
+   * still listed, just without a "result" yet.
+   */
+  async getHistory(userId: string) {
+    const worlds = await this.prisma.world.findMany({
+      where: { ownerId: userId },
+      include: { clubs: true },
+      orderBy: { createdAt: "desc" },
+    });
+    const worldIds = worlds.map((w) => w.id);
+    if (worldIds.length === 0) return [];
+
+    const [achievements, records] = await Promise.all([
+      this.prisma.achievement.findMany({ where: { worldId: { in: worldIds }, userId } }),
+      this.prisma.worldRecord.findMany({ where: { worldId: { in: worldIds }, name: "points-total" } }),
+    ]);
+    const trophiesByWorld = new Map<string, string[]>();
+    for (const a of achievements) {
+      const list = trophiesByWorld.get(a.worldId) ?? [];
+      list.push(a.key);
+      trophiesByWorld.set(a.worldId, list);
+    }
+    const pointsByWorld = new Map(records.map((r) => [r.worldId, r.value]));
+
+    return worlds.map((w) => {
+      const userClub = w.clubs.find((c) => c.managedByUserId === userId);
+      return {
+        worldId: w.id,
+        createdAt: w.createdAt,
+        status: w.status,
+        clubName: userClub?.name ?? null,
+        formation: userClub?.formation ?? null,
+        pointsTotal: pointsByWorld.get(w.id) ?? null,
+        trophies: trophiesByWorld.get(w.id) ?? [],
+      };
+    });
+  }
 }

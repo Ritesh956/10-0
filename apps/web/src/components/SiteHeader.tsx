@@ -25,6 +25,9 @@ export function SiteHeader({ onRequestSaveProgress }: Props) {
 
         {isAuthenticated ? (
           <div className="flex min-w-0 flex-wrap items-center gap-3 text-sm text-smoke-500">
+            <Link to="/history" className="shrink-0 transition hover:text-paper">
+              History
+            </Link>
             {user?.isGuest && onRequestSaveProgress && (
               <button
                 onClick={onRequestSaveProgress}

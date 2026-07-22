@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computePreseasonOdds } from "./DraftPage";
+import { computePreseasonOdds } from "../lib/preseasonOdds";
 
 describe("computePreseasonOdds", () => {
   it("regression: an Overall 82 squad no longer shows a ~40% title chance with a 7th-place projected finish", () => {

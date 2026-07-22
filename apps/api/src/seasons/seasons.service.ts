@@ -9,6 +9,8 @@ import { WorldsService } from "../worlds/worlds.service.js";
 import { buildLineup, type DraftCandidate } from "../common/lineup.js";
 import { instantiateWorldClub } from "../common/instantiate-world-club.js";
 import { generateDoubleRoundRobin } from "./round-robin.js";
+import { computeManagerStats, findGoalkeeperId } from "./season-stats.logic.js";
+import { evaluateTrophies } from "./trophy-evaluation.js";
 import type { CreateSeasonDto } from "./seasons.schemas.js";
 
 const AI_CLUB_FORMATION = "4-4-2";
@@ -205,7 +207,15 @@ export class SeasonsService {
     );
   }
 
-  async requestSimulation(worldId: string, seasonId: string, userId: string) {
+  /**
+   * `throughMatchday`, when given, tells the worker to stop after simulating that matchday instead
+   * of the whole season — the January Transfer Window's domestic-season split (see process-season.ts
+   * and JanuaryService). The worker only ever pulls SCHEDULED fixtures and only marks the Season
+   * COMPLETED once none remain, so a paused first half simply leaves the Season IN_PROGRESS; calling
+   * this again later (with no `throughMatchday`) picks up the rest, reading whatever lineup/roster
+   * changes were made to WorldClub/WorldPlayer in between (the worker re-reads both fresh every job).
+   */
+  async requestSimulation(worldId: string, seasonId: string, userId: string, throughMatchday?: number) {
     await this.worlds.assertOwnership(worldId, userId);
     const season = await this.prisma.season.findFirst({ where: { id: seasonId, worldId } });
     if (!season) throw new NotFoundException("Season not found");
@@ -214,7 +224,7 @@ export class SeasonsService {
     await this.prisma.season.update({ where: { id: seasonId }, data: { status: "IN_PROGRESS" } });
     await this.queue.add(
       SEASON_SIM_QUEUE,
-      { worldId, seasonId },
+      { worldId, seasonId, ...(throughMatchday !== undefined ? { throughMatchday } : {}) },
       { removeOnComplete: true, removeOnFail: 50 },
     );
     return { status: "queued" as const };
@@ -276,7 +286,32 @@ export class SeasonsService {
           (unbeaten && userRow.played > 0 ? " — unbeaten! 🔥" : "")
         : undefined;
 
-    return { standings, userClub, userRow, position, unbeaten, shareText };
+    // Squad snapshot (position + overall per starting-XI slot), for the frontend's season-narrative
+    // engine to group into Attack/Midfield/Defence/Goalkeeping — reusing lib/formations.ts's
+    // POSITION_GROUP client-side rather than duplicating that grouping table on the backend too.
+    let squad: { position: string; overall: number }[] | undefined;
+    let squadOverall: number | undefined;
+    if (userClub) {
+      const lineup = ((userClub.lineup as { position: string; playerId: string }[] | null) ?? []).filter((s) =>
+        Boolean(s?.playerId),
+      );
+      if (lineup.length > 0) {
+        const players = await this.prisma.worldPlayer.findMany({
+          where: { id: { in: lineup.map((s) => s.playerId) } },
+          select: { id: true, overall: true },
+        });
+        const overallById = new Map(players.map((p) => [p.id, p.overall]));
+        squad = lineup
+          .map((s) => {
+            const overall = overallById.get(s.playerId);
+            return overall !== undefined ? { position: s.position, overall } : undefined;
+          })
+          .filter((s): s is { position: string; overall: number } => s !== undefined);
+        if (squad.length > 0) squadOverall = Math.round(squad.reduce((sum, s) => sum + s.overall, 0) / squad.length);
+      }
+    }
+
+    return { standings, userClub, userRow, position, unbeaten, shareText, squad, squadOverall };
   }
 
   /**
@@ -410,15 +445,20 @@ export class SeasonsService {
   /**
    * Competition-wide (not just "my club") leaderboard: every player's goals/assists/average rating
    * across every completed fixture in every season under this competition — powers the Golden Boot,
-   * MVP, and top-scorers list on the post-season stats page. `mvp` requires a minimum match count
-   * (a quarter of whatever the most-used player logged) so a single standout cameo can't win it.
+   * Playmaker, Golden Glove, MVP, and top-scorers list on the post-season stats page. `mvp` requires
+   * a minimum match count (a quarter of whatever the most-used player logged) so a single standout
+   * cameo can't win it. `goldenGlove` is attributed to a named goalkeeper (parsed from each clean
+   * sheet's Match.setup, see findGoalkeeperId) rather than just the club, so all four awards read as
+   * consistently "a player won this" rather than three player awards and one club-level one.
    */
   async getCompetitionStats(worldId: string, competitionId: string, userId: string) {
     await this.worlds.assertOwnership(worldId, userId);
 
     const seasons = await this.prisma.season.findMany({ where: { worldId, competitionId }, select: { id: true } });
     const seasonIds = seasons.map((s) => s.id);
-    if (seasonIds.length === 0) return { topScorers: [], goldenBoot: undefined, mvp: undefined };
+    if (seasonIds.length === 0) {
+      return { topScorers: [], goldenBoot: undefined, mvp: undefined, playmaker: undefined, goldenGlove: undefined };
+    }
 
     const fixtures = await this.prisma.fixture.findMany({
       where: { worldId, seasonId: { in: seasonIds }, status: "COMPLETED" },
@@ -426,6 +466,7 @@ export class SeasonsService {
     });
 
     const totals = new Map<string, { goals: number; assists: number; matchesPlayed: number; ratingSum: number }>();
+    const cleanSheetsByKeeper = new Map<string, number>();
     for (const fixture of fixtures) {
       if (!fixture.match) continue;
       for (const stat of fixture.match.playerStats) {
@@ -437,6 +478,15 @@ export class SeasonsService {
           entry.ratingSum += stat.rating;
         }
         totals.set(stat.playerId, entry);
+      }
+
+      if (fixture.match.awayScore === 0) {
+        const gkId = findGoalkeeperId(fixture.match.setup, fixture.homeClubId);
+        if (gkId) cleanSheetsByKeeper.set(gkId, (cleanSheetsByKeeper.get(gkId) ?? 0) + 1);
+      }
+      if (fixture.match.homeScore === 0) {
+        const gkId = findGoalkeeperId(fixture.match.setup, fixture.awayClubId);
+        if (gkId) cleanSheetsByKeeper.set(gkId, (cleanSheetsByKeeper.get(gkId) ?? 0) + 1);
       }
     }
 
@@ -479,6 +529,149 @@ export class SeasonsService {
       .filter((r) => r.matchesPlayed >= mvpThreshold)
       .sort((a, b) => b.avgRating - a.avgRating)[0];
 
-    return { topScorers, goldenBoot, mvp };
+    const playmaker = rows
+      .filter((r) => r.assists > 0)
+      .sort((a, b) => b.assists - a.assists || b.goals - a.goals)[0];
+
+    const rowByPlayerId = new Map(rows.map((r) => [r.playerId, r]));
+    const goldenGlove = [...cleanSheetsByKeeper.entries()]
+      .map(([playerId, cleanSheets]) => {
+        const row = rowByPlayerId.get(playerId);
+        return row ? { ...row, cleanSheets } : undefined;
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== undefined)
+      .sort((a, b) => b.cleanSheets - a.cleanSheets)[0];
+
+    return { topScorers, goldenBoot, mvp, playmaker, goldenGlove };
+  }
+
+  /**
+   * One club's own season, from its manager's perspective: clean sheets, longest win streak,
+   * biggest win, and highest-scoring match — attributed to whichever RefManager the club drew (or
+   * null for a manager-less club). Walked in matchday order (unlike getCompetitionStats, which has
+   * no streak concept) so "longest win streak" is a genuine consecutive-run count, not just a tally.
+   */
+  async getManagerStats(worldId: string, competitionId: string, clubId: string, userId: string) {
+    await this.worlds.assertOwnership(worldId, userId);
+
+    const seasons = await this.prisma.season.findMany({ where: { worldId, competitionId }, select: { id: true } });
+    const seasonIds = seasons.map((s) => s.id);
+
+    const fixtures = await this.prisma.fixture.findMany({
+      where: {
+        worldId,
+        seasonId: { in: seasonIds },
+        status: "COMPLETED",
+        OR: [{ homeClubId: clubId }, { awayClubId: clubId }],
+      },
+      orderBy: { matchday: "asc" },
+      include: { match: true },
+    });
+
+    const results = fixtures
+      .filter((f): f is typeof f & { match: NonNullable<(typeof f)["match"]> } => f.match !== null)
+      .map((f) => {
+        const isHome = f.homeClubId === clubId;
+        return {
+          opponentClubId: isHome ? f.awayClubId : f.homeClubId,
+          ourScore: isHome ? f.match.homeScore : f.match.awayScore,
+          theirScore: isHome ? f.match.awayScore : f.match.homeScore,
+        };
+      });
+    const { cleanSheets, longestWinStreak, biggestWin, highestScoringMatch } = computeManagerStats(results);
+
+    const club = await this.prisma.worldClub.findUnique({ where: { id: clubId }, include: { refManager: true } });
+
+    return {
+      manager: club?.refManager
+        ? { name: club.refManager.name, nationality: club.refManager.nationality, philosophy: club.refManager.philosophy }
+        : null,
+      cleanSheets,
+      longestWinStreak,
+      biggestWin,
+      highestScoringMatch,
+    };
+  }
+
+  /**
+   * Persists the durable record of a finished run — trophies (Achievement), the competition's
+   * final awards (Award, reusing the same live computation getCompetitionStats already does —
+   * Phase 4 deliberately left these unpersisted pending this method), and this world's own headline
+   * numbers (WorldRecord: points total, longest win streak, biggest win margin). Called once by the
+   * frontend right as the stats hub is reached (not from the worker — a Competition can span
+   * several Season rows, e.g. Europe's league-phase/QF/SF/Final, so only the caller who knows the
+   * whole pipeline has actually finished can safely call this).
+   *
+   * Idempotent: every persisted row's unique constraint (`@@unique` on Achievement/Award/
+   * WorldRecord) plus `createMany({ skipDuplicates: true })` means calling this twice for the same
+   * world/season is a safe no-op the second time, not a duplicate-row pile-up.
+   */
+  async finalizeRun(worldId: string, seasonId: string, userId: string) {
+    const season = await this.prisma.season.findFirst({ where: { id: seasonId, worldId } });
+    if (!season) throw new NotFoundException("Season not found");
+
+    const world = await this.worlds.getWorld(worldId, userId);
+    const userClub = world.clubs.find((c) => c.managedByUserId === userId);
+    if (!userClub) throw new BadRequestException("You don't manage a club in this world");
+
+    const [standings, competitionStats, managerStats] = await Promise.all([
+      this.getStandings(worldId, seasonId, userId),
+      this.getCompetitionStats(worldId, season.competitionId, userId),
+      this.getManagerStats(worldId, season.competitionId, userClub.id, userId),
+    ]);
+
+    const position = standings.rows.findIndex((r) => r.clubId === userClub.id) + 1;
+    const userRow = standings.rows.find((r) => r.clubId === userClub.id);
+    if (!userRow || position === 0) {
+      throw new BadRequestException("Could not resolve a final standing for this club");
+    }
+
+    const trophies = evaluateTrophies({
+      userClubId: userClub.id,
+      played: userRow.played,
+      won: userRow.won,
+      drawn: userRow.drawn,
+      lost: userRow.lost,
+      position,
+      goldenBootClubId: competitionStats.goldenBoot?.clubId,
+      playmakerClubId: competitionStats.playmaker?.clubId,
+      goldenGloveClubId: competitionStats.goldenGlove?.clubId,
+      mvpClubId: competitionStats.mvp?.clubId,
+    });
+
+    const awardRows: { worldId: string; seasonId: string; name: string; winnerId: string }[] = [];
+    if (competitionStats.goldenBoot) {
+      awardRows.push({ worldId, seasonId, name: "golden-boot", winnerId: competitionStats.goldenBoot.playerId });
+    }
+    if (competitionStats.mvp) {
+      awardRows.push({ worldId, seasonId, name: "mvp", winnerId: competitionStats.mvp.playerId });
+    }
+    if (competitionStats.playmaker) {
+      awardRows.push({ worldId, seasonId, name: "playmaker", winnerId: competitionStats.playmaker.playerId });
+    }
+    if (competitionStats.goldenGlove) {
+      awardRows.push({ worldId, seasonId, name: "golden-glove", winnerId: competitionStats.goldenGlove.playerId });
+    }
+
+    const recordRows = [
+      { worldId, name: "points-total", holderId: userClub.id, value: userRow.points },
+      { worldId, name: "longest-win-streak", holderId: userClub.id, value: managerStats.longestWinStreak },
+      ...(managerStats.biggestWin
+        ? [{ worldId, name: "biggest-win-margin", holderId: userClub.id, value: managerStats.biggestWin.margin }]
+        : []),
+    ];
+
+    await Promise.all([
+      this.prisma.achievement.createMany({
+        data: trophies.map((key) => ({ worldId, userId, key })),
+        skipDuplicates: true,
+      }),
+      awardRows.length > 0
+        ? this.prisma.award.createMany({ data: awardRows, skipDuplicates: true })
+        : Promise.resolve(),
+      this.prisma.worldRecord.createMany({ data: recordRows, skipDuplicates: true }),
+    ]);
+
+    return { trophies, awards: awardRows, records: recordRows };
   }
 }

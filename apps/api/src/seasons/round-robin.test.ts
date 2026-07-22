@@ -60,6 +60,27 @@ describe("generateDoubleRoundRobin", () => {
     expect(generateDoubleRoundRobin([])).toEqual([]);
     expect(generateDoubleRoundRobin(["A"])).toEqual([]);
   });
+
+  // The January Transfer Window (Phase 3) pauses a domestic season at exactly
+  // Math.floor(totalMatchdays / 2) — derived client-side from the already-generated fixture list,
+  // never hardcoded. These lock in the two real league sizes this app actually uses (20 clubs:
+  // Premier League/LaLiga/Serie A, 18 clubs: Bundesliga/Ligue 1) against that formula so a future
+  // change to the round-robin generator can't silently move the pause point.
+  it("halfway matchday for a 20-club league (38 total) is matchday 19", () => {
+    const clubs = Array.from({ length: 20 }, (_, i) => `club-${i}`);
+    const fixtures = generateDoubleRoundRobin(clubs);
+    const totalMatchdays = Math.max(...fixtures.map((f) => f.matchday));
+    expect(totalMatchdays).toBe(38);
+    expect(Math.floor(totalMatchdays / 2)).toBe(19);
+  });
+
+  it("halfway matchday for an 18-club league (34 total) is matchday 17", () => {
+    const clubs = Array.from({ length: 18 }, (_, i) => `club-${i}`);
+    const fixtures = generateDoubleRoundRobin(clubs);
+    const totalMatchdays = Math.max(...fixtures.map((f) => f.matchday));
+    expect(totalMatchdays).toBe(34);
+    expect(Math.floor(totalMatchdays / 2)).toBe(17);
+  });
 });
 
 describe("generateSingleRoundRobin", () => {

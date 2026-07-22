@@ -21,6 +21,13 @@ export class WorldsController {
     return this.worlds.listWorlds(user.sub);
   }
 
+  // Must be registered before the ":worldId" route below — Nest/Express match routes in
+  // registration order, so a literal "history" segment would otherwise be swallowed as a worldId.
+  @Get("history")
+  history(@CurrentUser() user: AuthTokenPayload) {
+    return this.worlds.getHistory(user.sub);
+  }
+
   @Get(":worldId")
   get(@CurrentUser() user: AuthTokenPayload, @Param("worldId") worldId: string) {
     return this.worlds.getWorld(worldId, user.sub);

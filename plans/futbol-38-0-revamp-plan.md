@@ -220,7 +220,19 @@ All 3 `SeasonPage.tsx` call sites (domestic-replay, europe-league-replay, europe
 
 ---
 
-## 8. PHASE 3 — January Transfer Window (the flagship new mechanic)
+## 8. PHASE 3 — January Transfer Window (the flagship new mechanic) — ✅ COMPLETE (2026-07-22)
+
+Implemented per the design below with one simplification: the "forced sale" negative-event variant described in the original Event-variety work item was scoped down to "a downgrade replacement" rather than "remove a player with no replacement" — this keeps the lineup always at 11 starters (required for `buildSquad`/`simulate()` to run), and still delivers a genuine can-hurt-you outcome via a negative OVR delta.
+
+**Schema**: added `JanuaryEvent` model + `JanuaryEventType` enum (`packages/db/prisma/schema.prisma`, migration `20260722082536_add_january_event`) rather than overloading `Transfer` — `Transfer` models a single player moving between two `WorldClub`s, which doesn't fit a catalog-sourced OUT+IN pair, and `Transfer` has no room for event type/delta/idempotency. `@@unique([seasonId, clubId])` on `JanuaryEvent` is the idempotency guard (a club's window resolves once per season). A `Transfer` row is still written for the incoming leg, per the original "audit" ask.
+
+**Engine-pipeline change (the one flagged as architecturally risky)**: `packages/domain/src/jobs.ts`'s `seasonSimJob` gained an optional `throughMatchday`; `apps/sim-worker/src/process-season.ts`'s matchday loop now stops early via a small pure `shouldSimulateMatchday()` helper (unit-tested) rather than the originally-considered "split into two Season rows" approach — one `Season`/`Fixture` set throughout, so standings/stats code needed zero changes. The frontend computes the midpoint client-side from the already-generated fixture list (`Math.floor(maxMatchday / 2)`), calls `simulateSeason` with `{throughMatchday}` for the first half, polls a new `pollUntilMatchdayComplete`, then calls it again with no cutoff for the back half — reusing the existing single-`Season` completion semantics untouched.
+
+**Backend**: new `apps/api/src/january/` module (`january.service.ts` + a Prisma-free `january.logic.ts` for the testable pieces — weighted event-type roll, weakest-occupied-slot detection, candidate-pool biasing — following the `lineup.ts`/`round-robin.ts` pattern of extracting pure logic out of Prisma-coupled services). `POST /worlds/:worldId/january/:seasonId/resolve` finds the user's weakest lineup slot, rolls POSITIVE/NEUTRAL/NEGATIVE (35/40/25), draws a replacement `RefPlayerSeason` scoped to the world's era + the club's own league (falling back to the unbiased pool if the biased slice is empty), instantiates a `WorldPlayer` (same field mapping as `instantiate-world-club.ts`), and patches the lineup slot — all in one transaction.
+
+**Frontend**: `SeasonPage.tsx`'s `runSeasonPipeline` branches on `(settings.januaryWindow ?? true) && userClub && 0 < mid < total`; when enabled it reveals the first-half matches through the existing `MatchPopupReel` (remounted via a `domesticReelHalf` key), pauses on a new `"january"` phase rendering the new `JanuaryWindow.tsx` component (recap tiles + on-pace projection + gamble/stick choice, reusing `DrawReel`/`SlotReel` for the CLUB × SEASON spin exactly as the plan asked, danger-styled via the existing crimson/mint conventions rather than importing 38-0's palette), then resumes for the back half. `januaryOutcome` is threaded into `CachedStatsHub` for Phase 4 to consume, though nothing renders it yet.
+
+**Tests**: `january.logic.test.ts` (9 tests), `process-season.test.ts` (3, the matchday-cutoff boundary), `round-robin.test.ts` (+2, locking the 19-of-38 / 17-of-34 midpoint math against the real league sizes), `JanuaryWindow.test.tsx` (4, recap/decline/gamble+diff/error-retry), `SeasonPage.test.tsx` (+2, the pause-then-resume integration and the setting-off no-op). Full monorepo `pnpm typecheck` and `pnpm test` green across all 10 packages (91 tests total). Not done: a live pass against a running API+worker+Redis stack — this environment has no Docker/Redis available to stand one up; the previous phases' live-verification precedent should be repeated in a session where that infra is reachable.
 
 **Goal**: full parity with 38-0 §5b — a halfway pause with recap, an opt-in gamble, a wheel-driven resolution, and an OUT→IN "Done Deal".
 **Why here**: depends on the restructured reveal (Phase 2); its outcome text feeds the Phase-4 narrative.
@@ -249,7 +261,25 @@ All 3 `SeasonPage.tsx` call sites (domestic-replay, europe-league-replay, europe
 
 ---
 
-## 9. PHASE 4 — End-of-season results overhaul (their richest screen)
+## 9. PHASE 4 — End-of-season results overhaul (their richest screen) — ✅ COMPLETE (2026-07-22)
+
+Implemented per the design below, with the "full match log" item turning out to already exist from Phase 2 (`MatchLog.tsx`, already wired into the stats-hub under "Season Results"/"Campaign Results") — nothing to build there, confirmed and left as-is.
+
+**Narrative engine** (`apps/web/src/lib/seasonNarrative.ts`, pure, + `components/SeasonNarrative.tsx`): every signal from the spec implemented — verdict tag (recomputes a "projected finish" from the squad's overall via `computePreseasonOdds`, rather than persisting the pre-season projection anywhere, since it's a pure function of overall alone), unit word-tiers + composition sentence (grouped via `lib/formations.ts`'s existing `POSITION_GROUP`, fed by a new `summary.squad`/`summary.squadOverall` the backend now returns), finish-position flavor paragraph (bracket computed proportionally from `seasonSize`, not hardcoded to 20, so an 18-club league gets a correctly-sized relegation zone), January recap lines (from the already-cached `januaryOutcome`), standout-player quote (from existing `teamStats.topScorer`/`topAssist`), manager closing line (from the new `getManagerStats` endpoint's `manager.philosophy`). Deliberately **not** given its own cache slot — it's cheap and pure, recomputed inline in `SeasonPage`'s render from data that's already in `CachedStatsHub`.
+
+**Refactor along the way**: `computePreseasonOdds` moved out of `DraftPage.tsx` into a new `lib/preseasonOdds.ts` — the narrative engine needed it too, and a `lib/` file importing from a `pages/` file would have been a backwards dependency. `DraftPage.odds.test.ts` now imports from the new location; its own tests are untouched otherwise.
+
+**Awards** (`getCompetitionStats` extended): Playmaker (top assister, mirrors the existing Golden Boot pattern) and Golden Glove — attributed to a **named goalkeeper**, not just the club, by parsing the GK slot's `playerId` out of each clean sheet's `Match.setup` JSON (`findGoalkeeperId`, in the new `apps/api/src/seasons/season-stats.logic.ts`) so all four awards read consistently as "a player won this." Awards are computed **live on every read**, same as the existing Golden Boot/MVP — not persisted as `Award` rows despite the original work-item wording, since `Award` has no unique constraint (duplicate-row risk on a second read) and Phase 5 already owns wiring `Award`/`Achievement`/`WorldRecord` together at "season completion," which would need reworking this persistence anyway.
+
+**Manager stat card** (new `getManagerStats` endpoint + `components/ManagerStatCard.tsx`): Clean Sheets / Longest Win Streak / Biggest Win / Highest-Scoring match, walked in matchday order via a new pure `computeManagerStats` (same `season-stats.logic.ts`) so "longest streak" is a genuine consecutive-run count. Scoped to the **domestic league only** (no Europe variant) — matches 38-0's own single-league scope and keeps this from doubling in size for a v1.
+
+**Squad-tier flavor names** (`lib/squadRatings.ts`, new): Galácticos/Elite/Strong/Mid-table/Budget/Minnows bands, surfaced on both the draft-complete screen (`DraftPage.tsx`'s squad-ratings panel + pre-season-projection footer) and the results screen (a badge above `ShareCard`).
+
+**Two-way share**: new `components/JanuaryShareCard.tsx` ("Share your January"), rendered alongside the existing `ShareCard` ("Share your season") only when a January transfer happened this run.
+
+**Tests**: `season-stats.logic.test.ts` (8, goalkeeper-finding + streak/biggest-win/highest-scoring boundaries), `seasonNarrative.test.ts` (21, every signal + bracket boundaries + full/degraded-input assembly), `squadRatings.test.ts` (3, tier boundaries + monotonicity). Extended `SeasonPage.test.tsx` with a real-data render check for the narrative + manager card. Full monorepo `pnpm typecheck` and `pnpm test` green across all 10 packages (web 87 tests, api 32 tests). Not done: a live pass against a running API+worker+Redis stack — same Docker/Redis-unavailable constraint as Phase 3.
+
+
 
 **Goal**: parity with 38-0 §6 — the auto-generated narrative, expanded awards, manager card, totals, full log, squad tiers.
 **Why here**: consumes January outcome (Phase 3) and the restructured reveal (Phase 2); it's the emotional payoff screen and the biggest single UX gap.
@@ -285,7 +315,21 @@ All 3 `SeasonPage.tsx` call sites (domestic-replay, europe-league-replay, europe
 
 ---
 
-## 10. PHASE 5 — Persistence, trophies, history, sharing polish
+## 10. PHASE 5 — Persistence, trophies, history, sharing polish — ✅ COMPLETE (2026-07-22)
+
+Implemented per the design below, with the completion-hook question the Phase 4 note left open now resolved: **the frontend, not the worker, calls finalize** (`POST /worlds/:worldId/seasons/:seasonId/finalize`, called from `SeasonPage.tsx` right where `saveStatsHubCache` already fires) — a `Competition` can span several `Season` rows (Europe's league-phase/QF/SF/Final), so only the caller who knows the whole pipeline has actually finished can safely persist. This also means Phase 4's Golden Boot/MVP/Playmaker/Golden Glove — computed live on every `getCompetitionStats` read — now get a durable `Award` row the first time a run is finalized.
+
+**Schema**: added `@@unique` constraints to `Achievement` (`[worldId,userId,key]`), `Award` (`[worldId,seasonId,name]`), and `WorldRecord` (`[worldId,name]`) — all three tables were still empty (confirmed before migrating), so this was a zero-risk migration. Combined with `createMany({ skipDuplicates: true })`, this makes `finalizeRun` safely callable more than once (e.g. a reload mid-stats-hub) without duplicate rows — the exact gap Phase 4's note flagged as needing Phase 5's constraints.
+
+**Trophy catalog split**: `packages/domain/src/trophies.ts`'s `TrophyKey` enum is the shared source of truth for *what* can be unlocked; `apps/api/src/seasons/trophy-evaluation.ts` (pure, unit-tested) decides *whether* a given run unlocked each one; `apps/web/src/lib/trophies.ts` hand-mirrors the same key strings (per apps/web's zero-workspace-deps convention, same as `JanuaryEventType` before it) into a purely-*display* catalog (name/description/icon/color) for `TrophyCabinet.tsx`. Seven trophies: Invincible (won every match) and Unbeaten (no losses, but at least one draw) are mutually exclusive — a perfect record earns the rarer one, not both — plus Champions, and one each for Golden Boot/Playmaker/Golden Glove/MVP when the user's own club holds that award (a richer set than the plan's four illustrative examples, since Phase 4 already computes all four awards and leaving three without a matching trophy would've been an odd asymmetry).
+
+**History page**: `GET /worlds/history` (must be registered before the existing `GET /worlds/:worldId` route — Nest/Express match by registration order) returns each world's club name/formation (already on `WorldClub`, no extra query) plus a `pointsTotal` (read from the `WorldRecord` finalize persists) and `trophies` (from `Achievement`) — a world whose run was never finalized just shows "In progress" rather than a result.
+
+**Guest-persistence prompt**: new `GuestPersistPrompt.tsx`, shown inline in the stats hub for guest users — reuses the existing `SaveProgressModal` (and its `upgradeAccount` call) rather than duplicating the email/password form; it turns out `SaveProgressModal` already existed as an always-visible header button (`SiteHeader`'s "Save your progress"), so this phase's contribution is specifically the *peak-moment, results-screen* reinforcement the plan asked for, not a new upgrade flow.
+
+**Tests**: `trophy-evaluation.test.ts` (8, including the mutually-exclusive Invincible/Unbeaten boundary), `trophies.test.ts` (2, catalog completeness), `HistoryPage.test.tsx` (5), extended `SeasonPage.test.tsx` (+3: finalize-run call + trophy render, guest prompt shown/hidden). `getHistory`/`finalizeRun` themselves follow the established convention of not being directly unit-tested (Prisma-coupled orchestration, same as `aggregateTeamStats`/`getCompetitionStats` before them) — their real logic (`evaluateTrophies`) is what's tested. Full monorepo `pnpm typecheck` and `pnpm test` green across all 10 packages (web 97 tests, api 40 tests). Not done: a live pass against a running API+worker+Redis stack — same constraint noted in Phases 3-4, though this dev environment did have a local Redis/API running for parts of this session (see below).
+
+
 
 **Goal**: 38-0's account layer — runs saved forever, trophies, per-user history, and the peak-moment guest-persistence prompt (38-0 §6g, §7b trophies).
 **Why here**: leaderboard (Phase 6) needs saved, attributable runs; trophies need a home.
@@ -480,4 +524,4 @@ Also cleaned up after this pass: the two dev-server background processes started
 
 ## 19. Immediate next step
 
-Phases 0, 1, and 2 are complete, tested (automated + live), and ready to commit. Start **Phase 3 — the January Transfer Window** next: the flagship new mechanic, and the one phase in this plan with a genuine engine-pipeline change (splitting domestic season simulation into two halves around the halfway pause, so a January transfer can actually affect second-half results — see §8's design note on this). Read §8 in full before starting; it's the most architecturally involved phase after the foundational work.
+Phases 0-5 are complete and automated-test-verified. This closes out the "make the solo game exactly like 38-0" core loop (§17's framing) — everything from here is a self-contained surrounding mode. Start **Phase 6 — Leaderboard** next: a `LeaderboardEntry` model, a submission flow off the now-persisted `finalizeRun` data, and a `/leaderboard` page with global/filtered views. It needs saved, attributable runs, which Phase 5's `Achievement`/`WorldRecord`/`Award` persistence now provides. Read §11 in full before starting.

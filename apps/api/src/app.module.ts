@@ -8,6 +8,7 @@ import { WorldsModule } from "./worlds/worlds.module.js";
 import { DraftModule } from "./draft/draft.module.js";
 import { SeasonsModule } from "./seasons/seasons.module.js";
 import { EuropeModule } from "./europe/europe.module.js";
+import { JanuaryModule } from "./january/january.module.js";
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { EuropeModule } from "./europe/europe.module.js";
     DraftModule,
     SeasonsModule,
     EuropeModule,
+    JanuaryModule,
   ],
 })
 export class AppModule {}

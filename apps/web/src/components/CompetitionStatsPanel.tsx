@@ -7,6 +7,17 @@ interface Props {
   highlightClubId?: string | undefined;
 }
 
+const AWARD_ACCENT: Record<"amber" | "plum" | "mint" | "teal", { border: string; text: string }> = {
+  // "amber" is reserved for the Golden Boot specifically — it's the one award that's literally
+  // named after the color, so it keeps the trophy accent even though mint is now primary
+  // everywhere else. MVP uses plum, Playmaker mint (creativity), Golden Glove teal (matches the
+  // DEF position-group color, thematically apt for a goalkeeping/defensive award).
+  amber: { border: "border-amber-500/40 bg-amber-500/5", text: "text-amber-400" },
+  plum: { border: "border-plum-500/40 bg-plum-500/5", text: "text-plum-400" },
+  mint: { border: "border-mint-500/40 bg-mint-500/5", text: "text-mint-400" },
+  teal: { border: "border-teal-500/40 bg-teal-500/5", text: "text-teal-400" },
+};
+
 function AwardChip({
   label,
   value,
@@ -18,13 +29,9 @@ function AwardChip({
   value: string;
   sub?: string;
   isYou?: boolean;
-  /** "amber" is reserved for the Golden Boot specifically — it's the one award that's literally
-      named after the color, so it keeps the trophy-mint accent even though mint is now primary
-      everywhere else. MVP uses plum instead. */
-  accent?: "amber" | "plum";
+  accent?: keyof typeof AWARD_ACCENT;
 }) {
-  const border = accent === "amber" ? "border-amber-500/40 bg-amber-500/5" : "border-plum-500/40 bg-plum-500/5";
-  const text = accent === "amber" ? "text-amber-400" : "text-plum-400";
+  const { border, text } = AWARD_ACCENT[accent];
   return (
     <div className={`notch-sm border-2 px-4 py-3 text-center ${border}`}>
       <p className="text-[10px] uppercase tracking-wide text-smoke-600">{label}</p>
@@ -42,11 +49,13 @@ function AwardChip({
 /** Competition-wide leaderboard (Golden Boot, MVP, top scorers across every club) — distinct from
     TeamStatsPanel, which is scoped to just the user's own squad. */
 export function CompetitionStatsPanel({ stats, highlightClubId }: Props) {
-  if (!stats.goldenBoot && !stats.mvp && stats.topScorers.length === 0) return null;
+  if (!stats.goldenBoot && !stats.mvp && !stats.playmaker && !stats.goldenGlove && stats.topScorers.length === 0) {
+    return null;
+  }
 
   return (
     <div className="space-y-4">
-      {(stats.goldenBoot ?? stats.mvp) && (
+      {(stats.goldenBoot ?? stats.mvp ?? stats.playmaker ?? stats.goldenGlove) && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {stats.goldenBoot && (
             <AwardChip
@@ -63,6 +72,24 @@ export function CompetitionStatsPanel({ stats, highlightClubId }: Props) {
               sub={stats.mvp.clubName}
               isYou={stats.mvp.clubId === highlightClubId}
               accent="plum"
+            />
+          )}
+          {stats.playmaker && (
+            <AwardChip
+              label="Playmaker"
+              value={`${stats.playmaker.name} — ${stats.playmaker.assists}`}
+              sub={stats.playmaker.clubName}
+              isYou={stats.playmaker.clubId === highlightClubId}
+              accent="mint"
+            />
+          )}
+          {stats.goldenGlove && (
+            <AwardChip
+              label="Golden Glove"
+              value={`${stats.goldenGlove.name} — ${stats.goldenGlove.cleanSheets}`}
+              sub={stats.goldenGlove.clubName}
+              isYou={stats.goldenGlove.clubId === highlightClubId}
+              accent="teal"
             />
           )}
         </div>

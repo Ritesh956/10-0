@@ -4,7 +4,7 @@ import { CurrentUser } from "../auth/current-user.decorator.js";
 import type { AuthTokenPayload } from "../auth/auth.service.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
 import { SeasonsService } from "./seasons.service.js";
-import { createSeasonSchema, type CreateSeasonDto } from "./seasons.schemas.js";
+import { createSeasonSchema, simulateSeasonSchema, type CreateSeasonDto, type SimulateSeasonDto } from "./seasons.schemas.js";
 
 @UseGuards(JwtAuthGuard)
 @Controller("worlds/:worldId/seasons")
@@ -30,8 +30,9 @@ export class SeasonsController {
     @CurrentUser() user: AuthTokenPayload,
     @Param("worldId") worldId: string,
     @Param("seasonId") seasonId: string,
+    @Body(new ZodValidationPipe(simulateSeasonSchema)) dto: SimulateSeasonDto,
   ) {
-    return this.seasons.requestSimulation(worldId, seasonId, user.sub);
+    return this.seasons.requestSimulation(worldId, seasonId, user.sub, dto?.throughMatchday);
   }
 
   @Get(":seasonId/standings")
@@ -88,5 +89,24 @@ export class SeasonsController {
     @Query("clubId") clubId: string,
   ) {
     return this.seasons.getTeamStatsForCompetition(worldId, competitionId, clubId, user.sub);
+  }
+
+  @Get("competitions/:competitionId/manager-stats")
+  managerStats(
+    @CurrentUser() user: AuthTokenPayload,
+    @Param("worldId") worldId: string,
+    @Param("competitionId") competitionId: string,
+    @Query("clubId") clubId: string,
+  ) {
+    return this.seasons.getManagerStats(worldId, competitionId, clubId, user.sub);
+  }
+
+  @Post(":seasonId/finalize")
+  finalize(
+    @CurrentUser() user: AuthTokenPayload,
+    @Param("worldId") worldId: string,
+    @Param("seasonId") seasonId: string,
+  ) {
+    return this.seasons.finalizeRun(worldId, seasonId, user.sub);
   }
 }

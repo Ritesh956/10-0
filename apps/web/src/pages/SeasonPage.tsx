@@ -6,31 +6,43 @@ import type {
   CompetitionStatsDto,
   EuropeRoundDto,
   EuropeStatusDto,
+  JanuaryResultDto,
   KnockoutRound,
   KnockoutTieDto,
+  ManagerStatsDto,
   MatchSummaryDto,
   SeasonDto,
   StandingsDto,
   SummaryDto,
   TeamStatsDto,
+  TrophyKey,
   WorldDto,
 } from "../api/types";
 import { CompetitionStatsPanel } from "../components/CompetitionStatsPanel";
+import { GuestPersistPrompt } from "../components/GuestPersistPrompt";
+import { JanuaryShareCard } from "../components/JanuaryShareCard";
+import { JanuaryWindow } from "../components/JanuaryWindow";
 import { KnockoutBracket } from "../components/KnockoutBracket";
+import { ManagerStatCard } from "../components/ManagerStatCard";
 import { MatchLog } from "../components/MatchLog";
 import { MatchPopupReel } from "../components/MatchPopupReel";
+import { SeasonNarrative } from "../components/SeasonNarrative";
 import { ShareCard } from "../components/ShareCard";
 import { StandingsTable } from "../components/StandingsTable";
 import { TeamStatsPanel } from "../components/TeamStatsPanel";
+import { TrophyCabinet } from "../components/TrophyCabinet";
 import { Button } from "../components/ui/Button";
 import { fireChampionShower, fireQualificationBurst } from "../lib/confetti";
 import { staggerContainer, staggerItem, staggerItemBounce } from "../lib/motion";
+import { buildSeasonNarrative } from "../lib/seasonNarrative";
+import { squadTierName, TIER_TEXT } from "../lib/squadRatings";
 import { useDraft } from "../state/DraftContext";
 
 type Phase =
   | "no-season"
   | "simulating"
   | "domestic-replay"
+  | "january"
   | "domestic-standings"
   | "team-stats"
   | "europe-transition"
@@ -53,6 +65,18 @@ async function pollUntilCompleted(worldId: string, seasonId: string): Promise<vo
   }
 }
 
+/** Same polling shape as pollUntilCompleted, but resolves once every fixture up to (and
+    including) `matchday` is COMPLETED — used to detect the January halfway pause point, which
+    leaves the Season itself IN_PROGRESS (the back half is still SCHEDULED) rather than COMPLETED. */
+async function pollUntilMatchdayComplete(worldId: string, seasonId: string, matchday: number): Promise<void> {
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    const season = await api.getSeason(worldId, seasonId);
+    const upToMatchday = season.fixtures.filter((f) => f.matchday <= matchday);
+    if (upToMatchday.length > 0 && upToMatchday.every((f) => f.status === "COMPLETED")) return;
+  }
+}
+
 interface CachedStatsHub {
   standings: StandingsDto;
   teamStats: TeamStatsDto | null;
@@ -67,6 +91,16 @@ interface CachedStatsHub {
   /** Optional for backward compat with cache entries saved before the persistent match log existed. */
   domesticMatches?: MatchSummaryDto[];
   europeMatches?: MatchSummaryDto[];
+  /** null = January was off, or the user declined the gamble. Optional for backward compat with
+      cache entries saved before the January Transfer Window existed. Feeds the season narrative's
+      January recap lines and the two-way "Share your January" card. */
+  januaryOutcome?: JanuaryResultDto | null;
+  /** Domestic-only (38-0's own manager stat card has no per-competition split) — null for a
+      manager-less club or a world with no userClub. Optional for backward compat. */
+  leagueManagerStats?: ManagerStatsDto | null;
+  /** Trophies unlocked this run (SeasonsService.finalizeRun's persisted Achievement rows echoed
+      straight back). Optional for backward compat with cache entries saved before Phase 5. */
+  trophies?: TrophyKey[];
 }
 
 // A finished run's standings/stats are cached per-world so leaving /season and coming back (or
@@ -106,6 +140,13 @@ export function SeasonPage() {
   const [phase, setPhase] = useState<Phase>("no-season");
   const [simulatingLabel, setSimulatingLabel] = useState("Kicking off the season…");
   const [domesticMatches, setDomesticMatches] = useState<MatchSummaryDto[]>([]);
+  // What MatchPopupReel is currently revealing — distinct from `domesticMatches` (the full-season
+  // list used by the stats hub's match log) since the January split reveals the season in two
+  // waves through the same "domestic-replay" phase. `domesticReelHalf` is bumped between waves and
+  // used as the reel's `key` so its internal reveal state resets cleanly for the second half.
+  const [domesticReelMatches, setDomesticReelMatches] = useState<MatchSummaryDto[]>([]);
+  const [domesticReelHalf, setDomesticReelHalf] = useState(0);
+  const [januaryOutcome, setJanuaryOutcome] = useState<JanuaryResultDto | null>(null);
   const [standings, setStandings] = useState<StandingsDto | null>(null);
   const [teamStats, setTeamStats] = useState<TeamStatsDto | null>(null);
   const [summary, setSummary] = useState<SummaryDto | null>(null);
@@ -129,8 +170,10 @@ export function SeasonPage() {
   // afterward rather than only ever seeing whichever one the linear pipeline ended on.
   const [statsTab, setStatsTab] = useState<StatsTab>("league");
   const [leagueCompetitionStats, setLeagueCompetitionStats] = useState<CompetitionStatsDto | null>(null);
+  const [leagueManagerStats, setLeagueManagerStats] = useState<ManagerStatsDto | null>(null);
   const [europeCompetitionStats, setEuropeCompetitionStats] = useState<CompetitionStatsDto | null>(null);
   const [europeTeamStats, setEuropeTeamStats] = useState<TeamStatsDto | null>(null);
+  const [trophies, setTrophies] = useState<TrophyKey[]>([]);
 
   // Lets an "announcement" phase auto-advance after a short pause, or resolve immediately if the
   // user clicks past it — same escape-hatch pattern as MatchPopupReel's "Skip ahead".
@@ -152,6 +195,13 @@ export function SeasonPage() {
   function waitForReplay(): Promise<void> {
     return new Promise((resolve) => {
       replayResolveRef.current = resolve;
+    });
+  }
+
+  const januaryResolveRef = useRef<((result: JanuaryResultDto | null) => void) | null>(null);
+  function waitForJanuary(): Promise<JanuaryResultDto | null> {
+    return new Promise((resolve) => {
+      januaryResolveRef.current = resolve;
     });
   }
 
@@ -178,6 +228,9 @@ export function SeasonPage() {
         setSummary(cached.summary);
         setDomesticMatches(cached.domesticMatches ?? []);
         setEuropeAllMatches(cached.europeMatches ?? []);
+        setJanuaryOutcome(cached.januaryOutcome ?? null);
+        setLeagueManagerStats(cached.leagueManagerStats ?? null);
+        setTrophies(cached.trophies ?? []);
         setStatsTab(cached.qualified ? "europe" : "league");
         setPhase("stats-hub");
       })
@@ -218,18 +271,69 @@ export function SeasonPage() {
     const userClub = w.clubs.find((c) => c.managedByUserId);
     const domesticSeasonId = domesticSeason.id;
 
-    setPhase("simulating");
-    await api.simulateSeason(wId, domesticSeasonId);
-    await pollUntilCompleted(wId, domesticSeasonId);
+    // The January Transfer Window pauses the domestic season at its exact halfway matchday —
+    // derived from the already-generated fixture list (double round-robin, so the total is always
+    // even), never hardcoded. Off (or no human club to act on) falls back to the original one-shot
+    // simulate-then-reveal flow below, unchanged.
+    const totalMatchdays = Math.max(0, ...domesticSeason.fixtures.map((f) => f.matchday));
+    const midMatchday = Math.floor(totalMatchdays / 2);
+    const januaryEnabled = (w.settings?.januaryWindow ?? true) && Boolean(userClub) && midMatchday > 0 && midMatchday < totalMatchdays;
 
-    const [matches, standingsRes] = await Promise.all([
-      api.getMatchesWithEvents(wId, domesticSeasonId),
-      api.getStandings(wId, domesticSeasonId),
-    ]);
+    let matches: MatchSummaryDto[];
+    let standingsRes: StandingsDto;
+    let outcome: JanuaryResultDto | null = null;
+
+    if (januaryEnabled) {
+      setPhase("simulating");
+      setSimulatingLabel("Simulating the first half of the season…");
+      await api.simulateSeason(wId, domesticSeasonId, { throughMatchday: midMatchday });
+      await pollUntilMatchdayComplete(wId, domesticSeasonId, midMatchday);
+
+      const firstHalf = await api.getMatchesWithEvents(wId, domesticSeasonId);
+      setDomesticReelMatches(firstHalf);
+      setDomesticReelHalf(0);
+      setPhase("domestic-replay");
+      await waitForReplay();
+
+      setPhase("january");
+      outcome = await waitForJanuary();
+      setJanuaryOutcome(outcome);
+
+      setPhase("simulating");
+      setSimulatingLabel("Simulating the rest of the season…");
+      await api.simulateSeason(wId, domesticSeasonId);
+      await pollUntilCompleted(wId, domesticSeasonId);
+
+      const [allMatches, finalStandings] = await Promise.all([
+        api.getMatchesWithEvents(wId, domesticSeasonId),
+        api.getStandings(wId, domesticSeasonId),
+      ]);
+      matches = allMatches;
+      standingsRes = finalStandings;
+
+      setDomesticReelMatches(allMatches.filter((m) => m.matchday > midMatchday));
+      setDomesticReelHalf(1);
+      setPhase("domestic-replay");
+      await waitForReplay();
+    } else {
+      setPhase("simulating");
+      await api.simulateSeason(wId, domesticSeasonId);
+      await pollUntilCompleted(wId, domesticSeasonId);
+
+      const [m, s] = await Promise.all([
+        api.getMatchesWithEvents(wId, domesticSeasonId),
+        api.getStandings(wId, domesticSeasonId),
+      ]);
+      matches = m;
+      standingsRes = s;
+      setDomesticReelMatches(matches);
+      setDomesticReelHalf(0);
+      setPhase("domestic-replay");
+      await waitForReplay();
+    }
+
     setDomesticMatches(matches);
     setStandings(standingsRes);
-    setPhase("domestic-replay");
-    await waitForReplay();
 
     setPhase("domestic-standings");
     await pause(4000);
@@ -244,6 +348,15 @@ export function SeasonPage() {
 
     const leagueStats = await api.getCompetitionStats(wId, domesticSeason.competitionId);
     setLeagueCompetitionStats(leagueStats);
+    const managerStats = userClub ? await api.getManagerStats(wId, domesticSeason.competitionId, userClub.id) : null;
+    setLeagueManagerStats(managerStats);
+
+    // Persists trophies/awards/records for this run (see finalizeRun's own doc comment for why this
+    // is the caller's job, not the worker's). A failure here is a shame, not a crash — the reveal
+    // and every other stats-hub panel already succeeded, so trophies just quietly default to none.
+    const finalizeResult = userClub ? await api.finalizeRun(wId, domesticSeasonId).catch(() => null) : null;
+    const unlockedTrophies = finalizeResult?.trophies ?? [];
+    setTrophies(unlockedTrophies);
 
     // The Setup "European Nights" toggle (default on) opts a world out of continental football
     // entirely — "Off = just the league" — even for a qualifying finish. `settings` is null for
@@ -272,6 +385,9 @@ export function SeasonPage() {
         summary: summaryRes,
         domesticMatches: matches,
         europeMatches: [],
+        januaryOutcome: outcome,
+        leagueManagerStats: managerStats,
+        trophies: unlockedTrophies,
       });
       return;
     }
@@ -338,6 +454,9 @@ export function SeasonPage() {
       summary: summaryRes,
       domesticMatches: matches,
       europeMatches,
+      januaryOutcome: outcome,
+      leagueManagerStats: managerStats,
+      trophies: unlockedTrophies,
     });
   }
 
@@ -410,6 +529,26 @@ export function SeasonPage() {
     return row ? { won: row.won, drawn: row.drawn, lost: row.lost, points: row.points } : undefined;
   };
 
+  // The season narrative is pure and cheap to (re)compute from data the stats hub already has
+  // cached — no separate fetch or cache slot of its own, unlike the fields above.
+  const narrative =
+    summary && userClub && summary.position !== undefined && summary.userRow
+      ? buildSeasonNarrative({
+          position: summary.position,
+          seasonSize: standings?.rows.length ?? world.clubs.length,
+          points: summary.userRow.points,
+          clubName: userClub.name,
+          userClubId: userClub.id,
+          squadOverall: summary.squadOverall,
+          squad: summary.squad,
+          matches: onlyMine(domesticMatches),
+          teamStats,
+          januaryOutcome,
+          managerPhilosophy: leagueManagerStats?.manager?.philosophy,
+          nameFor,
+        })
+      : null;
+
   return (
     <div className="mx-auto max-w-3xl space-y-8 px-6 py-12">
       <div className="text-center">
@@ -433,10 +572,22 @@ export function SeasonPage() {
 
       {phase === "domestic-replay" && (
         <MatchPopupReel
-          matches={onlyMine(domesticMatches)}
+          key={`domestic-half-${domesticReelHalf}`}
+          matches={onlyMine(domesticReelMatches)}
           clubs={world.clubs}
           userClubId={userClub?.id}
           onComplete={() => replayResolveRef.current?.()}
+        />
+      )}
+
+      {phase === "january" && userClub && season && (
+        <JanuaryWindow
+          matches={onlyMine(domesticReelMatches)}
+          userClubId={userClub.id}
+          totalMatchdays={Math.max(0, ...season.fixtures.map((f) => f.matchday))}
+          matchdaysPlayed={Math.floor(Math.max(0, ...season.fixtures.map((f) => f.matchday)) / 2)}
+          onResolve={() => api.resolveJanuaryGamble(world.id, season.id)}
+          onDone={(outcome) => januaryResolveRef.current?.(outcome)}
         />
       )}
 
@@ -576,7 +727,18 @@ export function SeasonPage() {
                 : `${nameFor(champion)} lifted the Champions League this season.`}
             </p>
           )}
+          {summary.squadOverall !== undefined && (
+            <p className="text-center text-xs text-smoke-500">
+              A <span className={TIER_TEXT[squadTierName(summary.squadOverall)]}>{squadTierName(summary.squadOverall)}</span>{" "}
+              squad (Overall {summary.squadOverall})
+            </p>
+          )}
+
+          <TrophyCabinet trophies={trophies} />
+
           <ShareCard summary={summary} />
+          {januaryOutcome && <JanuaryShareCard outcome={januaryOutcome} />}
+          <GuestPersistPrompt />
 
           {qualified && (
             <div className="flex justify-center gap-2">
@@ -595,6 +757,7 @@ export function SeasonPage() {
                 League &middot; Final Standings
               </h2>
               <StandingsTable standings={standings} clubs={world.clubs} highlightClubId={userClub?.id} />
+              {narrative && <SeasonNarrative narrative={narrative} />}
               {leagueCompetitionStats && (
                 <CompetitionStatsPanel stats={leagueCompetitionStats} highlightClubId={userClub?.id} />
               )}
@@ -606,6 +769,7 @@ export function SeasonPage() {
                   <TeamStatsPanel stats={teamStats} record={recordFor(standings)} />
                 </>
               )}
+              {leagueManagerStats && <ManagerStatCard stats={leagueManagerStats} clubs={world.clubs} />}
               {domesticMatches.length > 0 && (
                 <>
                   <h3 className="text-center font-display text-base font-semibold uppercase tracking-wide text-paper">

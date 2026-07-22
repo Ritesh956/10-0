@@ -116,6 +116,11 @@ export interface StandingsDto {
   rows: StandingsRowDto[];
 }
 
+export interface SquadPositionOverallDto {
+  position: string;
+  overall: number;
+}
+
 export interface SummaryDto {
   standings: StandingsDto;
   userClub?: { id: string; name: string };
@@ -123,6 +128,11 @@ export interface SummaryDto {
   position?: number;
   unbeaten: boolean;
   shareText?: string;
+  /** The user's starting-XI position/overall snapshot, for the season-narrative engine's per-unit
+      tiering (Attack/Midfield/Defence/Goalkeeping) — grouped client-side via lib/formations.ts's
+      POSITION_GROUP, same as DraftPage's squad-ratings panel. Undefined for a manager-less/AI world. */
+  squad?: SquadPositionOverallDto[];
+  squadOverall?: number;
 }
 
 export interface CatalogFilter {
@@ -178,10 +188,24 @@ export interface CompetitionScorerRowDto {
   avgRating: number;
 }
 
+export interface CompetitionGoalkeeperRowDto extends CompetitionScorerRowDto {
+  cleanSheets: number;
+}
+
 export interface CompetitionStatsDto {
   topScorers: CompetitionScorerRowDto[];
   goldenBoot?: CompetitionScorerRowDto;
   mvp?: CompetitionScorerRowDto;
+  playmaker?: CompetitionScorerRowDto;
+  goldenGlove?: CompetitionGoalkeeperRowDto;
+}
+
+export interface ManagerStatsDto {
+  manager: { name: string; nationality: string; philosophy: string | null } | null;
+  cleanSheets: number;
+  longestWinStreak: number;
+  biggestWin?: { opponentClubId: string; ourScore: number; theirScore: number; margin: number };
+  highestScoringMatch?: { opponentClubId: string; ourScore: number; theirScore: number; total: number };
 }
 
 export type KnockoutRound = "QF" | "SF" | "FINAL";
@@ -221,4 +245,45 @@ export interface EuropeAdvanceResultDto {
   resolvedTies: KnockoutTieDto[];
   next?: EuropeRoundDto;
   champion?: string;
+}
+
+export type JanuaryEventType = "POSITIVE" | "NEUTRAL" | "NEGATIVE";
+
+export interface JanuaryPlayerDto {
+  id: string;
+  name: string;
+  overall: number;
+  position: string;
+}
+
+export interface JanuaryInPlayerDto extends JanuaryPlayerDto {
+  clubName: string;
+  seasonYear: number;
+}
+
+export interface JanuaryResultDto {
+  eventType: JanuaryEventType;
+  outPlayer: JanuaryPlayerDto;
+  inPlayer: JanuaryInPlayerDto;
+  delta: number;
+}
+
+// Hand-mirrored from @futbol/domain's TrophyKey (apps/web has zero workspace deps by design —
+// see CLAUDE.md — so this stays a plain string union kept in sync by hand, same as JanuaryEventType).
+export type TrophyKey = "invincible" | "unbeaten" | "champions" | "golden-boot" | "playmaker" | "golden-glove" | "mvp";
+
+export interface FinalizeRunResultDto {
+  trophies: TrophyKey[];
+  awards: { worldId: string; seasonId: string; name: string; winnerId: string }[];
+  records: { worldId: string; name: string; holderId: string; value: number }[];
+}
+
+export interface WorldHistoryRowDto {
+  worldId: string;
+  createdAt: string;
+  status: string;
+  clubName: string | null;
+  formation: string | null;
+  pointsTotal: number | null;
+  trophies: TrophyKey[];
 }

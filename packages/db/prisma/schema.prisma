@@ -225,6 +225,7 @@ model World {
   matches      Match[]
   knockoutTies KnockoutTie[]
   transfers    Transfer[]
+  januaryEvents JanuaryEvent[]
   memberships  LeagueMembership[]
   chatMessages ChatMessage[]
 
@@ -328,6 +329,7 @@ model Season {
   world       World       @relation(fields: [worldId], references: [id])
   competition Competition @relation(fields: [competitionId], references: [id])
   fixtures    Fixture[]
+  januaryEvents JanuaryEvent[]
 
   @@index([worldId])
   @@map("seasons")
@@ -535,6 +537,42 @@ model Transfer {
   @@map("transfers")
 }
 
+enum JanuaryEventType {
+  POSITIVE
+  NEUTRAL
+  NEGATIVE
+}
+
+/// One resolved January Transfer Window gamble for a club within a domestic season — the
+/// OUT/IN swap plus enough context to render Phase-4's narrative later. Kept separate from
+/// Transfer (which models a single player moving between two WorldClubs) since a January
+/// event is an atomic OUT+IN pair sourced from the ref catalog, not a world-to-world move,
+/// and needs event-type + delta fields Transfer has no room for. @@unique on [seasonId, clubId]
+/// is also the idempotency guard against double-resolving the same club's window.
+model JanuaryEvent {
+  id            String           @id @default(cuid())
+  worldId       String
+  seasonId      String
+  clubId        String
+  eventType     JanuaryEventType
+  outPlayerId   String
+  outPlayerName String
+  outOverall    Int
+  inPlayerId    String
+  inPlayerName  String
+  inOverall     Int
+  delta         Int
+  transferId    String?
+  createdAt     DateTime         @default(now())
+
+  world  World  @relation(fields: [worldId], references: [id])
+  season Season @relation(fields: [seasonId], references: [id])
+
+  @@unique([seasonId, clubId])
+  @@index([worldId])
+  @@map("january_events")
+}
+
 model Award {
   id       String @id @default(cuid())
   worldId  String
@@ -542,6 +580,9 @@ model Award {
   name     String
   winnerId String // clubId or playerId depending on award type
 
+  // Lets finalize-run persistence use createMany + skipDuplicates to stay idempotent across
+  // repeat calls (e.g. a user revisiting the stats hub) instead of accumulating duplicate rows.
+  @@unique([worldId, seasonId, name])
   @@index([worldId])
   @@map("awards")
 }
@@ -553,6 +594,7 @@ model WorldRecord {
   holderId String
   value    Float
 
+  @@unique([worldId, name])
   @@index([worldId])
   @@map("records")
 }
@@ -564,6 +606,7 @@ model Achievement {
   key        String
   unlockedAt DateTime @default(now())
 
+  @@unique([worldId, userId, key])
   @@index([worldId])
   @@map("achievements")
 }

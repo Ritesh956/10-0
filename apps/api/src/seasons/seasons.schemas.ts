@@ -11,3 +11,13 @@ export const createSeasonSchema = z.object({
   leagueId: z.string().optional(),
 });
 export type CreateSeasonDto = z.infer<typeof createSeasonSchema>;
+
+export const simulateSeasonSchema = z
+  .object({
+    /** Stop after this matchday instead of simulating every remaining fixture — used to pause a
+        domestic season at its halfway point for the January Transfer Window. Omitted body ⇒ {}. */
+    throughMatchday: z.number().int().positive().optional(),
+  })
+  .optional()
+  .default({});
+export type SimulateSeasonDto = z.infer<typeof simulateSeasonSchema>;

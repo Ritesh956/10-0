@@ -8,10 +8,13 @@ import type {
   EuropeLeaguePhaseDto,
   EuropeRoundDto,
   EuropeStatusDto,
+  FinalizeRunResultDto,
+  JanuaryResultDto,
   KnockoutRound,
   KnockoutTieDto,
   LeagueDto,
   ManagerDto,
+  ManagerStatsDto,
   MatchSummaryDto,
   PlayerSeasonDto,
   SeasonDto,
@@ -19,6 +22,7 @@ import type {
   SummaryDto,
   TeamStatsDto,
   WorldDto,
+  WorldHistoryRowDto,
 } from "./types";
 
 const API_BASE_URL = (import.meta.env["VITE_API_URL"] as string | undefined) ?? "http://localhost:4000";
@@ -142,8 +146,11 @@ export const api = {
       body: JSON.stringify({ competitionName, ...opts }),
     }),
 
-  simulateSeason: (worldId: string, seasonId: string) =>
-    request<{ status: string }>(`/worlds/${worldId}/seasons/${seasonId}/simulate`, { method: "POST" }),
+  simulateSeason: (worldId: string, seasonId: string, opts?: { throughMatchday?: number }) =>
+    request<{ status: string }>(`/worlds/${worldId}/seasons/${seasonId}/simulate`, {
+      method: "POST",
+      body: JSON.stringify(opts ?? {}),
+    }),
 
   getSeason: (worldId: string, seasonId: string) => request<SeasonDto>(`/worlds/${worldId}/seasons/${seasonId}`),
 
@@ -164,6 +171,9 @@ export const api = {
 
   getTeamStatsForCompetition: (worldId: string, competitionId: string, clubId: string) =>
     request<TeamStatsDto>(`/worlds/${worldId}/seasons/competitions/${competitionId}/team-stats?clubId=${clubId}`),
+
+  getManagerStats: (worldId: string, competitionId: string, clubId: string) =>
+    request<ManagerStatsDto>(`/worlds/${worldId}/seasons/competitions/${competitionId}/manager-stats?clubId=${clubId}`),
 
   getEuropeStatus: (worldId: string, domesticSeasonId: string) =>
     request<EuropeStatusDto>(`/worlds/${worldId}/europe/status?domesticSeasonId=${domesticSeasonId}`),
@@ -189,4 +199,12 @@ export const api = {
 
   getLeaguePhaseStandings: (worldId: string, seasonId: string) =>
     request<StandingsDto>(`/worlds/${worldId}/europe/league-phase-standings?seasonId=${seasonId}`),
+
+  resolveJanuaryGamble: (worldId: string, seasonId: string) =>
+    request<JanuaryResultDto>(`/worlds/${worldId}/january/${seasonId}/resolve`, { method: "POST" }),
+
+  finalizeRun: (worldId: string, seasonId: string) =>
+    request<FinalizeRunResultDto>(`/worlds/${worldId}/seasons/${seasonId}/finalize`, { method: "POST" }),
+
+  getHistory: () => request<WorldHistoryRowDto[]>("/worlds/history"),
 };

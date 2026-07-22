@@ -30,6 +30,12 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+/** Pure boundary check for the January Transfer Window's matchday cutoff — kept separate from the
+    loop in processSeasonSimJob so the `<=` boundary is unit-testable without mocking Prisma. */
+export function shouldSimulateMatchday(matchday: number, throughMatchday: number | undefined): boolean {
+  return throughMatchday === undefined || matchday <= throughMatchday;
+}
+
 function randomSeed(): bigint {
   return BigInt(`0x${randomBytes(8).toString("hex")}`);
 }
@@ -235,7 +241,7 @@ async function batchUpdateFitness(prisma: PrismaClient, updates: { playerId: str
  * itself rather than anything fixable from here without a lower-latency/self-hosted DB.
  */
 export async function processSeasonSimJob(prisma: PrismaClient, job: SeasonSimJob): Promise<void> {
-  const { worldId, seasonId } = job;
+  const { worldId, seasonId, throughMatchday } = job;
 
   const season = await prisma.season.findUniqueOrThrow({ where: { id: seasonId }, include: { competition: true } });
   const isContinental = season.competition.type === "CONTINENTAL";
@@ -279,6 +285,11 @@ export async function processSeasonSimJob(prisma: PrismaClient, job: SeasonSimJo
     }
 
     for (const matchday of [...fixturesByMatchday.keys()].sort((a, b) => a - b)) {
+      // The January Transfer Window pause: stop simulating once past the requested matchday and
+      // leave the rest SCHEDULED. `remaining` below will be nonzero, so the Season stays IN_PROGRESS
+      // rather than COMPLETED — a later job with no throughMatchday picks up where this left off,
+      // reading whatever WorldClub/WorldPlayer changes were made to the roster in between.
+      if (!shouldSimulateMatchday(matchday, throughMatchday)) break;
       const dayFixtures = fixturesByMatchday.get(matchday)!;
       await simulateMatchday(prisma, worldId, dayFixtures, clubById, playersByClub, finalFixtureIds, isContinental);
     }

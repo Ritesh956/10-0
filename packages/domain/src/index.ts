@@ -6,3 +6,4 @@ export * from "./squad.js";
 export * from "./match.js";
 export * from "./season.js";
 export * from "./jobs.js";
+export * from "./trophies.js";

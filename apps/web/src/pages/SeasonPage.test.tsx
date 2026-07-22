@@ -14,6 +14,12 @@ vi.mock("../lib/confetti", () => ({ fireQualificationBurst, fireChampionShower, 
 const { useDraftMock } = vi.hoisted(() => ({ useDraftMock: vi.fn() }));
 vi.mock("../state/DraftContext", () => ({ useDraft: useDraftMock }));
 
+// GuestPersistPrompt (rendered in the stats hub) calls useAuth() — mocked here the same way
+// useDraft is, defaulting to a signed-up (non-guest) user so it renders nothing in every test
+// that doesn't care about it.
+const { useAuthMock } = vi.hoisted(() => ({ useAuthMock: vi.fn() }));
+vi.mock("../lib/auth-context", () => ({ useAuth: useAuthMock }));
+
 const api = vi.hoisted(() => ({
   getWorld: vi.fn(),
   createSeason: vi.fn(),
@@ -30,6 +36,9 @@ const api = vi.hoisted(() => ({
   advanceEuropeKnockouts: vi.fn(),
   getLeaguePhaseStandings: vi.fn(),
   getSummary: vi.fn(),
+  resolveJanuaryGamble: vi.fn(),
+  getManagerStats: vi.fn(),
+  finalizeRun: vi.fn(),
 }));
 vi.mock("../api/client", () => ({ api }));
 
@@ -55,6 +64,7 @@ const teamStats: TeamStatsDto = { clubId: "user-club", goalsFor: 90, goalsAgains
 
 function setup() {
   useDraftMock.mockReturnValue({ worldId: "w1", config: { leagueIds: ["league-1"] } });
+  useAuthMock.mockReturnValue({ user: { id: "u1", email: null, displayName: "Tester", isGuest: false }, isAuthenticated: true });
   api.getWorld.mockResolvedValue(world);
   api.createSeason.mockResolvedValue(season);
   api.simulateSeason.mockResolvedValue({ status: "ok" });
@@ -64,6 +74,8 @@ function setup() {
   api.getTeamStats.mockResolvedValue(teamStats);
   api.getCompetitionStats.mockResolvedValue({ topScorers: [], goldenBoot: undefined, mvp: undefined });
   api.getTeamStatsForCompetition.mockResolvedValue(teamStats);
+  api.getManagerStats.mockResolvedValue({ manager: null, cleanSheets: 0, longestWinStreak: 0 });
+  api.finalizeRun.mockResolvedValue({ trophies: [], awards: [], records: [] });
 }
 
 describe("SeasonPage — qualification confetti wiring", () => {
@@ -219,4 +231,240 @@ describe("SeasonPage — one required Continue press carries the whole knockout 
     await waitFor(() => expect(api.getSummary).toHaveBeenCalled(), { timeout: 10000, interval: 50 });
     await findByText(/season result/i, {}, { timeout: 10000 });
   }, 30000);
+});
+
+describe("SeasonPage — January Transfer Window pause", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  // A small 4-matchday season (mid = 2) is enough to exercise the halfway split — the pause logic
+  // only cares that 0 < mid < total, not that the numbers match a real 20-club league.
+  const halfSeason: SeasonDto = {
+    id: "s1",
+    worldId: "w1",
+    competitionId: "c1",
+    year: 2024,
+    status: "IN_PROGRESS",
+    fixtures: [1, 2, 3, 4].map((matchday) => ({
+      id: `f${matchday}`,
+      matchday,
+      homeClubId: "user-club",
+      awayClubId: "ai-club",
+      status: "SCHEDULED",
+      matchId: null,
+    })),
+  };
+  const halfSeasonAllDone: SeasonDto = {
+    ...halfSeason,
+    status: "COMPLETED",
+    fixtures: halfSeason.fixtures.map((f) => ({ ...f, status: "COMPLETED", matchId: `m${f.matchday}` })),
+  };
+
+  function setupJanuary(januaryWindow: boolean) {
+    useDraftMock.mockReturnValue({ worldId: "w1", config: { leagueIds: ["league-1"] } });
+    useAuthMock.mockReturnValue({ user: { id: "u1", email: null, displayName: "Tester", isGuest: false }, isAuthenticated: true });
+    api.getWorld.mockResolvedValue({ ...world, settings: { europeanNights: false, januaryWindow } });
+    api.createSeason.mockResolvedValue(halfSeason);
+    api.simulateSeason.mockResolvedValue({ status: "ok" });
+    api.getSeason.mockResolvedValue(halfSeasonAllDone);
+    api.getMatchesWithEvents.mockResolvedValue([]);
+    api.getStandings.mockResolvedValue(standings);
+    api.getTeamStats.mockResolvedValue(teamStats);
+    api.getCompetitionStats.mockResolvedValue({ topScorers: [], goldenBoot: undefined, mvp: undefined });
+    api.getSummary.mockResolvedValue({ standings, unbeaten: false });
+    api.getManagerStats.mockResolvedValue({ manager: null, cleanSheets: 0, longestWinStreak: 0 });
+    api.finalizeRun.mockResolvedValue({ trophies: [], awards: [], records: [] });
+  }
+
+  it("pauses at the halfway matchday, then resumes the back half once the user sticks with their XI", async () => {
+    setupJanuary(true);
+
+    const { getByRole, findByText, findByRole } = render(
+      <MemoryRouter>
+        <SeasonPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(api.getWorld).toHaveBeenCalled());
+    getByRole("button", { name: /simulate season/i }).click();
+
+    await findByText(/halfway there/i, {}, { timeout: 8000 });
+    // The first half was simulated up to the derived midpoint, not the whole season.
+    expect(api.simulateSeason).toHaveBeenNthCalledWith(1, "w1", "s1", { throughMatchday: 2 });
+
+    getByRole("button", { name: /stick with your xi/i }).click();
+    expect(api.resolveJanuaryGamble).not.toHaveBeenCalled();
+
+    // A second, uncapped simulate call finishes the back half — the pipeline then continues
+    // exactly as the non-January flow does (domestic-standings, team-stats, then stats hub since
+    // europeanNights is off here).
+    await waitFor(() => expect(api.simulateSeason).toHaveBeenCalledTimes(2), { timeout: 5000 });
+
+    await findByRole("button", { name: /^continue/i }, { timeout: 5000 });
+    getByRole("button", { name: /^continue/i }).click();
+    await findByRole("button", { name: /^continue/i }, { timeout: 5000 });
+    getByRole("button", { name: /^continue/i }).click();
+
+    await waitFor(() => expect(api.getSummary).toHaveBeenCalled(), { timeout: 5000 });
+  }, 20000);
+
+  it("never pauses when the world's januaryWindow setting is off", async () => {
+    setupJanuary(false);
+
+    const { getByRole, findByRole, queryByText } = render(
+      <MemoryRouter>
+        <SeasonPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(api.getWorld).toHaveBeenCalled());
+    getByRole("button", { name: /simulate season/i }).click();
+
+    await findByRole("button", { name: /^continue/i }, { timeout: 5000 });
+    getByRole("button", { name: /^continue/i }).click();
+    await findByRole("button", { name: /^continue/i }, { timeout: 5000 });
+    getByRole("button", { name: /^continue/i }).click();
+
+    await waitFor(() => expect(api.getSummary).toHaveBeenCalled(), { timeout: 5000 });
+    expect(api.simulateSeason).toHaveBeenCalledTimes(1);
+    expect(api.simulateSeason).toHaveBeenCalledWith("w1", "s1");
+    expect(queryByText(/halfway there/i)).toBeNull();
+  }, 15000);
+});
+
+describe("SeasonPage — Phase 4 stats-hub additions render from real data", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it("renders the season narrative and manager stat card once squad/manager data comes back", async () => {
+    setup();
+    api.getEuropeStatus.mockResolvedValue({ qualified: false, position: 12, qualifierCount: 8, ties: [] });
+    api.getSummary.mockResolvedValue({
+      standings,
+      userClub: { id: "user-club", name: "Our XI" },
+      userRow: standings.rows[0],
+      position: 1,
+      unbeaten: false,
+      squadOverall: 82,
+      squad: [
+        { position: "GK", overall: 80 },
+        { position: "CB", overall: 78 },
+        { position: "ST", overall: 88 },
+      ],
+    });
+    api.getManagerStats.mockResolvedValue({
+      manager: { name: "Pep Testola", nationality: "Spain", philosophy: "Fluid possession, intense counter-press" },
+      cleanSheets: 10,
+      longestWinStreak: 5,
+      biggestWin: { opponentClubId: "ai-club", ourScore: 4, theirScore: 0, margin: 4 },
+      highestScoringMatch: { opponentClubId: "ai-club", ourScore: 3, theirScore: 3, total: 6 },
+    });
+
+    const { getByRole, findByText, findAllByText } = render(
+      <MemoryRouter>
+        <SeasonPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(api.getWorld).toHaveBeenCalled());
+    getByRole("button", { name: /simulate season/i }).click();
+
+    await findByText(/continue/i, {}, { timeout: 5000 });
+    getByRole("button", { name: /continue/i }).click();
+    await findByText(/continue/i, {}, { timeout: 5000 });
+    getByRole("button", { name: /continue/i }).click();
+
+    await findByText(/season story/i, {}, { timeout: 5000 });
+    expect(await findByText(/pep testola/i)).toBeTruthy();
+    expect(await findByText(/clean sheets/i)).toBeTruthy();
+    // "Elite" legitimately appears more than once (the squad-tier badge, the composition
+    // sentence, and the Attack unit chip) — assert at least one match rather than a single one.
+    expect((await findAllByText(/galácticos|elite/i)).length).toBeGreaterThan(0);
+  }, 15000);
+});
+
+describe("SeasonPage — Phase 5 finalize-run wiring", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it("calls finalizeRun once the stats hub is reached and shows unlocked trophies", async () => {
+    setup();
+    api.getEuropeStatus.mockResolvedValue({ qualified: false, position: 12, qualifierCount: 8, ties: [] });
+    api.getSummary.mockResolvedValue({ standings, unbeaten: false });
+    api.finalizeRun.mockResolvedValue({
+      trophies: ["champions", "golden-boot"],
+      awards: [],
+      records: [],
+    });
+
+    const { getByRole, findByText } = render(
+      <MemoryRouter>
+        <SeasonPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(api.getWorld).toHaveBeenCalled());
+    getByRole("button", { name: /simulate season/i }).click();
+
+    await findByText(/continue/i, {}, { timeout: 5000 });
+    getByRole("button", { name: /continue/i }).click();
+    await findByText(/continue/i, {}, { timeout: 5000 });
+    getByRole("button", { name: /continue/i }).click();
+
+    await waitFor(() => expect(api.finalizeRun).toHaveBeenCalledWith("w1", "s1"), { timeout: 5000 });
+    expect(await findByText("Champions")).toBeTruthy();
+    expect(await findByText("Golden Boot")).toBeTruthy();
+  }, 15000);
+
+  it("shows the guest-persistence prompt for a guest user", async () => {
+    setup();
+    useAuthMock.mockReturnValue({ user: { id: "u1", email: null, displayName: "Guest123", isGuest: true }, isAuthenticated: true });
+    api.getEuropeStatus.mockResolvedValue({ qualified: false, position: 12, qualifierCount: 8, ties: [] });
+    api.getSummary.mockResolvedValue({ standings, unbeaten: false });
+
+    const { getByRole, findByText } = render(
+      <MemoryRouter>
+        <SeasonPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(api.getWorld).toHaveBeenCalled());
+    getByRole("button", { name: /simulate season/i }).click();
+
+    await findByText(/continue/i, {}, { timeout: 5000 });
+    getByRole("button", { name: /continue/i }).click();
+    await findByText(/continue/i, {}, { timeout: 5000 });
+    getByRole("button", { name: /continue/i }).click();
+
+    expect(await findByText(/don't lose this season/i)).toBeTruthy();
+  }, 15000);
+
+  it("does not show the guest-persistence prompt for a signed-up user (the default fixture)", async () => {
+    setup();
+    api.getEuropeStatus.mockResolvedValue({ qualified: false, position: 12, qualifierCount: 8, ties: [] });
+    api.getSummary.mockResolvedValue({ standings, unbeaten: false });
+
+    const { getByRole, findByText, queryByText } = render(
+      <MemoryRouter>
+        <SeasonPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(api.getWorld).toHaveBeenCalled());
+    getByRole("button", { name: /simulate season/i }).click();
+
+    await findByText(/continue/i, {}, { timeout: 5000 });
+    getByRole("button", { name: /continue/i }).click();
+    await findByText(/continue/i, {}, { timeout: 5000 });
+    getByRole("button", { name: /continue/i }).click();
+
+    await waitFor(() => expect(api.getSummary).toHaveBeenCalled(), { timeout: 5000 });
+    expect(queryByText(/don't lose this season/i)).toBeNull();
+  }, 15000);
 });

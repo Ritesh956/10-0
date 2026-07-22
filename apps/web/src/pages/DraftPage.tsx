@@ -21,7 +21,9 @@ import {
   type PositionGroup,
 } from "../lib/formations";
 import { isRealCountry } from "../lib/leagues";
+import { computePreseasonOdds } from "../lib/preseasonOdds";
 import { surname } from "../lib/positionColors";
+import { squadTierName, TIER_BORDER, TIER_TEXT } from "../lib/squadRatings";
 import { useAuth } from "../lib/auth-context";
 import { useDraft } from "../state/DraftContext";
 
@@ -68,55 +70,6 @@ function sampleReelCandidates(pool: ClubSeasonDto[], count = 14): ReelCandidate[
 
 function average(values: number[]): number {
   return values.length ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : 0;
-}
-
-export interface PreseasonOdds {
-  seasonSize: number;
-  expectedPoints: number;
-  winPct: number;
-  top4Pct: number;
-  top6Pct: number;
-  top10Pct: number;
-  relegationPct: number;
-  projectedFinish: number;
-}
-
-/** Pre-season projection shown on the confirm screen. Every stat is derived from ONE continuous
-    expected-finish position (via a logistic rank distribution) rather than separate hand-tuned
-    curves per stat — those used to disagree with each other (e.g. a squad "projected 7th" could
-    simultaneously show ~40% to win the league, which makes no sense together). */
-export function computePreseasonOdds(overallRating: number): PreseasonOdds {
-  // SEASON_SIZE mirrors the real top-flight-sized league SeasonPage actually simulates
-  // (see apps/web/src/pages/SeasonPage.tsx's createSeason call) — keep the two in sync.
-  const seasonSize = 20;
-  const matches = (seasonSize - 1) * 2;
-  // A hard 55-90 clamp saturated `strength` to 1 for almost any good squad (overall 90+
-  // is common), making every strong draft show the same "90% to win it" numbers. A logistic
-  // curve centered on a realistic "mid-table top-flight XI" benchmark keeps differentiating
-  // squads all the way up near the top of the rating scale instead of flatlining early.
-  const MID_OVERALL = 75;
-  const SPREAD = 8;
-  const strength = 1 / (1 + Math.exp(-(overallRating - MID_OVERALL) / SPREAD));
-  const ppg = 0.6 + strength * 2; // ~0.6 (relegation form) to ~2.6 (title-winning pace) points/game
-
-  const meanRank = seasonSize - strength * (seasonSize - 1); // continuous, e.g. ~6.6 for a strong-but-not-dominant XI
-  const RANK_SPREAD = 3.5; // typical +/- finish-position swing a team of given quality sees season to season
-  const LOGISTIC_SCALE = RANK_SPREAD / 1.814; // logistic-distribution scale matching that spread's std dev
-  const rankCdf = (threshold: number) => 1 / (1 + Math.exp((meanRank - threshold) / LOGISTIC_SCALE));
-
-  return {
-    seasonSize,
-    expectedPoints: Math.round(ppg * matches),
-    winPct: Math.max(1, Math.min(95, Math.round(rankCdf(1) * 100))),
-    top4Pct: Math.max(1, Math.min(99, Math.round(rankCdf(4) * 100))),
-    // top6/top10 read off the same continuous rank distribution as win/top4/relegation — rankCdf
-    // is monotonically increasing in its threshold, so win <= top4 <= top6 <= top10 falls out for
-    // free rather than needing separately hand-tuned curves that could disagree with each other.
-    top6Pct: Math.max(1, Math.min(99, Math.round(rankCdf(6) * 100))),
-    top10Pct: Math.max(1, Math.min(99, Math.round(rankCdf(10) * 100))),
-    relegationPct: Math.max(0, Math.min(90, Math.round((1 - rankCdf(seasonSize - 3)) * 100))),
-    projectedFinish: Math.max(1, Math.min(seasonSize, Math.round(meanRank))),
-  };
 }
 
 function sortPlayers(list: PlayerSeasonDto[], mode: SortMode): PlayerSeasonDto[] {
@@ -654,7 +607,16 @@ export function DraftPage() {
             <div className="notch mt-4 space-y-3 border border-ink-800 bg-ink-900/50 p-4">
               <div>
                 <p className="text-xs uppercase tracking-widest text-smoke-600">Overall</p>
-                <p className="font-display text-3xl font-bold text-paper">{overallRating}</p>
+                <div className="flex items-baseline gap-2">
+                  <p className="font-display text-3xl font-bold text-paper">{overallRating}</p>
+                  {allFilled && (
+                    <span
+                      className={`notch-sm border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${TIER_BORDER[squadTierName(overallRating)]} ${TIER_TEXT[squadTierName(overallRating)]}`}
+                    >
+                      {squadTierName(overallRating)}
+                    </span>
+                  )}
+                </div>
               </div>
               <RatingBarOrEmpty label="Attack" value={groupOveralls.ATT.length ? squadRatings.attack : null} colorClass="bg-crimson-400" />
               <RatingBarOrEmpty label="Midfield" value={groupOveralls.MID.length ? squadRatings.midfield : null} colorClass="bg-teal-400" />
@@ -797,7 +759,8 @@ export function DraftPage() {
                     <OddsBar label="Relegation" pct={odds.relegationPct} colorClass="bg-crimson-400" />
                   </div>
                   <p className="text-xs text-ink-600">
-                    What an Overall {overallRating} squad should produce. Simulate to see if you beat it.
+                    What a {squadTierName(overallRating)} (Overall {overallRating}) squad should produce. Simulate to see if
+                    you beat it.
                   </p>
                 </div>
 
