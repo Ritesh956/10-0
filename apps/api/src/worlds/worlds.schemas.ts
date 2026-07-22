@@ -8,6 +8,12 @@ export const worldSettingsSchema = z.object({
       wherever a run needs to know it was a one-club draft — currently just LeaderboardService's
       submitRun, which derives mode/refClubId from this instead of trusting the submission body. */
   oneClubClubId: z.string().optional(),
+  /** Phase 9a (async multiplayer Leagues): the MultiplayerLeague this world's draft belongs to, or
+      omitted for a normal solo world. Set once at world creation; WorldsService.createWorld uses it
+      to attach the caller's LeagueMembership.worldId server-side (implicitly joining the league if
+      the caller hadn't already, harmless since membership is idempotent) — never trusted beyond
+      that, same "derive from World.settings" pattern as oneClubClubId. */
+  multiplayerLeagueId: z.string().optional(),
 });
 export type WorldSettingsDto = z.infer<typeof worldSettingsSchema>;
 

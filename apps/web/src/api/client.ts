@@ -3,6 +3,10 @@ import type {
   CatalogFilter,
   ClubSeasonDto,
   CompetitionStatsDto,
+  CreateLeagueDto,
+  CreateLiveDraftRoomDto,
+  DailyChallengeDto,
+  DailyChallengeEntryDto,
   EraDto,
   EuropeAdvanceResultDto,
   EuropeLeaguePhaseDto,
@@ -10,18 +14,24 @@ import type {
   EuropeStatusDto,
   FinalizeRunResultDto,
   JanuaryResultDto,
+  JoinLeagueResultDto,
+  JoinLiveDraftResultDto,
   KnockoutRound,
   KnockoutTieDto,
   LeaderboardEntryDto,
   LeaderboardQuery,
   LeagueDto,
+  LeagueStandingsRowDto,
+  LiveDraftRoomDto,
   ManagerDto,
   ManagerStatsDto,
   MatchSummaryDto,
+  MultiplayerLeagueDto,
   PlayerSeasonDto,
   RealClubDto,
   SeasonDto,
   StandingsDto,
+  SubmitDailyResultDto,
   SubmitLeaderboardDto,
   SubmitLeaderboardResultDto,
   SummaryDto,
@@ -128,7 +138,7 @@ export const api = {
 
   createWorld: (
     eraId: string,
-    settings?: { europeanNights: boolean; januaryWindow: boolean; oneClubClubId?: string },
+    settings?: { europeanNights: boolean; januaryWindow: boolean; oneClubClubId?: string; multiplayerLeagueId?: string },
   ) => request<WorldDto>("/worlds", { method: "POST", body: JSON.stringify({ eraId, type: "SINGLE", settings }) }),
 
   listWorlds: () => request<WorldDto[]>("/worlds"),
@@ -242,4 +252,40 @@ export const api = {
 
   reportLeaderboardEntry: (entryId: string) =>
     request<LeaderboardEntryDto>(`/leaderboard/${entryId}/report`, { method: "POST" }),
+
+  getDailyChallenge: () => request<DailyChallengeDto>("/daily/today"),
+
+  getDailyLeaderboard: (challengeId: string, limit = 50) =>
+    request<DailyChallengeEntryDto[]>(`/daily/${challengeId}/leaderboard?limit=${limit}`),
+
+  submitDailyAttempt: (challengeId: string, handle: string, picks: string[]) =>
+    request<SubmitDailyResultDto>(`/daily/${challengeId}/submit`, {
+      method: "POST",
+      body: JSON.stringify({ handle, picks }),
+    }),
+
+  createLeague: (dto: CreateLeagueDto) =>
+    request<MultiplayerLeagueDto>("/leagues", { method: "POST", body: JSON.stringify(dto) }),
+
+  getMyLeagues: () => request<MultiplayerLeagueDto[]>("/leagues/mine"),
+
+  previewLeagueInvite: (code: string) => request<MultiplayerLeagueDto>(`/leagues/invite/${code}`),
+
+  joinLeague: (code: string) => request<JoinLeagueResultDto>(`/leagues/invite/${code}/join`, { method: "POST" }),
+
+  getLeague: (leagueId: string) => request<MultiplayerLeagueDto>(`/leagues/${leagueId}`),
+
+  getLeagueStandings: (leagueId: string) => request<LeagueStandingsRowDto[]>(`/leagues/${leagueId}/standings`),
+
+  createLiveDraftRoom: (dto: CreateLiveDraftRoomDto) =>
+    request<LiveDraftRoomDto>("/live-draft", { method: "POST", body: JSON.stringify(dto) }),
+
+  getMyLiveDraftRooms: () => request<LiveDraftRoomDto[]>("/live-draft/mine"),
+
+  previewLiveDraftInvite: (code: string) => request<LiveDraftRoomDto>(`/live-draft/invite/${code}`),
+
+  joinLiveDraftRoom: (code: string) =>
+    request<JoinLiveDraftResultDto>(`/live-draft/invite/${code}/join`, { method: "POST" }),
+
+  getLiveDraftRoom: (roomId: string) => request<LiveDraftRoomDto>(`/live-draft/${roomId}`),
 };

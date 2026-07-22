@@ -15,6 +15,9 @@ import { JwtStrategy } from "./jwt.strategy.js";
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],
-  exports: [AuthService],
+  // JwtModule re-exported so other modules can inject JwtService directly — live-draft.gateway.ts
+  // needs it to verify a token off a WebSocket handshake (no @UseGuards/Passport request pipeline
+  // to hang a guard off, unlike every REST controller).
+  exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

@@ -7,11 +7,24 @@ import type { CreateWorldDto } from "./worlds.schemas.js";
 export class WorldsService {
   constructor(@Inject(PRISMA) private readonly prisma: PrismaClient) {}
 
-  createWorld(userId: string, dto: CreateWorldDto) {
-    return this.prisma.world.create({
+  async createWorld(userId: string, dto: CreateWorldDto) {
+    const world = await this.prisma.world.create({
       data: { ownerId: userId, eraId: dto.eraId, type: dto.type, settings: dto.settings },
       include: { clubs: true },
     });
+
+    // Phase 9a: attach this world to the caller's league membership, joining implicitly if they
+    // somehow reached draft-confirm without an explicit join call — see worlds.schemas.ts's comment.
+    const leagueId = dto.settings.multiplayerLeagueId;
+    if (leagueId) {
+      await this.prisma.leagueMembership.upsert({
+        where: { leagueId_userId: { leagueId, userId } },
+        create: { leagueId, userId, worldId: world.id },
+        update: { worldId: world.id },
+      });
+    }
+
+    return world;
   }
 
   listWorlds(userId: string) {

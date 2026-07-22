@@ -366,6 +366,20 @@ export function SeasonPage() {
     const unlockedTrophies = finalizeResult?.trophies ?? [];
     setTrophies(unlockedTrophies);
 
+    // Phase 9a: a league member's run reports itself automatically — the whole point of a league is
+    // comparing everyone's result, so it can't depend on each member remembering to click the
+    // (separate, opt-in) public-leaderboard Submit button below. Reuses that same submitToLeaderboard
+    // call — a league standing IS a public leaderboard entry, just also joined into a league's own
+    // member list server-side (see LeaguesService.getStandings); it isn't a parallel system.
+    if (userClub && w.settings?.multiplayerLeagueId) {
+      await api
+        .submitToLeaderboard(wId, domesticSeasonId, { handle: userClub.name, difficulty: config.difficulty, ratingsMode: config.playerRatings })
+        .catch(() => {
+          // Best-effort — a failed auto-submit just leaves this member's league standing showing
+          // "in progress" a little longer; the manual Submit block below can still recover it.
+        });
+    }
+
     // The Setup "European Nights" toggle (default on) opts a world out of continental football
     // entirely — "Off = just the league" — even for a qualifying finish. `settings` is null for
     // worlds created before this toggle was wired, which defaults to the toggle's own on-by-default.

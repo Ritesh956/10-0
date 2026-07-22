@@ -1,150 +1,45 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
-import type { ClubSeasonDto, EraDto, LeagueDto, PlayerSeasonDto, StandingsRowDto } from "../api/types";
-import { DrawReel, type ReelCandidate } from "../components/DrawReel";
+import type { EraDto, LeagueDto, LiveDraftRoomDto, MultiplayerLeagueDto } from "../api/types";
 import { FormationPicker } from "../components/FormationPicker";
 import { GuestGateModal } from "../components/GuestGateModal";
 import { LeaguePicker } from "../components/LeaguePicker";
-import { PlayerPickCard } from "../components/PlayerPickCard";
 import { Button } from "../components/ui/Button";
+import { SegmentedControl } from "../components/ui/SegmentedControl";
+import { Toggle } from "../components/ui/Toggle";
 import { useAuth } from "../lib/auth-context";
-import { type Formation } from "../lib/formations";
+import { isFormation, type Formation } from "../lib/formations";
+import { isRealCountry } from "../lib/leagues";
+import type { Difficulty } from "../state/DraftContext";
 
-interface SquadResult {
-  label: string;
-  squadName: string;
-  clubSeason: ClubSeasonDto;
-  refPlayerSeasonIds: string[];
-}
-
-function SquadDraftPanel({
-  label,
-  eraId,
-  leagueIds,
-  onComplete,
-}: {
-  label: string;
-  eraId: string;
-  leagueIds: string[];
-  onComplete: (result: Omit<SquadResult, "label">) => void;
-}) {
-  const [squadName, setSquadName] = useState(`${label}'s XI`);
-  const [clubSeason, setClubSeason] = useState<ClubSeasonDto | null>(null);
-  const [spinning, setSpinning] = useState(false);
-  const [spinTarget, setSpinTarget] = useState<ReelCandidate | null>(null);
-  const [spinToken, setSpinToken] = useState(0);
-  const settleResolveRef = useRef<(() => void) | null>(null);
-  const [players, setPlayers] = useState<PlayerSeasonDto[]>([]);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [error, setError] = useState<string | null>(null);
-
-  function handleSettled() {
-    settleResolveRef.current?.();
-    settleResolveRef.current = null;
-  }
-
-  async function spin() {
-    setSpinning(true);
-    setError(null);
-    try {
-      const club = await api.rollClubSeason({ eraId, leagueIds });
-      setSpinTarget({ club: club.club.name, year: club.seasonYear });
-      setSpinToken((t) => t + 1);
-      await new Promise<void>((resolve) => {
-        settleResolveRef.current = resolve;
-      });
-      setClubSeason(club);
-      const pool = await api.listPlayerSeasons({ clubSeasonId: club.id });
-      setPlayers(pool);
-      setSelected(new Set());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "No club seasons match those filters");
-    } finally {
-      setSpinning(false);
-    }
-  }
-
-  function toggle(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else if (next.size < 23) next.add(id);
-      return next;
-    });
-  }
-
-  return (
-    <div className="space-y-5">
-      <div className="text-center">
-        <p className="font-display text-xs font-semibold uppercase tracking-widest text-plum-400">{label}'s turn</p>
-        <input
-          value={squadName}
-          onChange={(e) => setSquadName(e.target.value)}
-          className="notch-sm mt-2 w-full max-w-xs border border-ink-800 bg-ink-950 px-3 py-2 text-center text-sm text-paper outline-none focus:border-mint-500"
-        />
-      </div>
-
-      {error && <p className="text-center text-sm text-crimson-400">{error}</p>}
-
-      {!clubSeason ? (
-        <DrawReel
-          target={spinTarget ?? undefined}
-          spinToken={spinToken}
-          spinning={spinning}
-          onSpin={() => void spin()}
-          onSettled={handleSettled}
-        />
-      ) : (
-        <div className="space-y-3">
-          <p className="text-center text-sm text-smoke-500">
-            {clubSeason.club.name} {clubSeason.seasonYear} &middot;{" "}
-            <button className="underline hover:text-smoke-400" onClick={() => void spin()}>
-              redraw
-            </button>
-          </p>
-          <p className="text-center text-xs text-ink-600">{selected.size}/23 selected (need 11+)</p>
-          <div className="grid max-h-72 gap-2 overflow-y-auto scrollbar-thin pr-1 sm:grid-cols-2">
-            {players.map((player) => (
-              <PlayerPickCard
-                key={player.id}
-                player={player}
-                showRatings
-                selected={selected.has(player.id)}
-                onClick={() => toggle(player.id)}
-              />
-            ))}
-          </div>
-          <Button
-            fullWidth
-            disabled={selected.size < 11}
-            onClick={() =>
-              onComplete({ squadName, clubSeason, refPlayerSeasonIds: [...selected] })
-            }
-          >
-            Confirm {label}'s squad &rarr;
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-type Phase = "intro" | "draft-a" | "pass-device" | "draft-b" | "simulating" | "result";
-
+/** Phase 9a: async multiplayer Leagues — replaces the old pass-and-play "Head to Head" mode (one
+    shared World, two WorldClubs, a single simulated fixture) with 38-0's own model: a creator locks
+    shared rules once, everyone who joins independently drafts + simulates their OWN solo World/
+    Season under those rules, ranked by points. See plans/futbol-38-0-revamp-plan.md §14. */
 export function MultiplayerPage() {
+  const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
-  const [phase, setPhase] = useState<Phase>("intro");
+
+  const [myLeagues, setMyLeagues] = useState<MultiplayerLeagueDto[] | null>(null);
+  const [myLiveRooms, setMyLiveRooms] = useState<LiveDraftRoomDto[] | null>(null);
+  const [loadingMine, setLoadingMine] = useState(false);
+
+  const [roomKind, setRoomKind] = useState<"async" | "live">("async");
   const [eras, setEras] = useState<EraDto[]>([]);
   const [leagues, setLeagues] = useState<LeagueDto[]>([]);
+  const [name, setName] = useState("");
   const [eraId, setEraId] = useState("");
   const [leagueIds, setLeagueIds] = useState<string[]>([]);
+  const [difficulty, setDifficulty] = useState<Difficulty>("normal");
+  const [formationFreedom, setFormationFreedom] = useState(true);
   const [formation, setFormation] = useState<Formation>("4-3-3");
-  const [showGuestGate, setShowGuestGate] = useState(false);
+  const [maxSeats, setMaxSeats] = useState(4);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<"create" | "join" | null>(null);
 
-  const [squadA, setSquadA] = useState<SquadResult | null>(null);
-  const [squadB, setSquadB] = useState<SquadResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [rows, setRows] = useState<{ clubName: string; row: StandingsRowDto }[] | null>(null);
+  const [joinCode, setJoinCode] = useState("");
 
   useEffect(() => {
     void api.listEras().then((list) => {
@@ -155,197 +50,250 @@ export function MultiplayerPage() {
 
   useEffect(() => {
     if (!eraId) return;
-    void api.listLeagues(eraId).then(setLeagues).catch(() => setLeagues([]));
+    void api
+      .listLeagues(eraId)
+      .then((list) => setLeagues(list.filter((l) => isRealCountry(l.country))))
+      .catch(() => setLeagues([]));
   }, [eraId]);
 
-  async function runHeadToHead(a: SquadResult, b: SquadResult) {
-    setPhase("simulating");
-    setError(null);
+  function refreshMine() {
+    setLoadingMine(true);
+    Promise.all([
+      api.getMyLeagues().catch(() => []),
+      api.getMyLiveDraftRooms().catch(() => []),
+    ])
+      .then(([leaguesRes, roomsRes]) => {
+        setMyLeagues(leaguesRes);
+        setMyLiveRooms(roomsRes);
+      })
+      .finally(() => setLoadingMine(false));
+  }
+
+  useEffect(() => {
+    if (isAuthenticated) refreshMine();
+  }, [isAuthenticated]);
+
+  async function doCreate() {
+    setCreating(true);
+    setCreateError(null);
     try {
-      const world = await api.createWorld(eraId);
-      await api.draftFantasy(world.id, a.squadName, formation, a.refPlayerSeasonIds);
-      await api.draftFantasy(world.id, b.squadName, formation, b.refPlayerSeasonIds);
-      const refreshedWorld = await api.getWorld(world.id);
-      const season = await api.createSeason(world.id, "Head-to-Head", { size: 2 });
-      await api.simulateSeason(world.id, season.id);
-      let latest = season;
-      for (;;) {
-        await new Promise((resolve) => setTimeout(resolve, 1200));
-        latest = await api.getSeason(world.id, season.id);
-        if (latest.status === "COMPLETED") break;
+      if (roomKind === "live") {
+        const room = await api.createLiveDraftRoom({
+          name: name.trim() || "My Live Draft",
+          eraId,
+          leagueIds,
+          difficulty,
+          formation,
+          maxSeats,
+        });
+        navigate(`/multiplayer/live/${room.id}`);
+      } else {
+        const league = await api.createLeague({
+          name: name.trim() || "My League",
+          eraId,
+          leagueIds,
+          difficulty,
+          formationFreedom,
+          ...(formationFreedom ? {} : { formation }),
+        });
+        navigate(`/multiplayer/league/${league.id}`);
       }
-      const standings = await api.getStandings(world.id, season.id);
-      const named = standings.rows.map((row) => ({
-        clubName: refreshedWorld.clubs.find((c) => c.id === row.clubId)?.name ?? "Unknown",
-        row,
-      }));
-      setRows(named);
-      setPhase("result");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Head-to-head simulation failed");
-      setPhase("draft-b");
+      setCreateError(err instanceof Error ? err.message : "Failed to create the room");
+    } finally {
+      setCreating(false);
     }
   }
 
-  function handleBothDrafted(a: SquadResult, b: SquadResult) {
-    if (!isAuthenticated) {
-      setSquadA(a);
-      setSquadB(b);
-      setShowGuestGate(true);
+  function handleCreateClick() {
+    if (!eraId || leagueIds.length === 0) {
+      setCreateError("Pick a league before creating.");
       return;
     }
-    void runHeadToHead(a, b);
+    if (!isAuthenticated) {
+      setPendingAction("create");
+      return;
+    }
+    void doCreate();
   }
 
-  if (phase === "intro") {
-    return (
-      <div className="mx-auto max-w-2xl space-y-8 px-6 py-12 text-center">
-        <div>
-          <h1 className="font-display text-3xl font-bold uppercase tracking-wide text-paper">Head to Head</h1>
-          <p className="mt-2 text-sm text-smoke-500">Same rules, your XI against theirs. Whoever's higher on the table wins.</p>
+  function handleJoinClick() {
+    const code = joinCode.trim().toUpperCase();
+    if (!code) return;
+    navigate(`/multiplayer/join/${code}`);
+  }
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-10 px-6 py-12">
+      <div className="text-center">
+        <h1 className="font-display text-3xl font-bold uppercase tracking-wide text-paper">Multiplayer</h1>
+        <p className="mt-2 text-sm text-smoke-500">
+          Async Leagues: same rules, everyone drafts on their own time. Live Draft Rooms: everyone drafts together,
+          turn by turn, in real time. Either way — each XI plays its own season, best points total tops the table.
+        </p>
+      </div>
+
+      {isAuthenticated && (
+        <section className="space-y-3">
+          <h2 className="font-display text-xs font-semibold uppercase tracking-widest text-smoke-500">My Leagues</h2>
+          {loadingMine && <p className="text-center text-sm text-smoke-500">Loading...</p>}
+          {!loadingMine && myLeagues && myLeagues.length === 0 && (
+            <p className="notch-sm border border-ink-800 bg-ink-900/40 p-4 text-center text-sm text-smoke-500">
+              You haven&apos;t joined or created a league yet.
+            </p>
+          )}
+          {myLeagues && myLeagues.length > 0 && (
+            <div className="space-y-2">
+              {myLeagues.map((league) => (
+                <button
+                  key={league.id}
+                  onClick={() => navigate(`/multiplayer/league/${league.id}`)}
+                  className="notch-sm flex w-full items-center justify-between border border-ink-800 bg-ink-900/50 px-4 py-3 text-left transition hover:border-mint-500/60"
+                >
+                  <span className="font-semibold text-paper">{league.name}</span>
+                  <span className="text-xs text-smoke-500">
+                    {league.rules.difficulty} &middot; {league.rules.formationFreedom ? "any formation" : league.rules.formation}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {myLiveRooms && myLiveRooms.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-widest text-smoke-600">Live Draft Rooms</h3>
+              {myLiveRooms.map((room) => (
+                <button
+                  key={room.id}
+                  onClick={() => navigate(`/multiplayer/live/${room.id}`)}
+                  className="notch-sm flex w-full items-center justify-between border border-ink-800 bg-ink-900/50 px-4 py-3 text-left transition hover:border-plum-500/60"
+                >
+                  <span className="font-semibold text-paper">{room.league.name}</span>
+                  <span className="text-xs text-smoke-500">
+                    {room.status === "LOBBY" ? "In lobby" : room.status === "IN_PROGRESS" ? "Drafting live" : "Complete"} &middot;{" "}
+                    {room.participants.length}/{room.maxSeats}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      <section className="notch space-y-3 border border-ink-800 bg-ink-900/50 p-5 text-center">
+        <h2 className="font-display text-xs font-semibold uppercase tracking-widest text-smoke-500">Have an invite code?</h2>
+        <div className="mx-auto flex max-w-xs items-center gap-2">
+          <input
+            value={joinCode}
+            onChange={(e) => setJoinCode(e.target.value)}
+            placeholder="e.g. AB3D9FGH"
+            maxLength={8}
+            className="notch-sm w-full border border-ink-800 bg-ink-950 px-3 py-2 text-center text-sm uppercase tracking-widest text-paper outline-none focus:border-mint-500/60"
+          />
+          <Button size="sm" onClick={handleJoinClick} disabled={!joinCode.trim()}>
+            Join
+          </Button>
         </div>
-        <p className="text-sm text-smoke-600">
-          Pass-and-play: Player A drafts an XI, then hands the device to Player B. Both squads play a two-leg
-          fixture and the higher points total wins.
+      </section>
+
+      <section className="space-y-5">
+        <div className="flex items-center justify-between border-b border-ink-800 pb-2">
+          <h2 className="font-display text-xs font-semibold uppercase tracking-widest text-smoke-500">
+            {roomKind === "live" ? "Create a Live Draft Room" : "Create a League"}
+          </h2>
+          <SegmentedControl<"async" | "live">
+            accent="plum"
+            columns={2}
+            value={roomKind}
+            onChange={setRoomKind}
+            options={[
+              { value: "async", label: "Async" },
+              { value: "live", label: "Live" },
+            ]}
+          />
+        </div>
+        <p className="text-xs text-smoke-500">
+          {roomKind === "live"
+            ? "Everyone drafts together, turn by turn, in real time — then each of you simulates your own season."
+            : "Everyone drafts independently, whenever they want — then each of you simulates your own season."}
         </p>
 
-        <div className="space-y-3 text-left">
-          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-smoke-500">
-            <span className="h-1.5 w-1.5 shrink-0 bg-teal-400 rounded-full" />
-            Shared league
-          </p>
-          <LeaguePicker leagues={leagues} selectedIds={leagueIds} onChange={setLeagueIds} />
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder={roomKind === "live" ? "Room name" : "League name"}
+          maxLength={40}
+          className="notch-sm w-full border border-ink-800 bg-ink-950 px-4 py-2.5 text-sm text-paper outline-none focus:border-mint-500/60"
+        />
+
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-widest text-smoke-500">League (shared by every member)</p>
+          <LeaguePicker leagues={leagues} selectedIds={leagueIds} onChange={setLeagueIds} singleSelect />
         </div>
 
-        <div className="space-y-3 text-left">
-          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-smoke-500">
-            <span className="h-1.5 w-1.5 shrink-0 bg-plum-400 rounded-full" />
-            Shared formation
-          </p>
-          <FormationPicker value={formation} onChange={setFormation} />
-        </div>
-
-        <Button size="lg" fullWidth disabled={!eraId} onClick={() => setPhase("draft-a")}>
-          Start: Player A drafts &rarr;
-        </Button>
-      </div>
-    );
-  }
-
-  if (phase === "draft-a") {
-    return (
-      <div className="mx-auto max-w-2xl px-6 py-12">
-        <SquadDraftPanel
-          label="Player A"
-          eraId={eraId}
-          leagueIds={leagueIds}
-          onComplete={(result) => {
-            setSquadA({ label: "Player A", ...result });
-            setPhase("pass-device");
-          }}
-        />
-      </div>
-    );
-  }
-
-  if (phase === "pass-device") {
-    return (
-      <div className="mx-auto max-w-md space-y-6 px-6 py-24 text-center">
-        <p className="font-display text-lg font-semibold uppercase tracking-wide text-paper">Pass the device to Player B</p>
-        <p className="text-sm text-smoke-500">Player A's XI is locked in. Player B, when you're ready...</p>
-        <Button size="lg" onClick={() => setPhase("draft-b")}>
-          I'm Player B, let's go &rarr;
-        </Button>
-      </div>
-    );
-  }
-
-  if (phase === "draft-b") {
-    return (
-      <div className="mx-auto max-w-2xl px-6 py-12">
-        {error && <p className="mb-4 text-center text-sm text-crimson-400">{error}</p>}
-        <SquadDraftPanel
-          label="Player B"
-          eraId={eraId}
-          leagueIds={leagueIds}
-          onComplete={(result) => {
-            const b = { label: "Player B", ...result };
-            setSquadB(b);
-            if (squadA) handleBothDrafted(squadA, b);
-          }}
-        />
-        {showGuestGate && (
-          <GuestGateModal
-            onCancel={() => setShowGuestGate(false)}
-            onDone={() => {
-              setShowGuestGate(false);
-              if (squadA && squadB) void runHeadToHead(squadA, squadB);
-            }}
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-widest text-smoke-500">Difficulty (shared)</p>
+          <SegmentedControl<Difficulty>
+            accent="crimson"
+            columns={3}
+            value={difficulty}
+            onChange={setDifficulty}
+            options={[
+              { value: "easy", label: "Easy", description: "3 redraws" },
+              { value: "normal", label: "Normal", description: "1 redraw" },
+              { value: "hard", label: "Hard", description: "No redraws" },
+            ]}
           />
-        )}
-      </div>
-    );
-  }
-
-  if (phase === "simulating") {
-    return <p className="px-6 py-24 text-center text-smoke-500">Simulating the fixture...</p>;
-  }
-
-  if (phase === "result" && rows) {
-    const [rowA, rowB] = rows;
-    const winner =
-      !rowA || !rowB
-        ? null
-        : rowA.row.points === rowB.row.points
-          ? "Draw"
-          : rowA.row.points > rowB.row.points
-            ? rowA.clubName
-            : rowB.clubName;
-
-    return (
-      <div className="mx-auto max-w-xl space-y-6 px-6 py-16 text-center">
-        <p className="text-xs font-semibold uppercase tracking-widest text-plum-400">Result</p>
-        <h1 className="font-display text-2xl font-bold uppercase tracking-wide text-paper">
-          {winner === "Draw" ? "It's a draw!" : `${winner} wins!`}
-        </h1>
-        <div className="grid grid-cols-2 gap-4">
-          {rows.map(({ clubName, row }) => {
-            const isWinner = clubName === winner;
-            return (
-              <div
-                key={clubName}
-                className={`notch border-2 p-5 ${
-                  isWinner
-                    ? "border-mint-400/70 bg-gradient-to-br from-mint-500/15 via-ink-900 to-ink-950 shadow-lg shadow-mint-500/10"
-                    : "border-ink-700 bg-ink-900/60"
-                }`}
-              >
-                <p className="font-semibold text-paper">{clubName}</p>
-                <p className={`mt-2 font-display text-3xl font-bold ${isWinner ? "text-mint-400" : "text-smoke-400"}`}>
-                  {row.points}
-                </p>
-                <p className="text-xs text-smoke-500">points</p>
-                <p className="mt-3 text-xs text-smoke-500">
-                  <span className="text-teal-400">{row.won}W</span> {row.drawn}D{" "}
-                  <span className="text-crimson-400">{row.lost}L</span> &middot; {row.goalsFor}-{row.goalsAgainst}
-                </p>
-              </div>
-            );
-          })}
         </div>
-        <Button
-          onClick={() => {
-            setPhase("intro");
-            setSquadA(null);
-            setSquadB(null);
-            setRows(null);
-          }}
-        >
-          Play again
-        </Button>
-      </div>
-    );
-  }
 
-  return null;
+        {roomKind === "live" ? (
+          <div className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-widest text-smoke-500">Formation (shared — a live draft always locks one)</p>
+            <FormationPicker value={formation} onChange={(f) => isFormation(f) && setFormation(f)} />
+            <p className="text-xs font-semibold uppercase tracking-widest text-smoke-500">Max Players</p>
+            <SegmentedControl<string>
+              accent="teal"
+              columns={3}
+              value={String(maxSeats)}
+              onChange={(v) => setMaxSeats(Number(v))}
+              options={[
+                { value: "2", label: "2" },
+                { value: "3", label: "3" },
+                { value: "4", label: "4" },
+              ]}
+            />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <Toggle
+              accent="teal"
+              label="Formation Freedom"
+              description="On = every member picks their own formation. Off = one fixed formation for the whole league."
+              checked={formationFreedom}
+              onChange={setFormationFreedom}
+            />
+            {!formationFreedom && (
+              <FormationPicker value={formation} onChange={(f) => isFormation(f) && setFormation(f)} />
+            )}
+          </div>
+        )}
+
+        {createError && <p className="text-center text-sm text-crimson-400">{createError}</p>}
+
+        <Button fullWidth size="lg" disabled={creating} onClick={handleCreateClick}>
+          {creating ? "Creating..." : roomKind === "live" ? "Create Room & Get Invite Link" : "Create League & Get Invite Link"}
+        </Button>
+      </section>
+
+      {pendingAction && (
+        <GuestGateModal
+          onCancel={() => setPendingAction(null)}
+          onDone={() => {
+            setPendingAction(null);
+            if (pendingAction === "create") void doCreate();
+          }}
+        />
+      )}
+    </div>
+  );
 }

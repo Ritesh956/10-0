@@ -44,7 +44,7 @@ export interface PlayerSeasonDto {
   overall: number;
   potential: number;
   player: { name: string; nationality: string; photoUrl: string | null };
-  clubSeason: { club: { name: string } };
+  clubSeason: { club: { id: string; name: string } };
 }
 
 export interface ManagerDto {
@@ -75,6 +75,10 @@ export interface WorldSettingsDto {
       creation); the backend derives leaderboard mode/refClubId from this, never from a submission
       body — see LeaderboardService.submitRun. */
   oneClubClubId?: string;
+  /** Phase 9a (async multiplayer Leagues) — the MultiplayerLeague this world's draft belongs to, or
+      undefined for a normal world. Set once at world creation; read-only from the frontend's
+      perspective, same convention as oneClubClubId. */
+  multiplayerLeagueId?: string;
 }
 
 export interface WorldDto {
@@ -368,4 +372,224 @@ export interface LeaderboardQuery {
   refClubId?: string;
   timeWindow?: LeaderboardTimeWindow;
   limit?: number;
+}
+
+// Phase 8 — Daily Challenge
+
+export type DailyTheme = "birthday" | "nationality" | "club-history";
+export type DailyConstraintType = "nationality" | "club";
+
+export interface DailyConstraintDto {
+  type: DailyConstraintType;
+  /** Nationality name, or clubId for a "club" constraint — matches PlayerSeasonDto's
+      `player.nationality` / `clubSeason.club.id` respectively for client-side live tracking. */
+  value: string;
+  label: string;
+  required: number;
+  description: string;
+}
+
+export interface DailyAnchorDto {
+  id: string;
+  playerId: string;
+  name: string;
+  nationality: string;
+  overall: number;
+  positions: string[];
+  photoUrl: string | null;
+  clubName: string;
+  clubId: string;
+}
+
+export interface DailyPoolStatsDto {
+  totalPlayers: number;
+  /** Aligned with the challenge's `constraints` array. */
+  eligiblePerConstraint: number[];
+}
+
+export interface DailyChallengeDto {
+  id: string;
+  /** "YYYY-MM-DD", UTC. */
+  date: string;
+  theme: DailyTheme;
+  themeLabel: string;
+  fixedFormation: string;
+  /** ISO timestamp of the next UTC-midnight refresh. */
+  refreshesAt: string;
+  anchor: DailyAnchorDto;
+  constraints: DailyConstraintDto[];
+  poolStats: DailyPoolStatsDto;
+}
+
+export interface DailyConstraintResultDto {
+  constraint: DailyConstraintDto;
+  matched: number;
+  met: boolean;
+  points: number;
+}
+
+export interface DailyChallengeEntryDto {
+  id: string;
+  dailyChallengeId: string;
+  userId: string;
+  handle: string;
+  squadOverall: number;
+  score: number;
+  maxScore: number;
+  attemptsUsed: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SubmitDailyResultDto {
+  score: number;
+  maxScore: number;
+  results: DailyConstraintResultDto[];
+  attemptsUsed: number;
+  attemptsRemaining: number;
+  isNewBest: boolean;
+  entry: DailyChallengeEntryDto;
+}
+
+// Phase 9a — async multiplayer Leagues
+
+export interface LeagueRulesDto {
+  eraId: string;
+  leagueIds: string[];
+  difficulty: LeaderboardDifficulty;
+  formationFreedom: boolean;
+  formation?: string;
+}
+
+export interface MultiplayerLeagueDto {
+  id: string;
+  name: string;
+  creatorId: string;
+  inviteCode: string;
+  rules: LeagueRulesDto;
+  createdAt: string;
+}
+
+export interface CreateLeagueDto {
+  name: string;
+  eraId: string;
+  leagueIds: string[];
+  difficulty: LeaderboardDifficulty;
+  formationFreedom: boolean;
+  formation?: string;
+}
+
+export interface LeagueMembershipDto {
+  id: string;
+  leagueId: string;
+  userId: string;
+  worldId: string | null;
+  joinedAt: string;
+}
+
+export interface JoinLeagueResultDto {
+  league: MultiplayerLeagueDto;
+  membership: LeagueMembershipDto;
+}
+
+export type LeagueMemberStatus = "not-started" | "in-progress" | "complete";
+
+export interface LeagueStandingsRowDto {
+  userId: string;
+  worldId: string | null;
+  entry: LeaderboardEntryDto | null;
+  rank: number | null;
+  status: LeagueMemberStatus;
+}
+
+// Phase 9b — real-time Live Draft
+
+export type LiveDraftStatus = "LOBBY" | "IN_PROGRESS" | "COMPLETED";
+
+export interface LiveDraftParticipantDto {
+  id: string;
+  roomId: string;
+  userId: string;
+  displayName: string;
+  seatIndex: number;
+  worldId: string | null;
+  joinedAt: string;
+}
+
+export interface LiveDraftRoomDto {
+  id: string;
+  leagueId: string;
+  hostUserId: string;
+  inviteCode: string;
+  maxSeats: number;
+  status: LiveDraftStatus;
+  currentPickNumber: number;
+  turnStartedAt: string | null;
+  createdAt: string;
+  completedAt: string | null;
+  league: MultiplayerLeagueDto;
+  participants: LiveDraftParticipantDto[];
+}
+
+export interface CreateLiveDraftRoomDto {
+  name: string;
+  eraId: string;
+  leagueIds: string[];
+  difficulty: LeaderboardDifficulty;
+  formation: string;
+  maxSeats: number;
+}
+
+export interface JoinLiveDraftResultDto {
+  room: LiveDraftRoomDto;
+  participant: LiveDraftParticipantDto;
+}
+
+/** Mirrors live-draft.gateway.ts's serializeRoom — the payload of every "room:state" WS event. */
+export interface LiveDraftStateEvent {
+  id: string;
+  status: LiveDraftStatus;
+  hostUserId: string;
+  maxSeats: number;
+  currentPickNumber: number;
+  turnStartedAt: string | null;
+  turnTimeoutMs: number;
+  rules: LeagueRulesDto;
+  participants: {
+    id: string;
+    userId: string;
+    displayName: string;
+    seatIndex: number;
+    isActive: boolean;
+    pickCount: number;
+  }[];
+  picks: {
+    pickNumber: number;
+    participantId: string;
+    refPlayerSeasonId: string;
+    playerId: string;
+  }[];
+}
+
+export interface LiveDraftSpinPlayer {
+  id: string;
+  playerId: string;
+  name: string;
+  nationality: string;
+  photoUrl: string | null;
+  positions: string[];
+  overall: number;
+}
+
+export interface LiveDraftSpinResultEvent {
+  club: { id: string; name: string; seasonYear: number };
+  players: LiveDraftSpinPlayer[];
+}
+
+export interface LiveDraftCompleteEvent {
+  results: { userId: string; worldId?: string; error?: string }[];
+}
+
+export interface LiveDraftErrorEvent {
+  message: string;
 }

@@ -30,6 +30,15 @@ export interface DraftConfig {
       full league instead" escape hatch. */
   lockedClubId?: string | undefined;
   lockedClubName?: string | undefined;
+  /** Phase 9a (async multiplayer Leagues): set together by the join-league flow when a member
+      accepts an invite. When present, DraftPage's doConfirm rides it along in createWorld's
+      settings so WorldsService can attach this world to the member's LeagueMembership. eraId/
+      leagueIds/difficulty are always locked alongside it (SetupPage hides their pickers); formation
+      is locked too unless the league's rules set formationFreedom. Cleared the same way lockedClubId
+      is — an explicit "leave this league draft" escape hatch in SetupPage. */
+  multiplayerLeagueId?: string | undefined;
+  multiplayerLeagueName?: string | undefined;
+  multiplayerFormationLocked?: boolean | undefined;
 }
 
 const DEFAULT_CONFIG: DraftConfig = {

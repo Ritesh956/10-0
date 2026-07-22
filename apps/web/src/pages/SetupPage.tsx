@@ -163,7 +163,30 @@ export function SetupPage() {
 
       {error && <p className="text-center text-sm text-crimson-400">{error}</p>}
 
-      {config.lockedClubId ? (
+      {config.multiplayerLeagueId ? (
+        <Section title="League" accent="mint">
+          <div className="notch flex flex-wrap items-center justify-between gap-3 border border-mint-500/30 bg-mint-500/5 p-4">
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-smoke-600">Multiplayer League</p>
+              <p className="font-display text-lg font-bold text-paper">{config.multiplayerLeagueName}</p>
+              <p className="mt-1 text-xs text-smoke-500">Era, real league(s), and difficulty are locked so every member drafts under the same rules.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setConfig({
+                  multiplayerLeagueId: undefined,
+                  multiplayerLeagueName: undefined,
+                  multiplayerFormationLocked: undefined,
+                })
+              }
+              className="shrink-0 text-xs text-smoke-500 underline hover:text-smoke-400"
+            >
+              Leave this league draft
+            </button>
+          </div>
+        </Section>
+      ) : config.lockedClubId ? (
         <Section title="Club" accent="mint">
           <div className="notch flex flex-wrap items-center justify-between gap-3 border border-mint-500/30 bg-mint-500/5 p-4">
             <div>
@@ -196,10 +219,16 @@ export function SetupPage() {
       )}
 
       <Section title="Formation" accent="teal">
-        <FormationPicker
-          value={config.formation}
-          onChange={(formation) => isFormation(formation) && setConfig({ formation })}
-        />
+        {config.multiplayerFormationLocked ? (
+          <p className="notch-sm border border-ink-800 bg-ink-900/40 px-3 py-2 text-center text-xs text-smoke-500">
+            Formation locked to <span className="font-semibold text-paper">{config.formation}</span> by this league&apos;s rules.
+          </p>
+        ) : (
+          <FormationPicker
+            value={config.formation}
+            onChange={(formation) => isFormation(formation) && setConfig({ formation })}
+          />
+        )}
         {config.lockedClubId && fillability && !fillability.fillable && (
           <p className="notch-sm border border-crimson-500/40 bg-crimson-500/10 p-3 text-center text-xs text-crimson-300">
             {config.lockedClubName}&apos;s recorded history has nobody who can play{" "}
@@ -210,19 +239,25 @@ export function SetupPage() {
       </Section>
 
       <Section title="Difficulty" accent="crimson">
-        <SegmentedControl<Difficulty>
-          accent="crimson"
-          columns={3}
-          value={config.difficulty}
-          onChange={(difficulty) =>
-            setConfig({ difficulty, showRatings: difficulty === "hard" ? false : config.showRatings })
-          }
-          options={[
-            { value: "easy", label: "Easy", description: "3 redraws available" },
-            { value: "normal", label: "Normal", description: "1 redraw available" },
-            { value: "hard", label: "Hard", description: "No redraws · ratings hidden" },
-          ]}
-        />
+        {config.multiplayerLeagueId ? (
+          <p className="notch-sm border border-ink-800 bg-ink-900/40 px-3 py-2 text-center text-xs text-smoke-500">
+            Locked to <span className="font-semibold capitalize text-paper">{config.difficulty}</span> by this league&apos;s rules.
+          </p>
+        ) : (
+          <SegmentedControl<Difficulty>
+            accent="crimson"
+            columns={3}
+            value={config.difficulty}
+            onChange={(difficulty) =>
+              setConfig({ difficulty, showRatings: difficulty === "hard" ? false : config.showRatings })
+            }
+            options={[
+              { value: "easy", label: "Easy", description: "3 redraws available" },
+              { value: "normal", label: "Normal", description: "1 redraw available" },
+              { value: "hard", label: "Hard", description: "No redraws · ratings hidden" },
+            ]}
+          />
+        )}
       </Section>
 
       <Section title="Show Ratings" accent="plum">

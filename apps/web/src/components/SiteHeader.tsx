@@ -25,6 +25,9 @@ export function SiteHeader({ onRequestSaveProgress }: Props) {
 
         {/* Public — no ownership/auth gate, unlike History, so both sit outside the isAuthenticated branch below. */}
         <div className="flex shrink-0 items-center gap-4 text-sm text-smoke-500">
+          <Link to="/daily" className="transition hover:text-paper">
+            Daily Challenge
+          </Link>
           <Link to="/clubs" className="transition hover:text-paper">
             One-Club XI
           </Link>

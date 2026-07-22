@@ -215,19 +215,18 @@ model World {
   settings  Json?
   createdAt DateTime    @default(now())
 
-  owner        User               @relation(fields: [ownerId], references: [id])
-  era          Era                @relation(fields: [eraId], references: [id])
-  clubs        WorldClub[]
-  players      WorldPlayer[]
-  seasons      Season[]
-  competitions Competition[]
-  fixtures     Fixture[]
-  matches      Match[]
-  knockoutTies KnockoutTie[]
-  transfers    Transfer[]
+  owner         User           @relation(fields: [ownerId], references: [id])
+  era           Era            @relation(fields: [eraId], references: [id])
+  clubs         WorldClub[]
+  players       WorldPlayer[]
+  seasons       Season[]
+  competitions  Competition[]
+  fixtures      Fixture[]
+  matches       Match[]
+  knockoutTies  KnockoutTie[]
+  transfers     Transfer[]
   januaryEvents JanuaryEvent[]
-  memberships  LeagueMembership[]
-  chatMessages ChatMessage[]
+  chatMessages  ChatMessage[]
 
   @@index([ownerId])
   @@map("worlds")
@@ -326,9 +325,9 @@ model Season {
   status        SeasonStatus @default(SCHEDULED)
   createdAt     DateTime     @default(now())
 
-  world       World       @relation(fields: [worldId], references: [id])
-  competition Competition @relation(fields: [competitionId], references: [id])
-  fixtures    Fixture[]
+  world         World          @relation(fields: [worldId], references: [id])
+  competition   Competition    @relation(fields: [competitionId], references: [id])
+  fixtures      Fixture[]
   januaryEvents JanuaryEvent[]
 
   @@index([worldId])
@@ -655,17 +654,128 @@ model LeaderboardEntry {
   @@map("leaderboard_entries")
 }
 
+/// Phase 9a — async multiplayer Leagues: the creator locks shared draft/season rules once (era,
+/// real league(s), difficulty, and either a fixed formation or per-member freedom — see 38-0's "same
+/// rules for everyone" framing), generates an invite code, and everyone who joins independently
+/// drafts + simulates their own solo World/Season under those rules. This is deliberately NOT one
+/// shared World with N WorldClubs (that's the older, removed pass-and-play Head-to-Head model) — see
+/// the plan doc's Phase 9 notes on why N-independent-seasons-ranked-by-points is simpler and matches
+/// 38-0's own model. `creatorId` is a plain unlinked userId, same convention as `LeaderboardEntry.
+/// userId`/`Achievement.userId` elsewhere in this schema (no enforced FK to User).
+model MultiplayerLeague {
+  id         String   @id @default(cuid())
+  name       String
+  creatorId  String
+  inviteCode String   @unique
+  /// { eraId, leagueIds: string[], difficulty, formationFreedom: boolean, formation?: Formation }
+  /// — see leagues.schemas.ts's createLeagueSchema for the exact shape.
+  rules      Json
+  createdAt  DateTime @default(now())
+
+  memberships   LeagueMembership[]
+  liveDraftRoom LiveDraftRoom?
+
+  @@map("multiplayer_leagues")
+}
+
+/// One user's spot in a MultiplayerLeague. `worldId` starts null (joined but hasn't drafted yet) and
+/// is attached automatically the moment the member confirms their draft — WorldsService.createWorld
+/// links it server-side when `World.settings.multiplayerLeagueId` is present, the same "derive from
+/// World.settings, never trust the client" pattern `oneClubClubId` already established. Standings
+/// are computed by joining these rows to `LeaderboardEntry` by `worldId` (LeaguesService.
+/// getStandings) rather than duplicating season-result storage here.
 model LeagueMembership {
-  id      String @id @default(cuid())
-  worldId String
-  userId  String
-  clubId  String
-  role    String @default("manager") // "manager" | "admin"
+  id       String   @id @default(cuid())
+  leagueId String
+  userId   String
+  worldId  String?
+  joinedAt DateTime @default(now())
 
-  world World @relation(fields: [worldId], references: [id])
+  league MultiplayerLeague @relation(fields: [leagueId], references: [id])
 
-  @@unique([worldId, userId])
+  @@unique([leagueId, userId])
   @@map("league_memberships")
+}
+
+enum LiveDraftStatus {
+  LOBBY
+  IN_PROGRESS
+  COMPLETED
+}
+
+/// Phase 9b — real-time turn-based Live Draft. Deliberately backed by a MultiplayerLeague (created
+/// alongside the room, with `formationFreedom: false` — a fixed shared formation is what makes the
+/// snake-order turn math well-defined for everyone) rather than a parallel rules/standings system —
+/// this model's only job is orchestrating the synchronized picking phase itself. The moment picking
+/// finishes, live-draft.gateway.ts submits each participant's picks through the exact same
+/// DraftService.draftFantasy path a solo/async-league draft already uses, tagged with this league's
+/// id, so simulation and standings are 100% reused Phase 9a infrastructure from that point on.
+model LiveDraftRoom {
+  id                String          @id @default(cuid())
+  leagueId          String          @unique
+  hostUserId        String
+  inviteCode        String          @unique
+  /// Seats fill in join order, 0-based; the host is always seat 0 (auto-joined at room creation).
+  maxSeats          Int             @default(4)
+  status            LiveDraftStatus @default(LOBBY)
+  /// Global monotonic turn counter — whose turn it is is *derived* (live-draft.logic.ts's
+  /// seatForPick), never stored redundantly, so there's only one source of truth to keep in sync.
+  currentPickNumber Int             @default(0)
+  /// Reset to now() at the start of every turn; the gateway's in-memory per-room timer compares
+  /// against this (not a stored deadline) so a server restart just makes the current turn's timer
+  /// start fresh rather than resuming a stale deadline.
+  turnStartedAt     DateTime?
+  createdAt         DateTime        @default(now())
+  completedAt       DateTime?
+
+  league       MultiplayerLeague      @relation(fields: [leagueId], references: [id])
+  participants LiveDraftParticipant[]
+  picks        LiveDraftPick[]
+
+  @@map("live_draft_rooms")
+}
+
+model LiveDraftParticipant {
+  id          String   @id @default(cuid())
+  roomId      String
+  userId      String
+  /// Snapshotted at join time (not looked up live) so a display name change mid-draft doesn't
+  /// retroactively relabel earlier picks in the room's shared log.
+  displayName String
+  seatIndex   Int
+  /// Set once this participant's picks are successfully submitted via DraftService.draftFantasy at
+  /// room completion — null until then, and stays null permanently if their squad couldn't fill the
+  /// formation (see the gateway's per-participant error handling, not a whole-room failure).
+  worldId     String?
+  joinedAt    DateTime @default(now())
+
+  room LiveDraftRoom @relation(fields: [roomId], references: [id])
+
+  @@unique([roomId, userId])
+  @@unique([roomId, seatIndex])
+  @@map("live_draft_participants")
+}
+
+/// One drafted player. No slot/position column — unlike the old shared-World multiplayer model,
+/// slot assignment isn't decided live during the turn; DraftService.draftFantasy's existing greedy
+/// buildLineup does that at completion from the participant's full flat pick list, exactly like a
+/// solo squad-first draft already does. `playerId` is denormalized from RefPlayerSeason purely so
+/// `@@unique([roomId, playerId])` can enforce the shared-pool "nobody drafts the same real person
+/// twice in this room" rule as a single DB constraint rather than an application-level scan.
+model LiveDraftPick {
+  id                String   @id @default(cuid())
+  roomId            String
+  participantId     String
+  pickNumber        Int
+  refPlayerSeasonId String
+  playerId          String
+  createdAt         DateTime @default(now())
+
+  room LiveDraftRoom @relation(fields: [roomId], references: [id])
+
+  @@unique([roomId, pickNumber])
+  @@unique([roomId, playerId])
+  @@map("live_draft_picks")
 }
 
 model ChatMessage {
@@ -679,4 +789,53 @@ model ChatMessage {
 
   @@index([worldId, createdAt])
   @@map("chat_messages")
+}
+
+/// Phase 8 — Daily Challenge: one deterministically-generated puzzle per calendar date (UTC),
+/// lazily created on the first `/daily/today` request of the day and reused by every later request/
+/// user for that same date (see daily.service.ts's getTodayChallenge) — "everyone sees the same
+/// puzzle" falls out of `date` being unique and generation being a pure function of it, not of a
+/// cron job. `anchorPlayerSeasonId` is pre-seeded into the user's squad, never drafted. `constraints`
+/// is a `DailyConstraint[]` (see daily.logic.ts) stored as JSON since its shape varies by theme.
+/// `poolStats` snapshots the generation-time pool sizes the completion-odds calculator needs
+/// (apps/web/src/lib/dailyOdds.ts) so later reads don't have to re-scan the whole catalog.
+model DailyChallenge {
+  id                   String   @id @default(cuid())
+  date                 DateTime @unique
+  theme                String
+  themeLabel           String
+  anchorPlayerSeasonId String
+  fixedFormation       String
+  constraints          Json
+  poolStats            Json
+  refreshesAt          DateTime
+  createdAt            DateTime @default(now())
+
+  entries DailyChallengeEntry[]
+
+  @@map("daily_challenges")
+}
+
+/// One row per user per challenge (best-attempt kept) — `attemptsUsed` enforces the 5-attempts/day
+/// economy (daily.service.ts's submitAttempt rejects a 6th) and doubles as this challenge's entry in
+/// the daily leaderboard, ranked by `score` desc. Distinct from `LeaderboardEntry`: a daily run has no
+/// world/season behind it at all (no simulation), just a scored draft, so it doesn't fit that model's
+/// won/drawn/lost/points shape.
+model DailyChallengeEntry {
+  id               String   @id @default(cuid())
+  dailyChallengeId String
+  userId           String
+  handle           String
+  squadOverall     Int
+  score            Int
+  maxScore         Int
+  attemptsUsed     Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  dailyChallenge DailyChallenge @relation(fields: [dailyChallengeId], references: [id])
+
+  @@unique([dailyChallengeId, userId])
+  @@index([dailyChallengeId, score])
+  @@map("daily_challenge_entries")
 }

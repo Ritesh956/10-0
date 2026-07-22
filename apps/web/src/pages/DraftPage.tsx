@@ -412,6 +412,7 @@ export function DraftPage() {
         europeanNights: config.europeanNights,
         januaryWindow: config.januaryWindow,
         ...(config.lockedClubId ? { oneClubClubId: config.lockedClubId } : {}),
+        ...(config.multiplayerLeagueId ? { multiplayerLeagueId: config.multiplayerLeagueId } : {}),
       });
       setWorldId(world.id);
       const refPlayerSeasonIds = slots.map((_, i) => picks[i]?.id).filter((id): id is string => Boolean(id));

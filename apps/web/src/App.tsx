@@ -13,6 +13,11 @@ import { MultiplayerPage } from "./pages/MultiplayerPage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
 import { ClubsDirectoryPage } from "./pages/ClubsDirectoryPage";
+import { DailyChallengePage } from "./pages/DailyChallengePage";
+import { LeagueJoinPage } from "./pages/LeagueJoinPage";
+import { LeagueDetailPage } from "./pages/LeagueDetailPage";
+import { LiveDraftJoinPage } from "./pages/LiveDraftJoinPage";
+import { LiveDraftPage } from "./pages/LiveDraftPage";
 import { SiteHeader } from "./components/SiteHeader";
 import { SaveProgressModal } from "./components/SaveProgressModal";
 
@@ -41,9 +46,14 @@ function Shell() {
               <Route path="/draft" element={<DraftPage />} />
               <Route path="/season" element={<SeasonPage />} />
               <Route path="/multiplayer" element={<MultiplayerPage />} />
+              <Route path="/multiplayer/join/:code" element={<LeagueJoinPage />} />
+              <Route path="/multiplayer/league/:leagueId" element={<LeagueDetailPage />} />
+              <Route path="/multiplayer/live/join/:code" element={<LiveDraftJoinPage />} />
+              <Route path="/multiplayer/live/:roomId" element={<LiveDraftPage />} />
               <Route path="/history" element={<HistoryPage />} />
               <Route path="/leaderboard" element={<LeaderboardPage />} />
               <Route path="/clubs" element={<ClubsDirectoryPage />} />
+              <Route path="/daily" element={<DailyChallengePage />} />
             </Routes>
           </motion.div>
         </AnimatePresence>
