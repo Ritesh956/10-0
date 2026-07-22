@@ -1,0 +1,483 @@
+# Futbol → 38-0 Parity Revamp — Extremely Detailed Phased Plan
+
+**Goal**: rebuild Futbol so it delivers the full 38-0.app experience — every mode, every UI/UX beat, every mechanic documented in [38-0-app-research.md](38-0-app-research.md) and [38-0-research-notes.md](38-0-research-notes.md) — but spanning the **top-5 European leagues** (Premier League, LaLiga, Serie A, Bundesliga, Ligue 1) instead of the English top flight only.
+
+This plan is grounded in a fresh audit of the current codebase (2026-07-22). Read it top to bottom before starting any phase; the Current-State Audit (§3) is what keeps us from re-planning work that already exists.
+
+---
+
+## 0. How to read this plan
+
+- Each phase has: **Goal**, **Why it's placed here**, **Work items** (broken into `web` / `api` / `db` / `engine` / `test`), **New files**, **Acceptance criteria**, and **Top-5 notes**.
+- Work items reference real files from our tree so they're actionable, not abstract.
+- "38-0 §N" cross-references point at sections of [38-0-app-research.md](38-0-app-research.md).
+- A phase is *done* only when its acceptance criteria pass AND the standard gates are green: `pnpm typecheck`, `pnpm test`, and (for engine-touching work) the sim-lab recalibration (`pnpm --filter @futbol/sim-lab test` + `exec tsx src/report.ts`).
+- Phases are ordered by dependency and by value-per-effort. Phases 1–5 rebuild the **solo core loop** to full parity (this is the bulk of "make it exactly like that"). Phases 6–10 add the surrounding modes.
+
+---
+
+## 1. Key product decisions — CONFIRMED 2026-07-22
+
+All three confirmed by the user; the plan is built around these.
+- **A — Design**: ✅ Keep our mint design system; match 38-0's UX/flow/mechanics, not their dark skin.
+- **B — Draft scope**: ✅ Per-league default + a new optional "All Top-5" cross-league mix.
+- **C — Priority**: ✅ Solo core first (Phases 0–5) before the surrounding modes.
+
+### Decision A — Visual design language: keep our mint system, adopt their information architecture. **(CONFIRMED)**
+38-0 is near-black + emerald. We *just* overhauled to a mint-green / rounded-corner system (latest commit `de9ee74`). "Exactly like that" almost certainly means the **flow, screens, mechanics, and layouts**, not throwing away a design system built days ago. So: **keep the `ink-*`/`mint`/`paper` token set and `.notch` shape language**, but restructure every screen's *content and interaction* to match 38-0 exactly (their panels, their ordering, their live readouts, their narrative blocks). Where they use color to signal meaning (gold = trophy, amber-orange = "risky gamble", red = danger/relegation), we map onto our existing accents (`amber` for trophies, `crimson` for danger) rather than importing their palette.
+- *Override option*: if you literally want 38-0's dark-emerald skin, that's a Phase 0 token swap — cheap to do, but discards the recent mint overhaul.
+
+### Decision B — Draft scope across top-5. **(recommended: per-league draft, with an optional "All Top-5" mix)**
+38-0 has no league picker (PL only). We already have one (`LeaguePicker`, `SetupPage`). For top-5:
+- **Default**: you pick ONE league at setup; the wheel draws club-seasons from that league's whole history; AI-fill is that league's current clubs (our existing `fillAiClubsFromLeague`). This is the cleanest analogue to 38-0's "one division" model and needs the least new work.
+- **Plus a new "All Top-5" option**: wheel draws from all five leagues' histories mixed (a true cross-league all-star draft); AI-fill is a **synthetic 20-club "European Super League"** of the current strongest clubs across all five. This is the top-5 analogue of 38-0's "all-time XI from anywhere" and is the headline differentiator vs 38-0.
+- *Override option*: make "All Top-5" the default instead of per-league.
+
+### Decision C — Mode scope & priority. **(recommended: solo-core-first)**
+Ship the solo core loop to full parity (Phases 1–5) before the surrounding modes (6–10). Rationale: 38-0 themselves shipped solo-draft-and-simulate first and everything else afterward (their own timeline, 38-0 §8), and the solo loop is where "it's so much better" is most visible. Leaderboard/One-Club/Daily/Multiplayer/Nations are each independently shippable afterward.
+- *Override option*: pull a specific later mode forward (e.g. Leaderboard early for virality).
+
+---
+
+## 2. Guiding principles (apply in every phase)
+
+1. **Reuse the wheel.** 38-0's power move is that One-Club, Daily, and the January window all re-enter the *same* `DrawReel`/`SlotReel` draft widget. Build every new "pick a player" surface on our existing reel components, never a new picker.
+2. **Live feedback over end-of-flow reveals.** Their draft shows a running OVERALL + per-unit readout after every pick; their draft/daily shows live odds. We currently compute odds only once at squad-complete. Bias toward continuous, per-action feedback.
+3. **Narrative over bare numbers.** Their biggest edge is procedurally-generated prose. Every stats surface should pair the number with a sentence.
+4. **The schema is ready.** `Transfer`, `Award`, `WorldRecord`, `Achievement` models already exist unused (`schema.prisma:504-565`). Wire them, don't invent new ones, unless a genuinely new shape is needed.
+5. **Determinism & calibration are sacred.** Every engine constant change re-runs sim-lab. Every `simulate()` call stays pure. January transfers must persist as auditable `Transfer` rows + re-snapshotted `WorldPlayer`s, same copy-on-write discipline as drafting.
+6. **Top-5 is a data-scope change, not a mechanic change.** Almost everything generalizes by swapping "the one English league" for "the chosen league (or All Top-5)". Call out the few places it's genuinely different (European Nights, One-Club count, AI-fill pools).
+
+---
+
+## 3. Current-state audit — what already exists (do NOT re-plan these)
+
+| 38-0 feature (research §) | Our current status | File(s) |
+|---|---|---|
+| Guest-first auth, JWT 24h | ✅ Have | `auth.*`, `GuestGateModal.tsx` |
+| Setup: League picker (top-5 filtered) | ✅ Have (single-select) | `SetupPage.tsx`, `LeaguePicker.tsx`, `leagues.ts` |
+| Setup: Formation picker | ✅ Have — **10 of their 12** | `FormationPicker.tsx`, `formations.ts` |
+| Setup: Difficulty (reroll+ratings coupling) | ✅ Have | `SetupPage.tsx`, `DraftContext.tsx` |
+| Setup: Show Ratings toggle | ✅ Have | `SetupPage.tsx` |
+| Setup: Draft Mode (squad/position-first) | ⚠️ Config exists; **verify position-first is fully wired in `DraftPage`** | `DraftContext.tsx`, `DraftPage.tsx` |
+| Setup: Player Ratings (season/prime) | ✅ Have, incl. backend | `catalog.service.ts` (`ratingsMode`) |
+| Setup: Era range slider + presets | ✅ Have | `SetupPage.tsx`, `RangeSlider.tsx` |
+| Setup: Advanced toggles (Managers/Europe/January) | ⚠️ UI exists; **Europe & January toggles are DEAD client-side state** (never sent to backend) | `SetupPage.tsx`, `DraftContext.tsx`, CLAUDE.md |
+| Spin-the-wheel draft (pre-decided winner, reel settle) | ✅ Have | `DrawReel.tsx`, `SlotReel.tsx`, `DraftPage.tsx` |
+| Player pool w/ position-eligibility chips | ✅ Have | `PlayerPickCard.tsx`, `formations.ts` (`canPlayPosition`) |
+| Deadlock guard / auto-reroll | ✅ Have (post-hoc) | `DraftPage.tsx` (`MAX_AUTO_REROLL_ATTEMPTS`) |
+| Duplicate-player prevention | ✅ Have | `DraftPage.tsx` (`draftedIds`) |
+| Manager roll + decline | ✅ Have | `DraftPage.tsx`, `catalog` roll-manager |
+| Pre-season odds panel | ✅ Have (win/top4/relegation/finish) — **missing Top6/Top10 bands** | `DraftPage.tsx` (`computePreseasonOdds`), `DraftPage.odds.test.ts` |
+| Animated season reveal | ✅ Have (popup reel, filtered to own fixtures) | `SeasonPage.tsx` (`MatchPopupReel`) |
+| Champions League / Europe (top-8, QF→SF→Final) | ✅ Have | `europe.service.ts`, `KnockoutBracket.tsx` |
+| Post-season stats hub (Golden Boot, MVP, top-10) | ✅ Have | `CompetitionStatsPanel.tsx`, `seasons.service.ts` (`getCompetitionStats`) |
+| Standings w/ "(You)" tag | ✅ Have | `StandingsTable.tsx` |
+| Team season stats | ✅ Have | `TeamStatsPanel.tsx`, `getTeamStats` |
+| Share card | ✅ Have (one generic) | `ShareCard.tsx` |
+| Schema for transfers/awards/records/achievements | ✅ Models exist, **unused** | `schema.prisma:504-565` |
+| `PlayerMatchStat` incl. assists | ✅ Data captured | `schema.prisma:397` |
+
+### Confirmed GAPS (everything below is net-new work in this plan)
+- **Setup**: ~~2 missing formations~~ ✅ done in Phase 0; ~~wire the 2 dead toggles~~ ✅ done in Phase 0.
+- **Draft** (revised after a direct code audit at the start of Phase 0 — see Phase 1 for the corrected, much smaller scope): squad-ratings panel needs to render progressively instead of only at squad-complete; reroll pip indicator (cosmetic, the count itself already shows); tap-anywhere/Space-to-spin; Top-6/Top-10 odds bands. **Already built, contrary to the original research-only assumption**: player-pool sort control, "Move a player" reposition, and the underlying live squad-ratings computation itself (just gated wrong) — CLAUDE.md's prose summary undersold how much of this screen already exists.
+- **Season sim**: continuous newest-first feed (vs discrete popups); persistent skip control.
+- **January Transfer Window**: entire mechanic — backend event resolution + frontend gamble flow.
+- **End-of-season**: auto-generated narrative block; Playmaker (assists) + Golden Glove (clean sheets) awards; manager stat card; season totals strip; full match log view; squad-tier flavor names; two-way share (season + January); end-of-season guest-persistence prompt.
+- **New modes**: Leaderboard (global, filtered, verified, handle-gated); One-Club XI; Daily Challenge; async Leagues + Live Draft multiplayer; Nations Trophy.
+- **Content pages**: How It Works, How to Play, Greatest XI, Story (none exist yet).
+- **Persistence layer**: trophies/history/records tied to accounts; per-user run archive.
+
+---
+
+## 4. Top-5-leagues adaptation — cross-cutting strategy
+
+Applies across all phases; each phase's "Top-5 notes" points back here.
+
+1. **Data**: we already seed real top-5 data (`seed-real.ts`, `real-top5-2012-2024.json.gz`). Confirm coverage depth per league is sufficient for a full draft pool (38-0 quotes 4,000+ player-seasons over 34 seasons for one country; our five-country dataset is 2012-2024 — **shorter era window**). *Action in Phase 0*: audit dataset breadth and decide whether to extend the ETL era range (`tools/data-etl/`) so an "All-time" era feels as deep as 38-0's.
+2. **Draft pool scoping** (Decision B): per-league or All-Top-5. `catalog.service.ts` `listPlayerSeasons` + the web draft pool fetch already filter by league; add an "All Top-5" pseudo-selection.
+3. **AI-fill**: `fillAiClubsFromLeague` already sizes to the chosen league's real current club count (20 PL/LaLiga/Serie A, 18 Bundesliga/Ligue 1). For "All Top-5", add a new fill path producing a 20-club cross-league elite division.
+4. **European Nights**: 38-0's Europe is a scaled-down single-division cup. With five real leagues we can make it *more* real: qualifiers pooled across leagues into one continental competition. But to avoid scope creep, **Phase-4 keeps our existing top-8-of-your-division model**; a "true multi-league UCL" is an explicit stretch item (Phase 10+).
+5. **Club counts**: One-Club XI (Phase 7) spans ~all top-5 clubs in the dataset (far more than 38-0's 49); Daily Challenge (Phase 8) constraints reference top-5 clubs/nationalities; Leaderboard (Phase 6) club filter lists top-5 clubs. All just consume the existing catalog — no special-casing.
+6. **Copy/branding**: every "English top-flight" string becomes "top-5 European" / "Europe's top leagues". Landing, FAQ, How-It-Works, meta titles.
+
+---
+
+## 5. PHASE 0 — Foundations, decisions lock-in, and quick parity wins — ✅ COMPLETE (2026-07-22)
+
+All work items done, all acceptance criteria met: 12 formations selectable end-to-end (web/api/domain/engine all in sync), `europeanNights`/`januaryWindow` persisted on `World.settings` and actually read (Europe qualification now genuinely skips when off, test-covered), position-first draft mode confirmed fully wired (no changes needed), dataset depth audited with concrete numbers recorded above. `pnpm typecheck` and `pnpm test` both green across all 10 packages. Migration `20260721223204_add_world_settings` applied to the dev database.
+
+
+
+**Goal**: clear the cheap, unblocking gaps so later phases build on a clean base.
+**Why here**: everything downstream assumes 12 formations, live toggles, and a known dataset depth.
+
+**Work items**
+- `web` — Add the 2 missing formations **4-1-2-1-2** and **4-2-2-2** to `formations.ts`: extend `FORMATIONS`, `FORMATION_POSITIONS`, `FORMATION_DESCRIPTIONS`, `FORMATION_COORDS`. Mirror them in the backend map.
+- `api` — Add the same 2 formations to `apps/api/src/common/lineup.ts` `FORMATION_POSITIONS` (the two maps MUST stay in sync per CLAUDE.md). Extend `lineup.test.ts`.
+- **`domain`** (discovered doing this work, not in the original audit) — `packages/domain/src/tactics.ts`'s `formation` zod enum is a *third* place formations are declared, and it gates `draftFantasySchema`/`draftClubSchema` validation — missing entries here reject the new formations at draft-confirm time even though the web UI happily offers them. Must extend alongside the other two.
+- **`engine`** (also discovered doing this work) — `packages/engine/src/testing/fixtures.ts` has a *fourth* `FORMATION_POSITIONS` copy (typed against `@futbol/domain`'s `Formation`), used only by engine/sim-lab test fixtures — TS catches a missing entry at compile time here (`Record<Formation, Position[]>` becomes non-exhaustive), which is how this one was actually found. **Running note for future formation changes: there are now 4 formation-position maps to keep in sync** (`apps/web/src/lib/formations.ts`, `apps/api/src/common/lineup.ts`, `packages/domain/src/tactics.ts`'s enum, `packages/engine/src/testing/fixtures.ts`) — CLAUDE.md only documented the first two.
+- `web`/`api` — **Wire the dead toggles.** `europeanNights` and `januaryWindow` must ride along in the `draftFantasy`/world-creation payload and be persisted on the `World` (add `europeanNights Boolean` + `januaryWindow Boolean` columns, or a `settings Json`). Update `worlds.schemas.ts`, `worlds.service.ts`, `draft.service.ts`.
+- `db` — Migration for the two new `World` settings columns (or a `World.settings Json`). Prefer a single `settings Json` blob to avoid churn as more toggles land.
+- `web` — Verify **position-first draft mode** actually works end-to-end in `DraftPage`; if it's config-only, either finish it or hide the option until Phase 1 completes it.
+- `data` — Audit top-5 dataset depth (seasons/players per league). Decide + ticket any ETL era-window extension (`tools/data-etl/`). Not a blocker for Phase 1 but sizes the "All-time" feel.
+  **AUDITED 2026-07-22** (`packages/db/prisma/data/real-top5-2012-2024.json.gz`, decompressed + counted directly):
+
+  | League | Seasons | Distinct clubs | Club-seasons | Player-seasons |
+  |---|---|---|---|---|
+  | Premier League | 2012–2024 (13) | 37 | 259 | 5,509 |
+  | LaLiga | 2012–2024 (13) | 32 | 258 | 5,712 |
+  | Serie A | 2012–2024 (13) | 38 | 260 | 5,917 |
+  | Bundesliga | 2012–2024 (13) | 31 | 234 | 4,889 |
+  | Ligue 1 | 2012–2024 (13) | 35 | 253 | 5,488 |
+  | **All 5 combined** | 2012–2024 (13) | **173 clubs** | 1,264 | **27,515** |
+
+  vs 38-0: 34 seasons (1992-93–2025/26), 49 clubs, 4,000+ player-seasons, one league.
+
+  **Finding**: per-league *density* is not the gap — every single one of our five leagues individually already has more player-seasons (4,900–5,900) than 38-0's entire one-league total (4,000+), and combined we have 27,515 across 173 clubs vs their 49. The real gap is **historical depth**: our data starts at 2012, theirs at 1992 — 13 seasons of coverage vs 34. Every 90s/2000s club-season (Invincibles-era Arsenal, Ferguson's early Man Utd treble side, etc.) that makes 38-0's "any era" pitch land is currently outside our range entirely.
+  **Decision**: defer the ETL era-back-extension (`tools/data-etl/`, sourcing 1992–2011 for all five leagues) as its own scoped data-sourcing project rather than folding it into Phase 0 — it's a real scraping/verification effort, not a quick win, and doesn't block Phases 1–9's mechanics work (which are era-range-agnostic). It IS a prerequisite for the "All-time" era preset and the Decision-B "All Top-5" mode to feel as deep as 38-0's. Flagged as a standing backlog item — revisit before or alongside Phase 10 (content/polish), or sooner if era depth is user-tested as a felt gap.
+- `web` — Decision-A token confirmation: no code change if we keep mint; if overriding to dark-emerald, do the token swap in `styles/index.css` + `tailwind.config.ts` here.
+
+**Acceptance criteria**
+- 12 formations selectable, both maps in sync, `lineup.test.ts` + `formations.test.ts` green.
+- Toggling European Nights off actually suppresses Europe; toggling January off actually suppresses the January window (verifiable once Phases 3–4 land — until then, the flag is persisted and read).
+- Dataset-depth decision recorded in this doc.
+
+**Top-5 notes**: dataset audit is the main top-5-specific item.
+
+---
+
+## 6. PHASE 1 — Draft Room revamp (full parity with 38-0's draft screen) — ✅ COMPLETE (2026-07-22)
+
+All corrected-scope work items done. Squad-ratings panel now renders progressively (from the very first pick, gated on `filledCount > 0` instead of `allFilled`), with a new `RatingBarOrEmpty` helper showing "–" for any still-empty unit instead of a misleading 0. Reroll pips added alongside the existing count. Tap-anywhere turned out to be partially built already too — `DrawReel.tsx` already had a Space-bar keydown listener wired end-to-end (missed in the initial audit because the earlier grep only checked `DraftPage.tsx`, not its child components); added the missing "tap the reel" half as a click handler on the reel box specifically (not wrapping the "Make the Draw" button, to avoid a double-fire-on-bubble hazard — verified with a dedicated regression test). Pre-season odds now show all 5 bands (win/top4/top6/top10/relegation) reusing the same continuous rank-distribution math, monotonicity guaranteed by construction. Pre-filtering the spin pool (vs. the existing post-hoc auto-reroll) was assessed and intentionally deferred — the current mechanism already delivers 38-0's "never truly stuck" outcome, so it didn't meet the bar for this phase.
+
+New/extended tests: `DraftPage.odds.test.ts` (+4 assertions, +2 new tests for top6/top10 extremes), `DrawReel.test.tsx` (+3 tests: tap-the-reel spins, no double-fire when the button's click bubbles, inert while spinning/disabled), `DraftPage.liveRatings.test.tsx` (new file: panel absent at zero picks, present with correct partial values after the first pick). All 13 web test files / 53 tests green; full monorepo typecheck clean across all 10 packages.
+
+
+
+**Goal**: our `/draft` matches 38-0 §4 beat for beat.
+**Why here**: the draft is the most-used screen and the most directly comparable; several later phases (Daily, One-Club) reuse these components.
+
+**⚠️ Correction from a direct code audit (2026-07-22), done at the start of Phase 0**: `DraftPage.tsx` already implements far more of this phase than the original research-only pass assumed (that pass worked from CLAUDE.md's prose summary, not the file itself). Confirmed already built and working, with tests green:
+- ✅ **Live squad-ratings computation** exists (`squadRatings` useMemo → `RatingBar` rows for Attack/Midfield/Defence/Goalkeeping) — **but it's gated behind `allFilled && config.showRatings`**, i.e. it only renders once the *entire* squad is done, not progressively after each pick like 38-0. This is the one real remaining gap in this item.
+- ✅ **"Move a player"** is fully built: a `moveMode`/`moveSourceIndex` state machine, a toggle button ("⇄ Move a player" / "Cancel move"), pitch-click-to-pick-up/drop-in flow, `canPlayPosition`-gated, with its own empty-state copy. Nothing to build here.
+- ✅ **Player-pool SORT control** is fully built: `SortMode` state (rating/position/surname), a 3-way button row above the pool, `sortPlayers()` helper. Nothing to build here.
+- ✅ **Reroll display** exists as a plain number (`Redraws: {rerollsRemaining}` in the header stat tile), not 38-0's dot/pip row. Cosmetic gap only.
+- ✅ **"No dead spin"** already has a safety net: `doSpin()` recursively auto-rerolls (up to `MAX_AUTO_REROLL_ATTEMPTS`) past any drawn club with nobody eligible for the target slot, silently and at no cost to the user's redraw budget (tested in `DraftPage.deadlock.test.tsx`). This is 38-0's *outcome* (you never get stuck on a dead squad) via a different mechanism (post-hoc reroll vs. their claimed pre-filter) — functionally equivalent from the player's seat. Not a blocking gap.
+- ❌ **Tap-anywhere / Space-to-spin** — confirmed genuinely missing (no keyboard listener anywhere in `DraftPage.tsx`). Real gap, small fix.
+- ❌ **Top-6 / Top-10 odds bands** — confirmed genuinely missing; `computePreseasonOdds` only returns `winPct`/`top4Pct`/`relegationPct`. Real gap.
+
+Given this, Phase 1's actual scope is much smaller than originally drafted:
+
+**Work items**
+- `web` — **Make the squad-ratings panel live/progressive**: remove the `allFilled` gate so `RatingBar`s render (with "–"/0 for empty units) from the very first pick onward, not just at squad-complete. Reuse the existing `squadRatings`/`RatingBar` wiring — this is a rendering-condition change, not new plumbing.
+- `web` — **Reroll pip indicator**: add a dot row (mint/plum filled pip per remaining reroll) alongside the existing "Redraws: N" tile — additive, don't remove the number.
+- `web` — **Tap-anywhere / Space-to-spin**: a `keydown` listener (Space) plus a click handler on the idle spin panel, both calling the same `doSpin()` path already wired to the button; guard so it's inert while `spinning`, while a `pendingPlayer`/pool is open, or while `moveMode` is active.
+- `web` — **Pre-season odds: add Top-6 and Top-10 bands**, colored distinctly (win=amber, top4=mint, top6=teal, top10=plum, relegation=crimson). Extend `computePreseasonOdds` + `DraftPage.odds.test.ts`, preserving its existing monotonicity/consistency assertions and adding the two new bands to them.
+- `web`(optional, low priority) — **Pre-filter the spin pool** instead of relying purely on post-hoc reroll, if a cheap client-side filter is feasible against the fetched `pool`. Not required for parity (the current mechanism already delivers 38-0's "never truly stuck" outcome) — demote to a nice-to-have unless profiling shows the auto-reroll firing often enough to be visibly janky.
+- `test` — Update the odds test for the 2 new bands; add a small test asserting the ratings panel renders after the first pick (not just at completion); add a Space-to-spin test alongside the existing `SlotReel`/`DrawReel` tests.
+
+**Acceptance criteria**
+- Squad-ratings panel visibly updates after every single pick, not just the last one.
+- Reroll pips shown alongside the existing count.
+- Space and a full-panel tap both trigger a spin when idle, inert otherwise.
+- Pre-season odds show 5 bands (win/top4/top6/top10/relegation).
+- All existing draft tests (`DraftPage.deadlock.test.tsx`, `SlotReel.test.tsx`, `DrawReel.test.tsx`, `DraftPage.odds.test.ts`) still pass.
+
+**Top-5 notes**: if Decision B's "All Top-5" is enabled, the pool fetch (already league-filtered via `config.leagueIds`) needs a union-of-five-leagues path; SORT and eligibility logic are already league-agnostic.
+
+---
+
+## 7. PHASE 2 — Season reveal revamp (continuous feed) — ✅ COMPLETE (2026-07-22)
+
+Rewrote `MatchPopupReel.tsx` from a one-card-at-a-time replace/exit component (old card animates out, new one animates in, `AnimatePresence mode="wait"`) into a genuinely accumulating feed: cards pile up newest-first as they reveal, nothing ever exits, and a live `StatStrip` (Won/Drawn/Lost/Pts + GF·GA·GD) recomputes after every reveal from the accumulated matches so far. The card format itself was also brought in line with 38-0 (§5a) and, not coincidentally, with our own existing `MatchLog.tsx` (the post-season "full match log" component, which turned out to already implement almost exactly this visual language — W/D/L badge, `GW<n>`, opponent + (H)/(A), score, own-goals-only scorer line): factored the shared "reframe a match from one club's perspective" logic that both components need into a new `apps/web/src/lib/matchResult.ts` (`summarizeForClub`, `accumulateRecord`), and refactored `MatchLog.tsx` to use it too instead of duplicating the same W/D/L/goal-filter logic in two places.
+
+Because `AnimatePresence` is no longer used at all in this component (nothing exits mid-reveal), the `forwardRef` requirement from CLAUDE.md's original gotcha no longer applies here — `FeedCard` is a plain function component now, one less footgun. Completion logic simplified accordingly: no more waiting on an exit-animation callback, `onComplete` fires directly once every match has revealed (or immediately on "Skip ahead," which the component now shows as a small header link, not just an ending fallback).
+
+All 3 `SeasonPage.tsx` call sites (domestic-replay, europe-league-replay, europe-knockout-replay) updated to pass the new required `userClubId` prop (`userClub?.id`) needed to compute the per-club perspective.
+
+**Tests**: rewrote `MatchPopupReel.test.tsx` (6 tests: cycling + completion, skip-ahead, empty-list, **accumulation** (all revealed cards stay visible, newest-first ordering), and the **stat strip's cumulative math** verified against a hand-computed 1W/1D/1L example). Full web suite (13 files / 56 tests) and full monorepo typecheck (10 packages) green, including `SeasonPage.test.tsx`'s existing pipeline-integration tests exercising the new component through all three real call sites unmodified.
+
+**Not done**: a live browser visual check of the actual rendered feed. Reaching it requires driving the full stack (API + Redis + sim-worker + a real drafted squad + a simulated season), and another session already owns this folder's dev server, so standing up a second, possibly port-conflicting instance for a spot-check felt like the wrong tradeoff given the component's behavior and exact rendered text are already pinned by 6 passing tests plus the unmodified full-pipeline `SeasonPage.test.tsx` suite. Flagging this explicitly rather than silently skipping it — say the word if you want a live visual pass.
+
+
+
+**Goal**: replace/augment the discrete popup reel with 38-0's continuous newest-first scrolling result feed + persistent skip control (38-0 §5a).
+**Why here**: the January window (Phase 3) pauses *inside* this reveal, so the reveal must be restructured first.
+
+**Work items**
+- `web` — Refactor `SeasonPage.tsx`'s reveal so completed fixtures stream into a **single vertical feed** of result cards (newest at top, sliding in via framer-motion), with the running stat strip (WON/DRAWN/LOST/PTS + GF·GA·GD) pinned below — instead of / in addition to the one-card-at-a-time `MatchPopupReel`. Keep `MatchCard` as `forwardRef` (AnimatePresence requirement, per CLAUDE.md).
+- `web` — **Persistent "Skip" control** that advances to the next checkpoint (January, or end) — reframe our existing "Skip ahead" as an always-visible header link matching "Skip to January →" / "Skip all →".
+- `web` — Card format parity: GW badge, W/D/L pill, opponent + (H)/(A), large result-colored score, `⚽ Scorer 54′` one-line-per-goal (no "x2" aggregation).
+- `web` — Keep the "own fixtures only" filter (`onlyMine()`), still correct and necessary for our bigger leagues (38-0's league is one campaign; ours is 20 clubs).
+- `test` — Update `MatchPopupReel.test.tsx` / add `SeasonFeed.test.tsx`: feed renders newest-first, stat strip accumulates correctly, skip jumps to checkpoint, `onComplete` fires.
+
+**New files**: possibly `components/SeasonFeed.tsx` (may absorb `MatchPopupReel`).
+
+**Acceptance criteria**: reveal reads as one continuous feed with a live-updating stat strip and a persistent skip; existing `SeasonPage.test.tsx` invariants (no stray "Continue" buttons in knockout stages) preserved.
+
+**Top-5 notes**: none beyond copy.
+
+---
+
+## 8. PHASE 3 — January Transfer Window (the flagship new mechanic)
+
+**Goal**: full parity with 38-0 §5b — a halfway pause with recap, an opt-in gamble, a wheel-driven resolution, and an OUT→IN "Done Deal".
+**Why here**: depends on the restructured reveal (Phase 2); its outcome text feeds the Phase-4 narrative.
+
+**Work items**
+- `engine`/`api` — Decide *when* halfway is. Domestic season is a double round-robin (38 games for 20 clubs). The window triggers at the **exact midpoint matchday** (matchday 19 of 38 for a 20-club league; 17 of 34 for an 18-club league — derive, don't hardcode).
+- `api` — **Backend event resolution.** New endpoint on `seasons` (or a new `january` module): given a world at its midpoint, compute the user club's **weakest-rated occupied slot**, draw a random source `RefClubSeason` (reuse catalog roll logic + era/league scope from the world's settings), pick an eligible replacement player, and produce an OUT/IN diff (old overall → new overall, delta). Persist:
+  - a `Transfer` row (`schema.prisma:517` — `fromClubId`/`toClubId`/`playerId`/`type: PERMANENT`) for audit,
+  - a new `WorldPlayer` for the incoming player (two-phase copy-on-write per `instantiate-world-club.ts` — new id, then patch the `WorldClub.lineup` slot to reference it),
+  - and mark the outgoing `WorldPlayer` as departed (soft flag or move off lineup).
+- `api` — **Event variety** (38-0 setup copy: "can help or hurt"). Model a small event pool, not just "Bargain Buy": at minimum a **positive** (upgrade-biased draw), a **neutral/random** (any draw, can downgrade), and a **negative** (forced sale / injury to a key player). Encode as a typed enum + weighted roll. Store the drawn event type on the `Transfer` (or a small `JanuaryEvent` record if we want richer history).
+- `api` — **Gate on the `januaryWindow` world setting** (wired in Phase 0). Off ⇒ no pause, no endpoint call.
+- `web` — **Recap panel** at the midpoint pause (38-0 §5b step 1): "JANUARY TRANSFER WINDOW / Halfway there", W-D-L / Points / GD tiles, and the dynamically-templated on-pace sentence.
+- `web` — **Choice** (step 2): "Enter the transfer market" (crimson/amber "risky" styling per Decision A) vs "Stick with your XI".
+- `web` — **Gamble resolution** (steps 3-5): reuse `DrawReel`/`SlotReel` to spin CLUB × SEASON, then show the **"DONE DEAL · <POS>"** OUT→IN card with the delta verdict, then "Continue the season" resumes the feed. Distinct danger visual language for the whole event.
+- `web` — Thread the January outcome (in/out players, delta, event type) through the season pipeline state so Phase 4's narrative and the results "IN" flag can use it (mind the stale-closure discipline in `SeasonPage`'s `runKnockoutRound` — return values, don't read state late).
+- `test` — `api`: weakest-slot detection, transfer persistence + lineup repatch, event-type weighting, gating by setting. `web`: recap renders correct on-pace text; declining resumes unchanged; accepting spins and shows a correct OUT→IN diff.
+
+**New files**: `apps/api/src/january/*` (module/service/schemas), `apps/web/src/components/JanuaryWindow.tsx` (+ tests). Possibly `JanuaryEvent` model in `schema.prisma`.
+
+**Acceptance criteria**
+- With January on, the reveal pauses at the derived midpoint; declining resumes cleanly; accepting resolves via the wheel into a persisted transfer and an updated lineup that the *rest of the simulated season already reflects* (the second half must be simulated with the post-transfer squad — confirm the sim ordering: the worker must simulate first-half → pause is a *reveal* pause, so either (a) the whole season is simulated post-choice, or (b) the season is simulated in two halves around the choice). **Design note**: since our worker simulates the whole season as one batch (CLAUDE.md), Phase 3 must split domestic simulation into two batches (matchdays 1..mid, then mid+1..end) so a January transfer can actually affect second-half results. This is the one real engine-pipeline change in the plan — scope it explicitly.
+- Event variety demonstrably includes a downgrade/negative outcome.
+
+**Top-5 notes**: the January draw respects the world's league/era scope (per-league or All-Top-5), so an EPL save draws EPL replacements, an All-Top-5 save can draw from anywhere.
+
+---
+
+## 9. PHASE 4 — End-of-season results overhaul (their richest screen)
+
+**Goal**: parity with 38-0 §6 — the auto-generated narrative, expanded awards, manager card, totals, full log, squad tiers.
+**Why here**: consumes January outcome (Phase 3) and the restructured reveal (Phase 2); it's the emotional payoff screen and the biggest single UX gap.
+
+**Work items**
+- `web`/`api` — **Auto-generated season narrative engine** (38-0 §6b — the highest-leverage item). Build a **template bank keyed by signals**, no LLM:
+  - *Verdict tag*: finished-vs-projected delta → phrase + color (e.g. "OVERACHIEVED"/mint, "AS EXPECTED"/smoke, "FLATTERED TO DECEIVE"/crimson).
+  - *Unit word-tiers*: per-unit overall → {Elite/Excellent/Strong/Very good/Solid/Shaky} band labels.
+  - *Composition sentence*: names strongest + weakest unit.
+  - *Finish-position flavor paragraph*: bracket (champion / top-4 / Europa / mid-table / relegation-scrap / relegated) → templated paragraph with slots for points total and the actual biggest-win fixture+scoreline.
+  - *January recap lines* (if gambled): one for the arrival, one for the departure (from Phase 3 outcome).
+  - *Standout-player pundit quote*: top performer → bold line + italic "🎙️" aside.
+  - *Manager closing line*: echoes the manager's philosophy blurb + the season's shape.
+  - Implement as `apps/web/src/lib/seasonNarrative.ts` (pure, unit-testable) fed by a stats bundle; the API just needs to expose the raw signals (most already exist in `getCompetitionStats`/`getTeamStats`). New component `components/SeasonNarrative.tsx`.
+- `api` — **Expand awards** (38-0 §6e). In `getCompetitionStats`:
+  - **Playmaker** (top assister) — assists already in `PlayerMatchStat`; just aggregate.
+  - **Golden Glove** (most clean sheets) — derive per-GK/defence from matches with 0 goals conceded by their club; needs a clean-sheet aggregation query.
+  - Keep Golden Boot + MVP.
+  - Persist final awards as `Award` rows (`schema.prisma:534`) for history/leaderboard reuse.
+- `web`/`api` — **Manager stat card** (38-0 §6f): Clean Sheets / Longest Win Streak / Biggest Win (scoreline+opponent) / Highest-Scoring match, attributed to the world club's manager. New aggregation in `seasons.service.ts`; render in a `components/ManagerStatCard.tsx`.
+- `web` — **Season totals strip** (38-0 §6d): W/D/L/Pts/GF/GA as six headline numbers (data already available).
+- `web` — **Full match log view** (38-0 §6a): an expandable "view full season" list of all the user's fixtures newest-first (reuse `MatchLog.tsx`).
+- `web` — **Squad-tier flavor names** (38-0 §9): map squad overall → {Galácticos/Elite/Strong/Mid-table/Budget/Minnows} in `lib/squadRatings.ts`; surface on results + draft-complete.
+- `web` — **Two-way share** (38-0 §6g): the existing `ShareCard` becomes "Share your season"; add a second "Share your January" card summarizing the OUT→IN beat (only if a January transfer happened).
+- `web` — Fold this into `SeasonPage`'s existing `"stats-hub"` phase and the `localStorage` stats-hub cache (`saveStatsHubCache`) so the narrative + awards survive reloads.
+- `test` — `seasonNarrative.ts` pure tests (each signal → expected phrase family; bracket boundaries; template slot-filling with real fixtures). API tests for Playmaker/Golden Glove/manager aggregations. Extend `SeasonPage.test.tsx`.
+
+**New files**: `lib/seasonNarrative.ts`, `components/SeasonNarrative.tsx`, `components/ManagerStatCard.tsx` (+ tests).
+
+**Acceptance criteria**: results screen renders a full narrative block that correctly references the actual season (biggest win, standout player, manager style, January outcome); four awards present; manager card populated; totals + full log + squad tier shown; two share CTAs when applicable; all cached and reload-safe.
+
+**Top-5 notes**: bracket flavor copy should be league-aware where natural (e.g. "you're going to the Bundesliga's European nights"), but a generic top-5 tone is fine for v1.
+
+---
+
+## 10. PHASE 5 — Persistence, trophies, history, sharing polish
+
+**Goal**: 38-0's account layer — runs saved forever, trophies, per-user history, and the peak-moment guest-persistence prompt (38-0 §6g, §7b trophies).
+**Why here**: leaderboard (Phase 6) needs saved, attributable runs; trophies need a home.
+
+**Work items**
+- `api`/`db` — **Persist completed runs as durable records.** Wire `Achievement` (trophies like "The Invincible" 38-0-0, "Unbeaten", "Champions", "Golden Boot"), `WorldRecord` (biggest win, longest streak, points record), and `Award` (season awards from Phase 4). Define a trophy catalog (key → name/description/condition) and evaluate it at season completion in the worker or a post-completion hook.
+- `web` — **"Your history" page** (`/history` or profile): list a user's past worlds/runs with result, formation, overall, trophies. New `pages/HistoryPage.tsx` + an API `GET /worlds?owner=me` summary.
+- `web` — **End-of-season guest-persistence prompt** (38-0 §6g): a second, softer "Don't lose this season — sign in to keep it forever" panel on the results screen for guest users (distinct from the existing squad-confirm `GuestGateModal`). Reinforces at peak investment.
+- `web` — **Trophy display**: a cabinet component; show unlocked trophies on results + history.
+- `test`: trophy-evaluation unit tests (38-0-0 unlocks Invincible, etc.); history summary API test.
+
+**New files**: `pages/HistoryPage.tsx`, `components/TrophyCabinet.tsx`, a `lib/trophies.ts` catalog (+ tests), API history summary.
+
+**Acceptance criteria**: completing a run persists trophies/records/awards; a signed-in user sees prior runs at `/history`; guests get a compelling end-of-season save prompt.
+
+**Top-5 notes**: trophy conditions are league-agnostic; "beat your club's record" style trophies belong to Phase 7 (One-Club), which has the historical benchmarks.
+
+---
+
+## 11. PHASE 6 — Leaderboard (global, filtered, verified, handle-gated)
+
+**Goal**: parity with 38-0 §9.
+**Why here**: needs saved/attributable runs (Phase 5); high virality payoff.
+
+**Work items**
+- `db`/`api` — **Leaderboard submission**: a `LeaderboardEntry` model (handle, userId?, worldId, mode, difficulty, formation, squadOverall, ratingsMode, result W-D-L+GD, points, verified, createdAt). Endpoint to submit a completed run under a chosen **handle** (lighter than full auth, per 38-0). Endpoint to query with filters.
+- `api` — **Verified-run flag**: mark server-simulated runs as verified (anti-tamper signal). Since our simulation is already server-side (worker), most runs are inherently verifiable — set verified when the run's matches were produced by our worker for that world.
+- `web` — **`/leaderboard` page**: Global / Friends tabs (Friends can stub to "sign in to add friends" until a friend graph exists), a filter panel (League/club, time window, formation, **squad tier** names from Phase 4, difficulty, ratings mode), and the row anatomy (rank, handle + ✓, difficulty tag, formation·overall·ratings caption, RESULT `38-0 ✨` or `W-D-L+GD`, PTS/114). "Report a name" moderation control.
+- `web` — **"Add this run to the leaderboard"** submission block on the results screen (handle input + Submit).
+- `test`: submission validation, filter query correctness, verified-flag logic.
+
+**New files**: `pages/LeaderboardPage.tsx`, `components/LeaderboardFilters.tsx`, API `leaderboard` module, `LeaderboardEntry` model.
+
+**Acceptance criteria**: a finished run submits under a handle and appears filtered correctly; verified badge shows for server-simulated runs; moderation entry point exists.
+
+**Top-5 notes**: the club filter enumerates top-5 clubs; add a **League** filter axis (PL/LaLiga/Serie A/Bundesliga/Ligue 1/All-Top-5) that 38-0 doesn't need — a genuine top-5 addition. Points ceiling stays 114 (38 games).
+
+---
+
+## 12. PHASE 7 — One-Club XI mode
+
+**Goal**: parity with 38-0 §7b, scaled to top-5 clubs.
+**Why here**: reuses the Phase-1 draft components and Phase-5 persistence; self-contained.
+
+**Work items**
+- `web` — **`/clubs` directory page**: all top-5 clubs (from catalog) as cards routing into a club-locked draft.
+- `web`/`api` — **Club-locked draft**: the wheel/pool draws only players who appeared for that club (needs a catalog query "all `RefPlayerSeason`s whose `RefClubSeason.clubId` = X across all seasons"). **Force Season ratings** (Prime disabled — a career-best row could be at another club). Validate formation is fillable from the club's history.
+- `api` — **Historical benchmarks**: derive each club's real best-ever / worst-ever top-flight points total from `RefClubSeason` history (or store during ETL) to power the record trophies.
+- `web`/`api` — **Club-specific trophies** (Phase-5 trophy system): "The Invincible", "Club Record Breaker" (beat real best points), "Club Worst Ever". Wire into `Achievement`.
+- `web`/`api` — **Per-club leaderboards**: reuse Phase-6 leaderboard filtered/partitioned by club (mode = one-club, club = X).
+- `test`: club-locked pool correctness; Prime disabled; benchmark derivation; trophy conditions.
+
+**New files**: `pages/ClubsDirectoryPage.tsx`, one-club draft config path, benchmark util.
+
+**Acceptance criteria**: picking a club yields a draft restricted to that club's real history, Season-only; club trophies + per-club board work.
+
+**Top-5 notes**: ~2× the club count of 38-0; benchmarks derived per real league's points system (identical 3-1-0). Bundesliga/Ligue 1 clubs have 34-game historical seasons in reality but our sim is always 38 — keep the *record comparison* on points, and note the game-count mismatch in copy (or normalize to points-per-game).
+
+---
+
+## 13. PHASE 8 — Daily Challenge mode
+
+**Goal**: parity with 38-0 §7c — themed daily constraint puzzle with completion odds.
+**Why here**: reuses Phase-1 draft components; standalone; high retention/virality.
+
+**Work items**
+- `api`/`db` — **Daily puzzle generation**: a deterministic-per-date puzzle (server clock, fixed refresh time). A `DailyChallenge` model (date, theme, anchorPlayerId, constraints[], fixedFormation). Themes: player-birthday (real DOB from `RefPlayer.dateOfBirth`, which we store!), nationality/tournament, club-history. Constraints as typed rules (N players from club X, N of nationality Y, etc.).
+- `web` — **`/daily` page**: themed header + countdown, mandatory anchor player pre-seeded, requirements checklist (progress fractions + status dots), **live "COMPLETION ODDS %"** recomputed per pick, fixed formation, attempt economy (**5 attempts/day + a smaller reroll budget**), bonus scoring (exceeding minimums improves score), yesterday's top-score recap.
+- `web` — **Completion-odds calculator**: given remaining open slots and unmet constraints, estimate P(all constraints satisfiable) from remaining eligible pool. Pure fn in `lib/dailyOdds.ts`.
+- `api` — **Daily leaderboard**: today's scores (reuse Phase-6 infra, mode = daily).
+- `test`: puzzle determinism per date; constraint tracking; odds monotonicity; attempt/reroll limits.
+
+**New files**: `pages/DailyChallengePage.tsx`, `lib/dailyOdds.ts`, `components/RequirementsTracker.tsx`, API `daily` module + `DailyChallenge` model.
+
+**Acceptance criteria**: everyone sees the same puzzle for a given date; constraints + live odds + attempt economy behave per 38-0; scored and rankable.
+
+**Top-5 notes**: constraints draw on top-5 clubs/nationalities — a *richer* puzzle space than 38-0's single country (e.g. "3 players who played in Serie A", "2 Brazilians", cross-league themes). Real differentiator.
+
+---
+
+## 14. PHASE 9 — Multiplayer revamp
+
+**Goal**: parity with 38-0 §7e — async **Leagues** first, then **Live Draft**.
+**Why here**: biggest surface area, benefits from everything above; 38-0 shipped async before live (their timeline) — we copy that ordering.
+
+**Work items (9a — async Leagues, ship first)**
+- `web`/`api` — Rework our current fixed 2-club head-to-head (`MultiplayerPage`) into **N-player async leagues**: creator sets shared rules once (era/league/difficulty/formation-freedom), generates an **invite link**, each participant independently drafts + simulates **their own season**, ranked by points. This matches 38-0's model and is simpler than shared fixtures.
+- `db`/`api` — Reuse `World` (`WorldType.LEAGUE`), `LeagueMembership`, and per-member `Season`s; a league standings view aggregates each member's points.
+- `web` — Create-league flow, join-by-link flow, league standings page.
+- `test`: rule-locking across members; independent seasons; standings aggregation.
+
+**Work items (9b — Live Draft, second)**
+- Real-time up-to-4-player simultaneous draft. Needs a realtime transport (WebSocket) — new infra. Draft-turn state machine, shared club pool with claim-locking. This is the largest single lift in the plan; scope as its own sub-project. Gate behind sign-in like 38-0.
+
+**Acceptance criteria (9a)**: a link-shared league where each player drafts independently and the best points total tops the table.
+
+**Top-5 notes**: rule-locking includes the chosen league / All-Top-5 scope so every member drafts from the same pool.
+
+---
+
+## 15. PHASE 10 — Nations Trophy, content pages, and platform polish
+
+**Goal**: remaining 38-0 surfaces + the marketing/SEO pages + PWA/app considerations.
+
+**Work items**
+- `web`/`api` — **Nations Trophy** (38-0 §7d): a limited-time tournament building a **nation's XI** (draft filtered to one nationality across top-5 clubs — `RefPlayer.nationality` already stored). Sign-in-gated, exclusive trophy via `Achievement`. Reuses the draft + season pipeline with a nationality-locked pool.
+- `web` — **Content/SEO pages** (all net-new, copy adapted to top-5): `/how-it-works`, `/how-to-play`, `/best-xi` (Greatest top-5 XI, our editorial shortlist), `/story`, plus FAQ on the landing page. Match 38-0's structure (38-0 §5 static pages in research).
+- `web` — **Landing page mode cards**: surface all modes (Classic, Multiplayer, One-Club, Daily, Nations) like 38-0's landing.
+- `web`/stretch — **"True multi-league European Nights"**: the top-5 upgrade over 38-0 — pool qualifiers across all five leagues into one real continental competition. Explicit stretch beyond parity.
+- Platform: PWA/installability, share-image rendering quality, meta/OG tags per mode.
+
+**Acceptance criteria**: all 38-0 modes have an analogue; content pages live and top-5-worded; landing surfaces every mode.
+
+**Top-5 notes**: Nations Trophy is *stronger* on top-5 (a nation's players are spread across five leagues, not one) — lean into it.
+
+---
+
+## 16. Feature parity matrix (38-0 → Futbol phase)
+
+| 38-0 feature | Research § | Phase |
+|---|---|---|
+| 12 formations | §3 | 0 |
+| Wire Europe/January toggles | §3 | 0 |
+| Live per-unit OVERALL during draft | §4.4 | 1 |
+| Reroll pips + progress bar | §4.1 | 1 |
+| Player-pool sort | §4.6 | 1 |
+| Move-a-player reposition | §4.3 | 1 |
+| Tap/Space to spin | §4.5 | 1 |
+| Pre-filtered "no dead spin" | §2 | 1 |
+| Top-6/Top-10 odds bands | §4 | 1 |
+| Continuous season feed + skip | §5a | 2 |
+| **January Transfer Window** | §5b | 3 |
+| Two-half sim split (enables January) | §5b | 3 |
+| Auto-generated season narrative | §6b | 4 |
+| Playmaker + Golden Glove awards | §6e | 4 |
+| Manager stat card | §6f | 4 |
+| Season totals / full log / squad tiers | §6a,d, §9 | 4 |
+| Two-way share (season + January) | §6g | 4 |
+| Trophies / records / history | §7b, §6g | 5 |
+| End-of-season guest prompt | §6g | 5 |
+| Leaderboard (global, filtered, verified) | §9 | 6 |
+| One-Club XI + club trophies + per-club boards | §7b | 7 |
+| Daily Challenge + completion odds | §7c | 8 |
+| Async Leagues multiplayer | §7e | 9a |
+| Live Draft multiplayer | §7e | 9b |
+| Nations Trophy | §7d | 10 |
+| Content/SEO pages | static pages | 10 |
+| True multi-league Europe (top-5 upgrade) | §4 top-5 note | 10 (stretch) |
+
+---
+
+## 17. Sequencing summary & effort shape
+
+- **Phases 0–5 = "make the solo game exactly like 38-0, on top-5."** This is the core ask and the bulk of the value. Phase 3 (January) and Phase 4 (narrative) are the two headline new experiences; Phase 3 carries the only real engine-pipeline change (two-half simulation).
+- **Phases 6–8** are each self-contained, mostly reusing Phase-1 draft components + Phase-5 persistence — parallelizable once the core is done.
+- **Phase 9b (Live Draft)** is the single biggest lift (realtime infra) — isolate it.
+- **Phase 10** is breadth/polish + the one place we can *exceed* 38-0 (true multi-league Europe, richer Nations/Daily on five leagues).
+
+**Biggest risks to flag now**
+1. **Two-half simulation split** (Phase 3) touches the worker's batch pipeline — the one place CLAUDE.md warns about performance regressions. Budget for re-measuring the 380-fixture season timing.
+2. **Dataset depth** (Phase 0): our top-5 data is 2012-2024; 38-0's "feel" comes from 34 seasons. If "All-time" feels thin, the ETL era extension is a prerequisite for the mode to land as well as 38-0's.
+3. **Narrative quality** (Phase 4): the template bank is what makes or breaks the "so much better" feeling — invest in breadth of phrasing, keyed carefully to signals.
+
+---
+
+## 18. Live verification pass (2026-07-22) — Phases 0–2 confirmed working against the real stack
+
+After Phases 0–2 landed (all unit/integration tests green, full monorepo typecheck clean), a full live pass was run against the real running stack — API (NestJS) + sim-worker (BullMQ) + the actual remote Neon Postgres + local Redis — not just mocked tests. Two methods were used:
+
+**Method A — direct HTTP calls against the real API** (the more decisive check, since it exercises real DB writes/reads and a real BullMQ job, none of which the mocked unit tests touch):
+1. `POST /auth/guest` → real JWT.
+2. `POST /worlds` with `settings: { europeanNights: false, januaryWindow: true }` → **the response round-tripped those exact values from a real Postgres write** (`{"settings":{"januaryWindow":true,"europeanNights":false}}`), and a follow-up `GET /worlds/:id` confirmed the read path too. This is the decisive proof that Phase 0's `World.settings` migration + wiring works end-to-end, not just in a mocked test.
+3. `POST /worlds/:id/draft/fantasy` with `"formation": "4-1-2-1-2"` and 11 real Manchester City 2023/24 player-season ids (Rodri, Foden, Haaland, Gvardiol, Álvarez, Akanji, Bernardo Silva, Aké, Ederson, Dias, De Bruyne) → **the real backend's `buildLineup()` correctly filled all 11 slots** in exactly the position order coded in Phase 0 (GK/LB/CB/CB/RB/CDM/CM/CM/CAM/ST/ST) — proof the new formation is recognized end-to-end through the real domain-schema validation, not just in `lineup.test.ts`.
+4. `POST /worlds/:id/seasons` (leagueId=Premier League) → AI-filled a real 20-club, 380-fixture season.
+5. `POST .../simulate` → real BullMQ job, watched complete via the sim-worker's own log ("Season sim job N ... completed") and by polling `GET .../seasons/:id` until `COMPLETED` — took well under a minute for 380 fixtures, consistent with CLAUDE.md's documented ~60-90s figure.
+6. `GET .../matches` → real match/goal data, e.g. `{"scorerName":"Tyrick Mitchell","assistName":"Ismaïla Sarr", ...}` — confirmed 353/380 fixtures had at least one goal (a realistic distribution), and our own club's 38 fixtures produced a sane record (13W-10D-15L, 49pts) that matched `GET .../standings` exactly.
+7. `GET .../europe/status` → correctly reported `qualified:false` (13th place, need top 8) — confirming the backend computes real qualification status unconditionally, and Phase 0's `europeanNights` gate is (by design) a frontend-only decision not to call/show it, not a backend behavior change.
+
+**Method B — the actual React frontend in a live browser**, using the results from Method A (set `futbol_token`/`futbol_user`/`futbol_world_id` into `localStorage` to attach the browser tab to that same real world, sidestepping a UI limitation described below):
+- Loading `/season` and clicking "Simulate Season" (which created and simulated a **second** season for the same world/competition) drove the **real, unmocked Phase 2 `MatchPopupReel` rewrite** through its full reveal — confirmed newest-first accumulation (`GW32` at the top counting down to `GW1`), the exact card format (W/D/L badge, `GW<n> Opponent (H/A)`, own-goals-only scorer line, score), and a correct live stat strip (`9 WON / 10 DRAWN / 13 LOST / 37 PTS`, `GF 32 · GA 46 · GD -14` at the 32/38 mark) — with real scorers (Kevin De Bruyne, Bernardo Silva, Rúben Dias, Julián Álvarez, Nathan Aké, Erling Haaland) and real AI-filled opponents (Nottingham Forest, West Ham, Liverpool, Everton, ...).
+- The pipeline then ran unattended all the way to the **stats hub** — final standings table, season-totals strip, top-scorer/top-assist awards, per-player G/A table, and the full `MatchLog` (also refactored in Phase 2 to share `summarizeForClub`) — all rendering correctly with zero console errors the entire time.
+
+**A real environment limitation was found and worked around, not an app bug**: this Browser pane's tab reports `document.hidden = true` / `visibilityState: "hidden"` to the page — i.e. the browser engine treats it as a backgrounded tab for automation purposes. Real browsers throttle `requestAnimationFrame` and slow down `setTimeout`/`setInterval` in backgrounded tabs (a standard power-saving behavior). Two concrete symptoms traced to this:
+1. `App.tsx`'s route-transition wrapper (`<AnimatePresence mode="wait">` keyed on `location.pathname`, wrapping `<Routes>`) never completes its exit animation in this environment, so a client-side `navigate()` between top-level pages (e.g. Setup → Draft) updates the URL (history API, unaffected) but the new page's DOM never mounts — it sits frozen on the outgoing page indefinitely. **This blocked clicking through Setup → Draft → Season directly in the browser** and is why Method A (direct API calls) was used for the deep pipeline checks, with Method B entered directly at `/season` via a hard load + localStorage to bypass the stuck cross-page transition (in-page phase changes within `SeasonPage` are plain conditional renders, not gated by this wrapper, so they animated/updated fine once reached).
+2. The BullMQ-completion poll and the reveal's per-card hold timers both run noticeably slower in real wall-clock time than their configured intervals while the tab is "hidden," due to the same background-tab timer throttling — expect real waits, not the configured `intervalMs`, when live-testing this app's animated flows in an automated/headless browser context.
+
+**Takeaway for future sessions**: this is a testing-environment quirk, not a product bug — a real user's focused, visible tab is never "hidden" and would see normal-speed transitions. If a future session needs to live-browser-test a route transition specifically (not just in-page state), expect this same freeze and either (a) test via direct hard-loads per page + localStorage token/world-id injection (as done here), or (b) accept the automated test suite's coverage (which uses jsdom, where `requestAnimationFrame` is never throttled) as the reliable source of truth for transition-animation correctness, and use live-browser passes only for in-page behavior and real-backend integration.
+
+Also cleaned up after this pass: the two dev-server background processes started for testing (API on port 4000, sim-worker) were stopped; the guest test user/world/seasons created during this pass were left in the dev database (harmless test data, not worth a destructive cleanup step).
+
+---
+
+## 19. Immediate next step
+
+Phases 0, 1, and 2 are complete, tested (automated + live), and ready to commit. Start **Phase 3 — the January Transfer Window** next: the flagship new mechanic, and the one phase in this plan with a genuine engine-pipeline change (splitting domestic season simulation into two halves around the halfway pause, so a January transfer can actually affect second-half results — see §8's design note on this). Read §8 in full before starting; it's the most architecturally involved phase after the foundational work.

@@ -68,4 +68,15 @@ describe("buildLineup", () => {
   it("throws for an unknown formation", () => {
     expect(() => buildLineup("2-2-2" as never, [])).toThrow();
   });
+
+  it.each(["4-1-2-1-2", "4-2-2-2"] as const)("fills all 11 slots for %s", (formation) => {
+    const slots = positionsForFormation(formation);
+    expect(slots).toHaveLength(11);
+    const pool: DraftCandidate[] = slots.map((pos, i) => candidate(`p${i}`, [pos], 50 + i));
+    const lineup = buildLineup(formation, pool);
+    expect(lineup.starters).toHaveLength(11);
+    for (let i = 0; i < slots.length; i++) {
+      expect(lineup.starters[i]?.position).toBe(slots[i]);
+    }
+  });
 });

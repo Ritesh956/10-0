@@ -111,8 +111,8 @@ export const api = {
 
   rollManager: () => request<ManagerDto>("/catalog/roll-manager"),
 
-  createWorld: (eraId: string) =>
-    request<WorldDto>("/worlds", { method: "POST", body: JSON.stringify({ eraId, type: "SINGLE" }) }),
+  createWorld: (eraId: string, settings?: { europeanNights: boolean; januaryWindow: boolean }) =>
+    request<WorldDto>("/worlds", { method: "POST", body: JSON.stringify({ eraId, type: "SINGLE", settings }) }),
 
   listWorlds: () => request<WorldDto[]>("/worlds"),
 

@@ -12,6 +12,8 @@ export const formation = z.enum([
   "4-1-4-1",
   "4-4-1-1",
   "3-4-2-1",
+  "4-1-2-1-2",
+  "4-2-2-2",
 ]);
 export type Formation = z.infer<typeof formation>;
 

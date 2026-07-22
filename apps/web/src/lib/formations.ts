@@ -113,6 +113,8 @@ export const FORMATIONS = [
   "4-1-4-1",
   "4-4-1-1",
   "3-4-2-1",
+  "4-1-2-1-2",
+  "4-2-2-2",
 ] as const;
 
 export type Formation = (typeof FORMATIONS)[number];
@@ -128,6 +130,8 @@ export const FORMATION_POSITIONS: Record<Formation, Position[]> = {
   "4-1-4-1": ["GK", "LB", "CB", "CB", "RB", "CDM", "LM", "CM", "CM", "RM", "ST"],
   "4-4-1-1": ["GK", "LB", "CB", "CB", "RB", "LM", "CM", "CM", "RM", "CAM", "ST"],
   "3-4-2-1": ["GK", "CB", "CB", "CB", "LM", "CM", "CM", "RM", "CAM", "CAM", "ST"],
+  "4-1-2-1-2": ["GK", "LB", "CB", "CB", "RB", "CDM", "CM", "CM", "CAM", "ST", "ST"],
+  "4-2-2-2": ["GK", "LB", "CB", "CB", "RB", "CDM", "CDM", "LM", "RM", "ST", "ST"],
 };
 
 export const FORMATION_DESCRIPTIONS: Record<Formation, string> = {
@@ -141,6 +145,8 @@ export const FORMATION_DESCRIPTIONS: Record<Formation, string> = {
   "4-1-4-1": "Disciplined shape. A holding midfielder shields the back four.",
   "4-4-1-1": "Two strikers, staggered. One drops deep to link play.",
   "3-4-2-1": "Narrow and creative. Two number tens support a lone striker.",
+  "4-1-2-1-2": "Narrow diamond. A lone holder and a number ten thread the ball to a strike partnership.",
+  "4-2-2-2": "Box-shaped and direct. A double pivot protects the back four, feeding two strikers through the inside channels.",
 };
 
 /** Hand-tuned pitch coordinates per formation, same length/order as FORMATION_POSITIONS[formation]. */
@@ -274,6 +280,32 @@ const FORMATION_COORDS: Record<Formation, Array<{ x: number; y: number }>> = {
     { x: 38, y: 30 },
     { x: 62, y: 30 },
     { x: 50, y: 14 },
+  ],
+  "4-1-2-1-2": [
+    { x: 50, y: 93 },
+    { x: 15, y: 74 },
+    { x: 38, y: 76 },
+    { x: 62, y: 76 },
+    { x: 85, y: 74 },
+    { x: 50, y: 60 },
+    { x: 35, y: 46 },
+    { x: 65, y: 46 },
+    { x: 50, y: 30 },
+    { x: 38, y: 14 },
+    { x: 62, y: 14 },
+  ],
+  "4-2-2-2": [
+    { x: 50, y: 93 },
+    { x: 15, y: 74 },
+    { x: 38, y: 76 },
+    { x: 62, y: 76 },
+    { x: 85, y: 74 },
+    { x: 38, y: 56 },
+    { x: 62, y: 56 },
+    { x: 15, y: 34 },
+    { x: 85, y: 34 },
+    { x: 38, y: 14 },
+    { x: 62, y: 14 },
   ],
 };
 

@@ -1,139 +1,105 @@
-import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, animate, motion } from "framer-motion";
-import type { MatchGoalDto, MatchSummaryDto, WorldClubDto } from "../api/types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion";
+import type { MatchSummaryDto, WorldClubDto } from "../api/types";
 import { Button } from "./ui/Button";
 import { SPRING_SMOOTH } from "../lib/motion";
+import { accumulateRecord, summarizeForClub, type ClubRecord } from "../lib/matchResult";
+import { RESULT_BADGE, RESULT_ROW } from "./MatchLog";
 
 interface Props {
   matches: MatchSummaryDto[];
   clubs: WorldClubDto[];
-  /** Minimum milliseconds each match popup stays on screen before auto-advancing. */
+  userClubId: string | undefined;
+  /** Minimum milliseconds each revealed card stays up before the next one appears. */
   intervalMs?: number;
   onComplete: () => void;
 }
 
-const ENTER_MS = 250;
-const GOAL_STAGGER_MS = 130;
-const SETTLE_BUFFER_MS = 500;
-const SCORE_COUNT_MS = 550;
+/** Extra hold time per goal the user's club scored in the just-revealed match, so a big win's
+    card doesn't fly past before it's actually readable. */
+const GOAL_HOLD_BONUS_MS = 220;
 
 const cardVariants = {
-  initial: { opacity: 0, scale: 0.94, y: 10 },
-  animate: { opacity: 1, scale: 1, y: 0, transition: SPRING_SMOOTH },
-  exit: { opacity: 0, scale: 0.97, y: -8, transition: { duration: 0.18 } },
+  initial: { opacity: 0, y: -14, scale: 0.97 },
+  animate: { opacity: 1, y: 0, scale: 1, transition: SPRING_SMOOTH },
 };
 
-const goalListVariants = {
-  animate: { transition: { staggerChildren: GOAL_STAGGER_MS / 1000 } },
-};
-
-const goalItemVariants = {
-  initial: { opacity: 0, y: 4 },
-  animate: { opacity: 1, y: 0 },
-};
-
-/** Ticks two scores up from 0 to their final values over SCORE_COUNT_MS, resetting on each match. */
-function useScoreCountUp(homeScore: number, awayScore: number, key: string) {
-  const [display, setDisplay] = useState({ home: 0, away: 0 });
-
-  useEffect(() => {
-    setDisplay({ home: 0, away: 0 });
-    const controls = animate(0, 1, {
-      duration: SCORE_COUNT_MS / 1000,
-      ease: "easeOut",
-      onUpdate: (t) => {
-        setDisplay({ home: Math.round(t * homeScore), away: Math.round(t * awayScore) });
-      },
-    });
-    return () => controls.stop();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
-
-  return display;
-}
-
-function GoalList({ goals, align }: { goals: MatchGoalDto[]; align: "left" | "right" }) {
+function FeedCard({ clubId, match, nameFor }: { clubId: string; match: MatchSummaryDto; nameFor: (id: string) => string }) {
+  const row = summarizeForClub(match, clubId);
   return (
     <motion.div
-      variants={goalListVariants}
+      layout
+      variants={cardVariants}
       initial="initial"
       animate="animate"
-      className={`space-y-1 ${align === "right" ? "text-right" : "text-left"}`}
+      className={`notch-sm flex items-center gap-3 border p-3 ${RESULT_ROW[row.result]}`}
     >
-      {goals.map((goal, i) => (
-        <motion.p key={i} variants={goalItemVariants}>
-          &#9917; {goal.scorerName} {goal.minute}&apos;{goal.assistName ? ` (${goal.assistName})` : ""}
-        </motion.p>
-      ))}
+      <span
+        className={`notch-sm flex h-7 w-7 shrink-0 items-center justify-center border font-display text-xs font-bold ${RESULT_BADGE[row.result]}`}
+      >
+        {row.result}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-paper">
+          <span className="text-smoke-600">GW{match.matchday}</span> {nameFor(row.opponentId)}{" "}
+          <span className="text-smoke-600">({row.isHome ? "H" : "A"})</span>
+        </p>
+        {row.yourGoals.length > 0 && (
+          <p className="truncate text-xs text-smoke-500">
+            &#9917; {row.yourGoals.map((g) => `${g.scorerName} ${g.minute}'`).join(", ")}
+          </p>
+        )}
+      </div>
+      <span className="shrink-0 font-display text-lg font-bold text-paper">
+        {row.yourScore}-{row.theirScore}
+      </span>
     </motion.div>
   );
 }
 
-/** forwardRef is required here — AnimatePresence attaches a ref directly to whatever
-    element sits inside it to track when the exit animation actually finishes; a plain
-    function component silently swallows that ref (React warns, and exit-completion never fires). */
-const MatchCard = forwardRef<HTMLDivElement, { match: MatchSummaryDto; nameFor: (clubId: string) => string }>(
-  function MatchCard({ match, nameFor }, ref) {
-    const homeGoals = match.goals.filter((g) => g.clubId === match.homeClubId).sort((a, b) => a.minute - b.minute);
-    const awayGoals = match.goals.filter((g) => g.clubId === match.awayClubId).sort((a, b) => a.minute - b.minute);
-    const score = useScoreCountUp(match.homeScore, match.awayScore, match.fixtureId);
+/** The running W/D/L/Pts/GD line that accumulates alongside the feed as matches reveal, instead
+    of only being knowable once the whole replay finishes. */
+function StatStrip({ record }: { record: ClubRecord }) {
+  const gd = record.goalsFor - record.goalsAgainst;
+  return (
+    <div className="notch grid grid-cols-4 gap-2 border border-ink-800 bg-ink-900/50 p-3 text-center">
+      <div>
+        <p className="font-display text-lg font-bold text-teal-400">{record.won}</p>
+        <p className="text-[10px] uppercase tracking-wide text-smoke-600">Won</p>
+      </div>
+      <div>
+        <p className="font-display text-lg font-bold text-paper">{record.drawn}</p>
+        <p className="text-[10px] uppercase tracking-wide text-smoke-600">Drawn</p>
+      </div>
+      <div>
+        <p className="font-display text-lg font-bold text-crimson-400">{record.lost}</p>
+        <p className="text-[10px] uppercase tracking-wide text-smoke-600">Lost</p>
+      </div>
+      <div>
+        <p className="font-display text-lg font-bold text-mint-400">{record.points}</p>
+        <p className="text-[10px] uppercase tracking-wide text-smoke-600">Pts</p>
+      </div>
+      <div className="col-span-4 border-t border-ink-800 pt-2 text-xs text-smoke-500">
+        GF {record.goalsFor} &middot; GA {record.goalsAgainst} &middot; GD {gd >= 0 ? "+" : ""}
+        {gd}
+      </div>
+    </div>
+  );
+}
 
-    return (
-      <motion.div
-        ref={ref}
-        variants={cardVariants}
-        initial="initial"
-        animate="animate"
-        exit="exit"
-        className="notch mx-auto max-w-sm border border-ink-800 bg-ink-900/70 p-6"
-      >
-        <div className="flex items-center justify-center gap-3">
-          <span className="min-w-0 flex-1 truncate text-right font-display text-lg font-bold uppercase tracking-tight text-paper">
-            {nameFor(match.homeClubId)}
-          </span>
-          <span className="notch-sm shrink-0 border border-mint-500/40 bg-mint-500/10 px-3 py-1 font-display text-xl font-bold text-mint-400">
-            {score.home}-{score.away}
-          </span>
-          <span className="min-w-0 flex-1 truncate text-left font-display text-lg font-bold uppercase tracking-tight text-paper">
-            {nameFor(match.awayClubId)}
-          </span>
-        </div>
-
-        {match.goals.length > 0 && (
-          <div className="mt-4 grid grid-cols-2 gap-4 text-xs text-smoke-400">
-            <GoalList goals={homeGoals} align="right" />
-            <GoalList goals={awayGoals} align="left" />
-          </div>
-        )}
-      </motion.div>
-    );
-  },
-);
-
-/** Plays a season's matches one at a time, like watching results roll in, instead of dumping the table. */
-export function MatchPopupReel({ matches, clubs, intervalMs = 1500, onComplete }: Props) {
-  const [index, setIndex] = useState(0);
+/** Streams a season's matches into a continuous, accumulating "results are rolling in" feed —
+    newest card on top, exactly like watching a live scores ticker — instead of the one-at-a-time
+    popup this replaced (which showed a single card, fully replacing it with the next). A running
+    W/D/L/Pts/GD strip builds up alongside it, so the story of the run is legible as it goes rather
+    than only knowable once every match has revealed. */
+export function MatchPopupReel({ matches, clubs, userClubId, intervalMs = 1200, onComplete }: Props) {
   const nameFor = (clubId: string) => clubs.find((c) => c.id === clubId)?.name ?? clubId;
 
-  const match = index < matches.length ? matches[index] : undefined;
-
-  // Give goal-heavy matches enough time to actually read the staggered reveal, instead of a fixed
-  // interval that either rushes a 5-goal match or leaves a scoreless one sitting idle.
-  const holdMs = useMemo(() => {
-    if (!match) return intervalMs;
-    const goalTime = ENTER_MS + match.goals.length * GOAL_STAGGER_MS + SETTLE_BUFFER_MS;
-    return Math.max(intervalMs, SCORE_COUNT_MS + goalTime);
-  }, [match, intervalMs]);
-
-  // "ending": ran out of matches naturally — wait for the last card's exit transition before
-  // calling onComplete. "skipped": the user bailed — call onComplete immediately, don't make
-  // them wait for any animation, and just let the exit play out visually in the background.
-  const [phase, setPhase] = useState<"playing" | "ending" | "skipped">("playing");
-  // AnimatePresence's onExitComplete fires after EVERY card-to-card exit, not just the final
-  // one — and by the time it actually calls back, the closure it captured can be stale relative
-  // to the current phase, so the check needs a ref that's always current, not `phase` directly.
-  const phaseRef = useRef(phase);
-  phaseRef.current = phase;
+  // The first card appears immediately (computed as the initial state, not via an effect) —
+  // otherwise the feed would sit blank for a render pass before anything shows up. Every
+  // subsequent card waits out a hold timer instead.
+  const [revealedCount, setRevealedCount] = useState(() => (matches.length > 0 ? 1 : 0));
+  const [skipped, setSkipped] = useState(false);
   const completedRef = useRef(false);
 
   function fireOnce() {
@@ -143,44 +109,54 @@ export function MatchPopupReel({ matches, clubs, intervalMs = 1500, onComplete }
   }
 
   useEffect(() => {
-    if (phase !== "playing") return;
-    if (!match) {
-      setPhase("ending");
-      // Nothing was ever rendered, so AnimatePresence has nothing to exit — its
-      // onExitComplete will never fire, so don't wait on it.
-      if (matches.length === 0) fireOnce();
+    if (skipped) return;
+    if (revealedCount >= matches.length) {
+      fireOnce();
       return;
     }
-    const timer = setTimeout(() => setIndex((i) => i + 1), holdMs);
+    const justRevealed = matches[revealedCount - 1]!;
+    const goalCount = userClubId ? summarizeForClub(justRevealed, userClubId).yourGoals.length : 0;
+    const holdMs = intervalMs + goalCount * GOAL_HOLD_BONUS_MS;
+    const timer = setTimeout(() => setRevealedCount((n) => n + 1), holdMs);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [match, holdMs, phase]);
+  }, [revealedCount, matches, skipped, intervalMs]);
 
   function handleSkip() {
-    setPhase("skipped");
+    setSkipped(true);
     fireOnce();
   }
 
-  function handleExitComplete() {
-    if (phaseRef.current === "ending") fireOnce();
-  }
+  const revealed = matches.slice(0, revealedCount);
+  const record = useMemo(
+    () => (userClubId ? accumulateRecord(revealed, userClubId) : null),
+    [revealed, userClubId],
+  );
+
+  if (!userClubId) return null; // nothing to summarize a "your results" feed against
 
   return (
-    <div className="space-y-4 text-center">
-      {phase === "playing" && match && (
-        <p className="text-xs font-semibold uppercase tracking-widest text-smoke-600">
-          Matchday {match.matchday} &middot; {index + 1} / {matches.length}
+    <div className="space-y-4">
+      {revealed.length > 0 && (
+        <p className="text-center text-xs font-semibold uppercase tracking-widest text-smoke-600">
+          Matchday {revealed[revealed.length - 1]!.matchday} &middot; {revealed.length} / {matches.length}
         </p>
       )}
 
-      <AnimatePresence mode="wait" onExitComplete={handleExitComplete}>
-        {phase === "playing" && match && <MatchCard key={match.fixtureId} match={match} nameFor={nameFor} />}
-      </AnimatePresence>
+      <div className="max-h-96 space-y-2 overflow-y-auto scrollbar-thin pr-1">
+        {[...revealed].reverse().map((match) => (
+          <FeedCard key={match.fixtureId} clubId={userClubId} match={match} nameFor={nameFor} />
+        ))}
+      </div>
 
-      {phase === "playing" && (
-        <Button variant="ghost" size="sm" onClick={handleSkip}>
-          Skip ahead &rarr;
-        </Button>
+      {record && <StatStrip record={record} />}
+
+      {!skipped && revealedCount < matches.length && (
+        <div className="text-center">
+          <Button variant="ghost" size="sm" onClick={handleSkip}>
+            Skip ahead &rarr;
+          </Button>
+        </div>
       )}
     </div>
   );

@@ -75,6 +75,8 @@ export interface PreseasonOdds {
   expectedPoints: number;
   winPct: number;
   top4Pct: number;
+  top6Pct: number;
+  top10Pct: number;
   relegationPct: number;
   projectedFinish: number;
 }
@@ -107,6 +109,11 @@ export function computePreseasonOdds(overallRating: number): PreseasonOdds {
     expectedPoints: Math.round(ppg * matches),
     winPct: Math.max(1, Math.min(95, Math.round(rankCdf(1) * 100))),
     top4Pct: Math.max(1, Math.min(99, Math.round(rankCdf(4) * 100))),
+    // top6/top10 read off the same continuous rank distribution as win/top4/relegation — rankCdf
+    // is monotonically increasing in its threshold, so win <= top4 <= top6 <= top10 falls out for
+    // free rather than needing separately hand-tuned curves that could disagree with each other.
+    top6Pct: Math.max(1, Math.min(99, Math.round(rankCdf(6) * 100))),
+    top10Pct: Math.max(1, Math.min(99, Math.round(rankCdf(10) * 100))),
     relegationPct: Math.max(0, Math.min(90, Math.round((1 - rankCdf(seasonSize - 3)) * 100))),
     projectedFinish: Math.max(1, Math.min(seasonSize, Math.round(meanRank))),
   };
@@ -126,6 +133,24 @@ function sortPlayers(list: PlayerSeasonDto[], mode: SortMode): PlayerSeasonDto[]
     copy.sort((a, b) => surname(a.player.name).localeCompare(surname(b.player.name)));
   }
   return copy;
+}
+
+/** Same visual language as RatingBar, but renders "–" with an empty track for a unit that has no
+    drafted player yet — the live per-unit readout otherwise misreads a still-empty position group
+    as a genuine rating of 0 while the draft is still in progress. */
+function RatingBarOrEmpty({ label, value, colorClass }: { label: string; value: number | null; colorClass: string }) {
+  if (value === null) {
+    return (
+      <div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-smoke-500">{label}</span>
+          <span className="font-display font-bold text-ink-600">&ndash;</span>
+        </div>
+        <div className="mt-1 h-1.5 w-full bg-ink-800" />
+      </div>
+    );
+  }
+  return <RatingBar label={label} value={value} colorClass={colorClass} />;
 }
 
 function OddsBar({ label, pct, colorClass }: { label: string; pct: number; colorClass: string }) {
@@ -157,6 +182,7 @@ export function DraftPage() {
     removePick,
     resetDraft,
     rerollsRemaining,
+    rerollsUsed,
     useReroll,
     squadName,
     setSquadName,
@@ -419,7 +445,10 @@ export function DraftPage() {
     setConfirming(true);
     setError(null);
     try {
-      const world = await api.createWorld(config.eraId);
+      const world = await api.createWorld(config.eraId, {
+        europeanNights: config.europeanNights,
+        januaryWindow: config.januaryWindow,
+      });
       setWorldId(world.id);
       const refPlayerSeasonIds = slots.map((_, i) => picks[i]?.id).filter((id): id is string => Boolean(id));
       await api.draftFantasy(world.id, effectiveSquadName, config.formation, refPlayerSeasonIds, managerPick?.id);
@@ -556,6 +585,16 @@ export function DraftPage() {
           <div className="notch-sm border-2 border-plum-500/25 bg-ink-900/40 px-3 py-2">
             <dt className="text-[10px] uppercase tracking-wide text-smoke-600">Redraws</dt>
             <dd className="font-display text-lg font-bold text-plum-400">{rerollsRemaining}</dd>
+            {rerollsRemaining + rerollsUsed > 0 && (
+              <div className="mt-1 flex gap-1">
+                {Array.from({ length: rerollsRemaining + rerollsUsed }, (_, i) => (
+                  <span
+                    key={i}
+                    className={`h-1.5 w-1.5 rounded-full ${i < rerollsRemaining ? "bg-plum-400" : "bg-ink-700"}`}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </dl>
       </div>
@@ -611,16 +650,16 @@ export function DraftPage() {
             </span>
           </div>
 
-          {allFilled && config.showRatings && (
+          {filledCount > 0 && config.showRatings && (
             <div className="notch mt-4 space-y-3 border border-ink-800 bg-ink-900/50 p-4">
               <div>
                 <p className="text-xs uppercase tracking-widest text-smoke-600">Overall</p>
                 <p className="font-display text-3xl font-bold text-paper">{overallRating}</p>
               </div>
-              <RatingBar label="Attack" value={squadRatings.attack} colorClass="bg-crimson-400" />
-              <RatingBar label="Midfield" value={squadRatings.midfield} colorClass="bg-teal-400" />
-              <RatingBar label="Defence" value={squadRatings.defence} colorClass="bg-mint-400" />
-              <RatingBar label="Goalkeeping" value={squadRatings.gk} colorClass="bg-plum-400" />
+              <RatingBarOrEmpty label="Attack" value={groupOveralls.ATT.length ? squadRatings.attack : null} colorClass="bg-crimson-400" />
+              <RatingBarOrEmpty label="Midfield" value={groupOveralls.MID.length ? squadRatings.midfield : null} colorClass="bg-teal-400" />
+              <RatingBarOrEmpty label="Defence" value={groupOveralls.DEF.length ? squadRatings.defence : null} colorClass="bg-mint-400" />
+              <RatingBarOrEmpty label="Goalkeeping" value={groupOveralls.GK.length ? squadRatings.gk : null} colorClass="bg-plum-400" />
             </div>
           )}
         </div>
@@ -751,8 +790,10 @@ export function DraftPage() {
                     </div>
                   </div>
                   <div className="space-y-2 border-t border-ink-800 pt-3">
-                    <OddsBar label="Win the league" pct={odds.winPct} colorClass="bg-mint-400" />
-                    <OddsBar label="Top 4 (Europe)" pct={odds.top4Pct} colorClass="bg-teal-400" />
+                    <OddsBar label="Win the league" pct={odds.winPct} colorClass="bg-amber-400" />
+                    <OddsBar label="Top 4 (Europe)" pct={odds.top4Pct} colorClass="bg-mint-400" />
+                    <OddsBar label="Top 6" pct={odds.top6Pct} colorClass="bg-teal-400" />
+                    <OddsBar label="Top 10" pct={odds.top10Pct} colorClass="bg-plum-400" />
                     <OddsBar label="Relegation" pct={odds.relegationPct} colorClass="bg-crimson-400" />
                   </div>
                   <p className="text-xs text-ink-600">

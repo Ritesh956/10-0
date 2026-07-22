@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import type { MatchSummaryDto, WorldClubDto } from "../api/types";
 import { staggerContainer, staggerItem } from "../lib/motion";
+import { summarizeForClub, type MatchResult } from "../lib/matchResult";
 
 interface Props {
   matches: MatchSummaryDto[];
@@ -8,15 +9,13 @@ interface Props {
   userClubId?: string | undefined;
 }
 
-type Result = "W" | "D" | "L";
-
-const RESULT_BADGE: Record<Result, string> = {
+export const RESULT_BADGE: Record<MatchResult, string> = {
   W: "border-teal-500/50 bg-teal-500/15 text-teal-300",
   D: "border-ink-600 bg-ink-800 text-smoke-400",
   L: "border-crimson-500/50 bg-crimson-500/15 text-crimson-300",
 };
 
-const RESULT_ROW: Record<Result, string> = {
+export const RESULT_ROW: Record<MatchResult, string> = {
   W: "border-teal-500/20 bg-teal-500/5",
   D: "border-ink-700 bg-ink-900/40",
   L: "border-crimson-500/20 bg-crimson-500/5",
@@ -24,22 +23,14 @@ const RESULT_ROW: Record<Result, string> = {
 
 /** Persistent, scrollable "your results" feed — most recent first — with a colored W/D/L badge
     and goalscorers per match, so a finished run's story stays browsable from the stats hub instead
-    of only ever being visible once during the one-shot animated MatchPopupReel. */
+    of only ever being visible once during the one-shot animated season reveal. */
 export function MatchLog({ matches, clubs, userClubId }: Props) {
   const nameFor = (clubId: string) => clubs.find((c) => c.id === clubId)?.name ?? clubId;
 
   if (!userClubId || matches.length === 0) return null;
 
   const rows = matches
-    .map((match) => {
-      const isHome = match.homeClubId === userClubId;
-      const opponentId = isHome ? match.awayClubId : match.homeClubId;
-      const yourScore = isHome ? match.homeScore : match.awayScore;
-      const theirScore = isHome ? match.awayScore : match.homeScore;
-      const result: Result = yourScore > theirScore ? "W" : yourScore < theirScore ? "L" : "D";
-      const yourGoals = match.goals.filter((g) => g.clubId === userClubId).sort((a, b) => a.minute - b.minute);
-      return { match, isHome, opponentId, yourScore, theirScore, result, yourGoals };
-    })
+    .map((match) => summarizeForClub(match, userClubId))
     .sort((a, b) => b.match.matchday - a.match.matchday);
 
   return (

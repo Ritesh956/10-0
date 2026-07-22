@@ -66,9 +66,16 @@ export function DrawReel({
   return (
     <div className="mx-auto max-w-sm space-y-5 text-center">
       <div
+        data-testid="draw-reel-box"
         className={`notch relative border-2 bg-ink-900/70 p-5 transition-colors ${
           spinning ? "border-mint-500/60" : "border-ink-700"
-        }`}
+        } ${!disabled && !spinning ? "cursor-pointer" : ""}`}
+        // A separate tap target from the "Make the Draw" button below, not a wrapper around it —
+        // wrapping the button too would double-fire onSpin from both the button's own click and
+        // this div's click bubbling up to it on the same interaction.
+        onClick={() => {
+          if (!disabled && !spinning) onSpin();
+        }}
       >
         {spinning && <span aria-hidden className="absolute inset-0 animate-mint-pulse bg-mint-500/5" />}
 
@@ -103,7 +110,7 @@ export function DrawReel({
           {spinning ? "Drawing..." : "Make the Draw"}
         </Button>
       </div>
-      <p className="text-xs text-ink-600">shortcut: space bar</p>
+      <p className="text-xs text-ink-600">or tap the reel, or press space</p>
     </div>
   );
 }

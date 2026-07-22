@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canPlayPosition } from "./formations";
+import { canPlayPosition, FORMATIONS, FORMATION_POSITIONS, slotsForFormation } from "./formations";
 
 describe("canPlayPosition — defensive versatility", () => {
   it("a CB can also cover LB and RB", () => {
@@ -25,5 +25,32 @@ describe("canPlayPosition — defensive versatility", () => {
   it("a CB is still not eligible for midfield/attack positions", () => {
     expect(canPlayPosition(["CB"], "CM")).toBe(false);
     expect(canPlayPosition(["CB"], "ST")).toBe(false);
+  });
+});
+
+describe("formation coverage", () => {
+  it("every formation has exactly 11 positions", () => {
+    for (const formation of FORMATIONS) {
+      expect(FORMATION_POSITIONS[formation]).toHaveLength(11);
+    }
+  });
+
+  it("every formation has exactly one GK", () => {
+    for (const formation of FORMATIONS) {
+      const gkCount = FORMATION_POSITIONS[formation].filter((p) => p === "GK").length;
+      expect(gkCount).toBe(1);
+    }
+  });
+
+  it.each(["4-1-2-1-2", "4-2-2-2"] as const)("%s produces 11 pitch-coordinate slots matching its position list", (formation) => {
+    const slots = slotsForFormation(formation);
+    expect(slots).toHaveLength(11);
+    expect(slots.map((s) => s.position)).toEqual(FORMATION_POSITIONS[formation]);
+    for (const slot of slots) {
+      expect(slot.x).toBeGreaterThanOrEqual(0);
+      expect(slot.x).toBeLessThanOrEqual(100);
+      expect(slot.y).toBeGreaterThanOrEqual(0);
+      expect(slot.y).toBeLessThanOrEqual(100);
+    }
   });
 });

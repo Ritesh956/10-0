@@ -209,6 +209,10 @@ model World {
   type      WorldType
   eraId     String
   status    WorldStatus @default(ACTIVE)
+  /// { europeanNights: boolean, januaryWindow: boolean } — the Setup "Advanced" toggles, previously
+  /// decided client-side (DraftContext) but never sent to the backend. A single Json blob rather than
+  /// two columns so future Setup toggles don't each need their own migration.
+  settings  Json?
   createdAt DateTime    @default(now())
 
   owner        User               @relation(fields: [ownerId], references: [id])

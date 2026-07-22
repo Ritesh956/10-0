@@ -122,6 +122,32 @@ describe("SeasonPage — qualification confetti wiring", () => {
     await waitFor(() => expect(api.getSummary).toHaveBeenCalled(), { timeout: 5000, interval: 50 });
     expect(fireQualificationBurst).not.toHaveBeenCalled();
   }, 15000);
+
+  it("skips Europe entirely when the world's europeanNights setting is off, even on a qualifying finish", async () => {
+    setup();
+    api.getWorld.mockResolvedValue({ ...world, settings: { europeanNights: false, januaryWindow: true } });
+    // If the gate didn't work, this qualifying status would drive the pipeline into Europe instead.
+    api.getEuropeStatus.mockResolvedValue({ qualified: true, position: 1, qualifierCount: 8, ties: [] });
+    api.getSummary.mockResolvedValue({ standings, unbeaten: false });
+
+    const { getByRole, findByText } = render(
+      <MemoryRouter>
+        <SeasonPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(api.getWorld).toHaveBeenCalled());
+    getByRole("button", { name: /simulate season/i }).click();
+
+    await findByText(/continue/i, {}, { timeout: 5000 });
+    getByRole("button", { name: /continue/i }).click();
+    await findByText(/continue/i, {}, { timeout: 5000 });
+    getByRole("button", { name: /continue/i }).click();
+
+    await waitFor(() => expect(api.getSummary).toHaveBeenCalled(), { timeout: 5000, interval: 50 });
+    expect(api.getEuropeStatus).not.toHaveBeenCalled();
+    expect(fireQualificationBurst).not.toHaveBeenCalled();
+  }, 15000);
 });
 
 describe("SeasonPage — one required Continue press carries the whole knockout stage through", () => {

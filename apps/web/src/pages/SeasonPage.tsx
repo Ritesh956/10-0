@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import type {
   CompetitionStatsDto,
   EuropeRoundDto,
+  EuropeStatusDto,
   KnockoutRound,
   KnockoutTieDto,
   MatchSummaryDto,
@@ -244,7 +245,13 @@ export function SeasonPage() {
     const leagueStats = await api.getCompetitionStats(wId, domesticSeason.competitionId);
     setLeagueCompetitionStats(leagueStats);
 
-    const status = await api.getEuropeStatus(wId, domesticSeasonId);
+    // The Setup "European Nights" toggle (default on) opts a world out of continental football
+    // entirely — "Off = just the league" — even for a qualifying finish. `settings` is null for
+    // worlds created before this toggle was wired, which defaults to the toggle's own on-by-default.
+    const europeanNightsEnabled = w.settings?.europeanNights ?? true;
+    const status: Pick<EuropeStatusDto, "qualified"> = europeanNightsEnabled
+      ? await api.getEuropeStatus(wId, domesticSeasonId)
+      : { qualified: false };
     setQualified(status.qualified);
 
     if (!status.qualified) {
@@ -425,7 +432,12 @@ export function SeasonPage() {
       )}
 
       {phase === "domestic-replay" && (
-        <MatchPopupReel matches={onlyMine(domesticMatches)} clubs={world.clubs} onComplete={() => replayResolveRef.current?.()} />
+        <MatchPopupReel
+          matches={onlyMine(domesticMatches)}
+          clubs={world.clubs}
+          userClubId={userClub?.id}
+          onComplete={() => replayResolveRef.current?.()}
+        />
       )}
 
       {phase === "domestic-standings" && standings && (
@@ -488,6 +500,7 @@ export function SeasonPage() {
           <MatchPopupReel
             matches={onlyMine(europeLeagueMatches)}
             clubs={world.clubs}
+            userClubId={userClub?.id}
             onComplete={() => replayResolveRef.current?.()}
           />
         </div>
@@ -512,7 +525,12 @@ export function SeasonPage() {
           <p className="text-center text-xs font-semibold uppercase tracking-widest text-smoke-600">
             Champions League &middot; {ROUND_LABEL[knockoutRound]}
           </p>
-          <MatchPopupReel matches={onlyMine(knockoutMatches)} clubs={world.clubs} onComplete={() => replayResolveRef.current?.()} />
+          <MatchPopupReel
+            matches={onlyMine(knockoutMatches)}
+            clubs={world.clubs}
+            userClubId={userClub?.id}
+            onComplete={() => replayResolveRef.current?.()}
+          />
         </div>
       )}
 

@@ -9,7 +9,7 @@ export class WorldsService {
 
   createWorld(userId: string, dto: CreateWorldDto) {
     return this.prisma.world.create({
-      data: { ownerId: userId, eraId: dto.eraId, type: dto.type },
+      data: { ownerId: userId, eraId: dto.eraId, type: dto.type, settings: dto.settings },
       include: { clubs: true },
     });
   }

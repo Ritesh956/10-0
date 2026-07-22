@@ -67,6 +67,11 @@ export interface WorldClubDto {
   refClubSeasonId: string | null;
 }
 
+export interface WorldSettingsDto {
+  europeanNights: boolean;
+  januaryWindow: boolean;
+}
+
 export interface WorldDto {
   id: string;
   ownerId: string;
@@ -74,6 +79,7 @@ export interface WorldDto {
   type: string;
   status: string;
   clubs: WorldClubDto[];
+  settings: WorldSettingsDto | null;
 }
 
 export interface FixtureDto {
