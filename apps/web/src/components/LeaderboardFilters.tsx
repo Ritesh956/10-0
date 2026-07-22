@@ -5,7 +5,7 @@ import { FORMATIONS } from "../lib/formations";
 import type { SquadTier } from "../lib/squadRatings";
 import { Chip } from "./ui/Chip";
 
-export type LeaderboardMode = "solo" | "one-club";
+export type LeaderboardMode = "solo" | "one-club" | "nations";
 
 export interface LeaderboardFiltersState {
   mode: LeaderboardMode | "all";
@@ -63,6 +63,9 @@ export function LeaderboardFilters({ filters, onChange, leagueNames }: Props) {
         </Chip>
         <Chip active={filters.mode === "one-club"} onClick={() => onChange({ mode: "one-club" })}>
           One-Club XI
+        </Chip>
+        <Chip active={filters.mode === "nations"} onClick={() => onChange({ mode: "nations" })}>
+          Nations Trophy
         </Chip>
       </Row>
 

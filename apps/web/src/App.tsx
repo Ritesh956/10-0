@@ -13,7 +13,12 @@ import { MultiplayerPage } from "./pages/MultiplayerPage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
 import { ClubsDirectoryPage } from "./pages/ClubsDirectoryPage";
+import { NationsDirectoryPage } from "./pages/NationsDirectoryPage";
 import { DailyChallengePage } from "./pages/DailyChallengePage";
+import { HowItWorksPage } from "./pages/HowItWorksPage";
+import { HowToPlayPage } from "./pages/HowToPlayPage";
+import { BestXiPage } from "./pages/BestXiPage";
+import { StoryPage } from "./pages/StoryPage";
 import { LeagueJoinPage } from "./pages/LeagueJoinPage";
 import { LeagueDetailPage } from "./pages/LeagueDetailPage";
 import { LiveDraftJoinPage } from "./pages/LiveDraftJoinPage";
@@ -53,7 +58,12 @@ function Shell() {
               <Route path="/history" element={<HistoryPage />} />
               <Route path="/leaderboard" element={<LeaderboardPage />} />
               <Route path="/clubs" element={<ClubsDirectoryPage />} />
+              <Route path="/nations" element={<NationsDirectoryPage />} />
               <Route path="/daily" element={<DailyChallengePage />} />
+              <Route path="/how-it-works" element={<HowItWorksPage />} />
+              <Route path="/how-to-play" element={<HowToPlayPage />} />
+              <Route path="/best-xi" element={<BestXiPage />} />
+              <Route path="/story" element={<StoryPage />} />
             </Routes>
           </motion.div>
         </AnimatePresence>

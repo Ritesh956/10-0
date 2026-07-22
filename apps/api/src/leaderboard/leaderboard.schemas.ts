@@ -24,6 +24,9 @@ export const leaderboardQuerySchema = z.object({
       mode="one-club", but not enforced together since a stray refClubId with mode="solo" just
       matches nothing (solo runs never set refClubId) rather than needing its own validation error. */
   refClubId: z.string().optional(),
+  /** Scopes to one nation's runs (Phase 10's per-nation leaderboard) — only meaningful alongside
+      mode="nations", same "not enforced together" reasoning as refClubId. */
+  nationality: z.string().optional(),
   timeWindow: z.enum(["today", "week", "all"]).optional().default("all"),
   limit: z.coerce.number().int().min(1).max(100).optional().default(50),
 });

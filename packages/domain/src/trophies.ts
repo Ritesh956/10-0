@@ -19,5 +19,10 @@ export const trophyKey = z.enum([
   // against prior *simulated* runs for the club within this game, not real-world history.
   "club-record-breaker",
   "club-worst-ever",
+  // Phase 10 (Nations Trophy) — the exclusive trophy for winning the domestic league with a
+  // nationality-locked XI. Evaluated by trophy-evaluation.ts's evaluateTrophies alongside
+  // "champions" (same position===1 condition), gated on RunSummary.nationsLocked so a normal
+  // fantasy-XI title doesn't also earn this one.
+  "nations-champion",
 ]);
 export type TrophyKey = z.infer<typeof trophyKey>;

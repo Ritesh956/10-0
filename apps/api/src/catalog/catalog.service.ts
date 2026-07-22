@@ -29,6 +29,7 @@ export class CatalogService {
     return this.prisma.refClubSeason.findMany({
       where: {
         ...(filter.clubId ? { clubId: filter.clubId } : {}),
+        ...(filter.nationality ? { playerSeasons: { some: { player: { nationality: filter.nationality } } } } : {}),
         league: {
           ...(filter.eraId ? { eraId: filter.eraId } : {}),
           ...(filter.leagueIds?.length ? { id: { in: filter.leagueIds } } : {}),
@@ -37,6 +38,27 @@ export class CatalogService {
       include: { club: true, league: true },
       orderBy: { reputation: "desc" },
     });
+  }
+
+  /**
+   * Distinct nationalities represented across the top-5 catalog, each with a count of distinct
+   * real players (not player-seasons) — powers the Nations Trophy directory (Phase 10), the
+   * nationality-locked analogue of listClubs(). Grouped in SQL via Prisma's groupBy rather than
+   * flattened in JS (unlike getClubPositionCoverage) since RefPlayer.nationality is a scalar
+   * column, not an array, so a real groupBy is both available and cheaper than a full table scan.
+   */
+  async listNations() {
+    const rows = await this.prisma.refPlayer.groupBy({
+      by: ["nationality"],
+      where: {
+        playerSeasons: { some: { clubSeason: { league: { country: { in: REAL_LEAGUE_COUNTRIES } } } } },
+      },
+      _count: { _all: true },
+      orderBy: { nationality: "asc" },
+    });
+    return rows
+      .map((r) => ({ nationality: r.nationality, playerCount: r._count._all }))
+      .sort((a, b) => b.playerCount - a.playerCount);
   }
 
   /**
@@ -89,6 +111,7 @@ export class CatalogService {
       where: {
         ...(filter.clubSeasonId ? { clubSeasonId: filter.clubSeasonId } : {}),
         ...(filter.positions?.length ? { positions: { hasSome: filter.positions } } : {}),
+        ...(filter.nationality ? { player: { nationality: filter.nationality } } : {}),
         clubSeason: {
           league: {
             ...(filter.eraId ? { eraId: filter.eraId } : {}),

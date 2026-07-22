@@ -39,6 +39,7 @@ export function ClubsDirectoryPage() {
       leagueIds: [club.currentLeagueId],
       lockedClubId: club.id,
       lockedClubName: club.name,
+      lockedNationality: undefined,
       playerRatings: "season",
       eraYearMin: undefined,
       eraYearMax: undefined,

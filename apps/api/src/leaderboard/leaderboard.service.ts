@@ -10,6 +10,7 @@ import type { LeaderboardQueryDto, SubmitLeaderboardDto } from "./leaderboard.sc
 /** Same cast-a-loosely-typed-Json pattern as JanuaryService's WorldSettingsShape. */
 interface WorldSettingsShape {
   oneClubClubId?: string;
+  nationsNationality?: string;
 }
 
 @Injectable()
@@ -54,12 +55,15 @@ export class LeaderboardService {
           )?.league.name
         : undefined) ?? null;
 
-    // mode/refClubId come from World.settings, set once at world-creation time by the frontend's
-    // ClubsDirectoryPage flow — never from this request's own body, so a one-club run can't be
-    // faked (or a genuine one-club run disguised as "solo") by a crafted submission.
+    // mode/refClubId/nationality come from World.settings, set once at world-creation time by the
+    // frontend's ClubsDirectoryPage/NationsDirectoryPage flows — never from this request's own
+    // body, so a one-club or nations run can't be faked (or disguised as "solo") by a crafted
+    // submission. oneClubClubId and nationsNationality are never both set (mutually exclusive
+    // locked-draft variants), so refClubId takes precedence only because it's checked first.
     const settings = (world.settings as WorldSettingsShape | null) ?? {};
     const refClubId = settings.oneClubClubId ?? null;
-    const mode = refClubId ? "one-club" : "solo";
+    const nationality = settings.nationsNationality ?? null;
+    const mode = refClubId ? "one-club" : nationality ? "nations" : "solo";
 
     const { userRow } = summary;
     const shared = {
@@ -72,6 +76,7 @@ export class LeaderboardService {
       leagueName,
       mode,
       refClubId,
+      nationality,
       won: userRow.won,
       drawn: userRow.drawn,
       lost: userRow.lost,
@@ -135,6 +140,7 @@ export class LeaderboardService {
         ...(query.formation ? { formation: query.formation } : {}),
         ...(query.leagueName ? { leagueName: query.leagueName } : {}),
         ...(query.refClubId ? { refClubId: query.refClubId } : {}),
+        ...(query.nationality ? { nationality: query.nationality } : {}),
         ...(cutoff ? { createdAt: { gte: cutoff } } : {}),
       },
       orderBy: [{ points: "desc" }, { goalDiff: "desc" }],

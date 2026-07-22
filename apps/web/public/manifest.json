@@ -1,0 +1,17 @@
+{
+  "name": "Futbol — Draft. Simulate. Go Unbeaten.",
+  "short_name": "Futbol",
+  "description": "Draft a fantasy XI from real top-5 European club-seasons and simulate a full season to chase an unbeaten record.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0f0d",
+  "theme_color": "#0a0f0d",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

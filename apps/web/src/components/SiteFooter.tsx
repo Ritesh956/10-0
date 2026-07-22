@@ -4,6 +4,10 @@ const NAV_LINKS: Array<{ label: string; to: string }> = [
   { label: "Home", to: "/" },
   { label: "Play", to: "/setup" },
   { label: "Multiplayer", to: "/multiplayer" },
+  { label: "How It Works", to: "/how-it-works" },
+  { label: "How to Play", to: "/how-to-play" },
+  { label: "Best XI", to: "/best-xi" },
+  { label: "Our Story", to: "/story" },
 ];
 
 export function SiteFooter() {

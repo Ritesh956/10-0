@@ -30,6 +30,15 @@ export interface DraftConfig {
       full league instead" escape hatch. */
   lockedClubId?: string | undefined;
   lockedClubName?: string | undefined;
+  /** Nations Trophy mode (Phase 10): set by NationsDirectoryPage when a nation card is picked —
+      the nationality-locked sibling of lockedClubId. Unlike club id/name, a single string doubles
+      as both the identifier and the display label (there's no separate Nation model). When
+      present, DraftPage's pool fetch draws from every club-season with at least one player of this
+      nationality (via config.nationality on the catalog filter) instead of config.leagueIds, and
+      further filters each drawn squad down to that nationality. Unlike One-Club, playerRatings is
+      NOT force-set here — RefPlayer.nationality is season-independent, so "Prime" stays safe to
+      use. Cleared the same way lockedClubId is. */
+  lockedNationality?: string | undefined;
   /** Phase 9a (async multiplayer Leagues): set together by the join-league flow when a member
       accepts an invite. When present, DraftPage's doConfirm rides it along in createWorld's
       settings so WorldsService can attach this world to the member's LeagueMembership. eraId/

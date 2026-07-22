@@ -14,6 +14,13 @@ export const worldSettingsSchema = z.object({
       the caller hadn't already, harmless since membership is idempotent) — never trusted beyond
       that, same "derive from World.settings" pattern as oneClubClubId. */
   multiplayerLeagueId: z.string().optional(),
+  /** Phase 10 (Nations Trophy): the RefPlayer.nationality string this world's draft was locked to,
+      or omitted for a normal world — same "set once at world creation, read server-side, never
+      client-supplied at submission time" pattern as oneClubClubId. Drives LeaderboardService's
+      mode="nations" derivation and SeasonsService.finalizeRun's nationsLocked flag for the
+      "nations-champion" trophy. The nationality string itself doubles as the id (there's no
+      separate Nation model), same as how clubName/refClubId aren't unified in One-Club either. */
+  nationsNationality: z.string().optional(),
 });
 export type WorldSettingsDto = z.infer<typeof worldSettingsSchema>;
 

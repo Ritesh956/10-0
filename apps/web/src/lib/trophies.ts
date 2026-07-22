@@ -66,4 +66,10 @@ export const TROPHY_CATALOG: Record<TrophyKey, TrophyMeta> = {
     icon: "📉",
     colorClass: "text-crimson-300 border-crimson-400/60",
   },
+  "nations-champion": {
+    name: "Golden Generation",
+    description: "Won the league with a squad drafted entirely from one nation's players.",
+    icon: "🌍",
+    colorClass: "text-plum-300 border-plum-400/60",
+  },
 };

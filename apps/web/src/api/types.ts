@@ -153,6 +153,10 @@ export interface CatalogFilter {
   /** One-Club mode (Phase 7): scopes a club-season pool fetch to a single real club's whole
       history instead of a league. */
   clubId?: string;
+  /** Nations Trophy mode (Phase 10): scopes a club-season pool fetch to only clubs with at least
+      one player of this RefPlayer.nationality, or a player-season pool fetch to only that
+      nationality's players within the drawn club-season. */
+  nationality?: string;
 }
 
 /** A distinct real club (Phase 7's One-Club directory), one row per club at its most recent
@@ -165,6 +169,13 @@ export interface RealClubDto {
   badgeRef: string | null;
   currentLeagueId: string;
   currentLeagueName: string;
+}
+
+/** A distinct nationality represented in the top-5 catalog (Phase 10's Nations Trophy directory,
+    the nationality-locked analogue of RealClubDto), with a count of distinct real players. */
+export interface NationDto {
+  nationality: string;
+  playerCount: number;
 }
 
 export interface MatchGoalDto {
@@ -303,7 +314,8 @@ export type TrophyKey =
   | "golden-glove"
   | "mvp"
   | "club-record-breaker"
-  | "club-worst-ever";
+  | "club-worst-ever"
+  | "nations-champion";
 
 export interface FinalizeRunResultDto {
   trophies: TrophyKey[];
@@ -370,6 +382,7 @@ export interface LeaderboardQuery {
   formation?: string;
   leagueName?: string;
   refClubId?: string;
+  nationality?: string;
   timeWindow?: LeaderboardTimeWindow;
   limit?: number;
 }

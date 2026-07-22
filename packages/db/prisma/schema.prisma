@@ -640,6 +640,10 @@ model LeaderboardEntry {
   /// collide with a real club's name). Scopes the per-club leaderboard and the club-record-breaker/
   /// club-worst-ever trophy comparisons in leaderboard.service.ts.
   refClubId    String?
+  /// The RefPlayer.nationality string this run's squad was locked to, set only for mode="nations"
+  /// (Phase 10) — same role as refClubId for One-Club, but the nationality string itself doubles as
+  /// the id since there's no separate Nation model. Scopes the per-nation leaderboard.
+  nationality  String?
   won          Int
   drawn        Int
   lost         Int
@@ -651,6 +655,7 @@ model LeaderboardEntry {
 
   @@index([mode, points])
   @@index([mode, refClubId, points])
+  @@index([mode, nationality, points])
   @@map("leaderboard_entries")
 }
 

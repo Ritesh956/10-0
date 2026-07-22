@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { api } from "../api/client";
+import { api, ApiError } from "../api/client";
 import type { ClubSeasonDto, ManagerDto, PlayerSeasonDto } from "../api/types";
 import { DraftedPlayerRow } from "../components/DraftedPlayerRow";
 import { DrawReel, type ReelCandidate } from "../components/DrawReel";
@@ -127,7 +127,7 @@ function OddsBar({ label, pct, colorClass }: { label: string; pct: number; color
 
 export function DraftPage() {
   const navigate = useNavigate();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, logout } = useAuth();
   const {
     config,
     picks,
@@ -188,6 +188,7 @@ export function DraftPage() {
 
   const [error, setError] = useState<string | null>(null);
   const [showGuestGate, setShowGuestGate] = useState(false);
+  const [guestGateReason, setGuestGateReason] = useState<"not-signed-in" | "session-expired">("not-signed-in");
   const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
@@ -201,9 +202,13 @@ export function DraftPage() {
         // One-Club XI (Phase 7): scope the pool to this club's entire real history (any era it
         // has data for) instead of config.leagueIds — every spin then draws a different season of
         // the same club, so a squad can genuinely mix e.g. 2015 and 2019 versions of one club.
+        // Nations Trophy (Phase 10): scope the pool to every club-season with at least one player
+        // of the locked nationality — spans all five leagues, unlike One-Club's single-club history.
         const raw = config.lockedClubId
           ? await api.listClubSeasons({ eraId: config.eraId, clubId: config.lockedClubId })
-          : await api.listClubSeasons({ eraId: config.eraId, leagueIds: config.leagueIds });
+          : config.lockedNationality
+            ? await api.listClubSeasons({ eraId: config.eraId, nationality: config.lockedNationality })
+            : await api.listClubSeasons({ eraId: config.eraId, leagueIds: config.leagueIds });
         const filtered = raw.filter(
           (cs) =>
             cs.seasonYear >= (config.eraYearMin ?? 0) &&
@@ -219,7 +224,14 @@ export function DraftPage() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.eraId, config.leagueIds.join(","), config.eraYearMin, config.eraYearMax, config.lockedClubId]);
+  }, [
+    config.eraId,
+    config.leagueIds.join(","),
+    config.eraYearMin,
+    config.eraYearMax,
+    config.lockedClubId,
+    config.lockedNationality,
+  ]);
 
   async function loadPlayersFor(club: ClubSeasonDto): Promise<PlayerSeasonDto[] | null> {
     setLoadingPlayers(true);
@@ -229,7 +241,11 @@ export function DraftPage() {
       // and SetupPage hides the toggle) — a career-best "Prime" row could belong to a different
       // club entirely, which would break the "this really is this club's XI" premise of the mode.
       const ratingsMode = config.lockedClubId ? "season" : config.playerRatings;
-      const players = await api.listPlayerSeasons({ clubSeasonId: club.id, ratingsMode });
+      const players = await api.listPlayerSeasons({
+        clubSeasonId: club.id,
+        ratingsMode,
+        ...(config.lockedNationality ? { nationality: config.lockedNationality } : {}),
+      });
       setPlayerPool(players);
       return players;
     } catch (err) {
@@ -412,6 +428,7 @@ export function DraftPage() {
         europeanNights: config.europeanNights,
         januaryWindow: config.januaryWindow,
         ...(config.lockedClubId ? { oneClubClubId: config.lockedClubId } : {}),
+        ...(config.lockedNationality ? { nationsNationality: config.lockedNationality } : {}),
         ...(config.multiplayerLeagueId ? { multiplayerLeagueId: config.multiplayerLeagueId } : {}),
       });
       setWorldId(world.id);
@@ -419,7 +436,18 @@ export function DraftPage() {
       await api.draftFantasy(world.id, effectiveSquadName, config.formation, refPlayerSeasonIds, managerPick?.id);
       navigate("/season");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to confirm your XI");
+      // A 24h-old token can still be present locally (isAuthenticated only checks that) while the
+      // server no longer honors it — this is the only place that actually finds out, since it's
+      // the first authenticated call of a fresh draft. Clear the stale session and reopen the gate
+      // instead of surfacing a raw "Unauthorized" with no recovery path (see CLAUDE.md's JWT-expiry
+      // gotcha). Picks/config survive this — DraftProvider sits above the router in App.tsx.
+      if (err instanceof ApiError && err.status === 401) {
+        logout();
+        setGuestGateReason("session-expired");
+        setShowGuestGate(true);
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to confirm your XI");
+      }
     } finally {
       setConfirming(false);
     }
@@ -427,6 +455,7 @@ export function DraftPage() {
 
   function handleConfirmClick() {
     if (!isAuthenticated) {
+      setGuestGateReason("not-signed-in");
       setShowGuestGate(true);
       return;
     }
@@ -517,6 +546,11 @@ export function DraftPage() {
               {config.lockedClubId && (
                 <span className="notch-sm inline-flex items-center gap-2 border-2 border-teal-500/30 bg-teal-500/5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-teal-300">
                   One-Club &middot; {config.lockedClubName}
+                </span>
+              )}
+              {config.lockedNationality && (
+                <span className="notch-sm inline-flex items-center gap-2 border-2 border-plum-500/30 bg-plum-500/5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-plum-300">
+                  Nations Trophy &middot; {config.lockedNationality}
                 </span>
               )}
             </div>
@@ -947,6 +981,7 @@ export function DraftPage() {
 
       {showGuestGate && (
         <GuestGateModal
+          reason={guestGateReason}
           onCancel={() => setShowGuestGate(false)}
           onDone={() => {
             setShowGuestGate(false);

@@ -626,6 +626,10 @@ export class SeasonsService {
       throw new BadRequestException("Could not resolve a final standing for this club");
     }
 
+    // Same cast-a-loosely-typed-Json pattern as JanuaryService/LeaderboardService's
+    // WorldSettingsShape — only the one field finalizeRun actually needs.
+    const nationsLocked = Boolean((world.settings as { nationsNationality?: string } | null)?.nationsNationality);
+
     const trophies = evaluateTrophies({
       userClubId: userClub.id,
       played: userRow.played,
@@ -637,6 +641,7 @@ export class SeasonsService {
       playmakerClubId: competitionStats.playmaker?.clubId,
       goldenGloveClubId: competitionStats.goldenGlove?.clubId,
       mvpClubId: competitionStats.mvp?.clubId,
+      nationsLocked,
     });
 
     const awardRows: { worldId: string; seasonId: string; name: string; winnerId: string }[] = [];

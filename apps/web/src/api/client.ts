@@ -27,6 +27,7 @@ import type {
   ManagerStatsDto,
   MatchSummaryDto,
   MultiplayerLeagueDto,
+  NationDto,
   PlayerSeasonDto,
   RealClubDto,
   SeasonDto,
@@ -63,10 +64,11 @@ function toQuery(filter: CatalogFilter): string {
   if (filter.clubSeasonId) params.set("clubSeasonId", filter.clubSeasonId);
   if (filter.ratingsMode) params.set("ratingsMode", filter.ratingsMode);
   if (filter.clubId) params.set("clubId", filter.clubId);
+  if (filter.nationality) params.set("nationality", filter.nationality);
   return params.toString();
 }
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
@@ -136,9 +138,17 @@ export const api = {
   getClubPositionCoverage: (clubId: string, eraId?: string) =>
     request<string[]>(`/catalog/clubs/${clubId}/positions${eraId ? `?eraId=${eraId}` : ""}`),
 
+  listNations: () => request<NationDto[]>("/catalog/nations"),
+
   createWorld: (
     eraId: string,
-    settings?: { europeanNights: boolean; januaryWindow: boolean; oneClubClubId?: string; multiplayerLeagueId?: string },
+    settings?: {
+      europeanNights: boolean;
+      januaryWindow: boolean;
+      oneClubClubId?: string;
+      multiplayerLeagueId?: string;
+      nationsNationality?: string;
+    },
   ) => request<WorldDto>("/worlds", { method: "POST", body: JSON.stringify({ eraId, type: "SINGLE", settings }) }),
 
   listWorlds: () => request<WorldDto[]>("/worlds"),
@@ -245,6 +255,7 @@ export const api = {
     if (query.formation) params.set("formation", query.formation);
     if (query.leagueName) params.set("leagueName", query.leagueName);
     if (query.refClubId) params.set("refClubId", query.refClubId);
+    if (query.nationality) params.set("nationality", query.nationality);
     if (query.timeWindow) params.set("timeWindow", query.timeWindow);
     if (query.limit) params.set("limit", String(query.limit));
     return request<LeaderboardEntryDto[]>(`/leaderboard?${params.toString()}`);

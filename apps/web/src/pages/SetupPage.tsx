@@ -207,6 +207,27 @@ export function SetupPage() {
             </div>
           </div>
         </Section>
+      ) : config.lockedNationality ? (
+        <Section title="Nation" accent="plum">
+          <div className="notch flex flex-wrap items-center justify-between gap-3 border border-plum-500/30 bg-plum-500/5 p-4">
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-smoke-600">Nations Trophy</p>
+              <p className="font-display text-lg font-bold text-paper">{config.lockedNationality}</p>
+            </div>
+            <div className="flex flex-col items-end gap-1 text-xs">
+              <button type="button" onClick={() => navigate("/nations")} className="text-plum-400 underline">
+                Pick a different nation
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfig({ lockedNationality: undefined })}
+                className="text-smoke-500 underline hover:text-smoke-400"
+              >
+                Draft a full league instead
+              </button>
+            </div>
+          </div>
+        </Section>
       ) : (
         <Section title="League" accent="mint">
           <LeaguePicker

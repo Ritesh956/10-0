@@ -53,6 +53,15 @@ describe("evaluateTrophies", () => {
     expect(evaluateTrophies(run({ position: 10 }))).toEqual([]);
   });
 
+  it("awards Golden Generation (nations-champion) only for position 1 with a nations-locked run", () => {
+    expect(evaluateTrophies(run({ position: 1, nationsLocked: true }))).toContain("nations-champion");
+    expect(evaluateTrophies(run({ position: 2, nationsLocked: true }))).not.toContain("nations-champion");
+    // Winning the league with a normal (non-nations-locked) squad never earns it, even though the
+    // position condition is otherwise identical to "champions".
+    expect(evaluateTrophies(run({ position: 1, nationsLocked: false }))).not.toContain("nations-champion");
+    expect(evaluateTrophies(run({ position: 1 }))).not.toContain("nations-champion");
+  });
+
   it("can award multiple trophies at once for a dominant title-winning campaign", () => {
     const trophies = evaluateTrophies(
       run({

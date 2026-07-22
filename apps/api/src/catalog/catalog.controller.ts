@@ -25,6 +25,13 @@ export class CatalogController {
     return this.catalog.listClubs();
   }
 
+  // Nations Trophy (Phase 10) directory analogue of "clubs" — registered alongside it for the
+  // same reason ("nations" doesn't collide with any param segment, so ordering is unconstrained).
+  @Get("nations")
+  listNations() {
+    return this.catalog.listNations();
+  }
+
   @Get("clubs/:clubId/positions")
   getClubPositionCoverage(
     @Param("clubId") clubId: string,

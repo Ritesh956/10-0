@@ -21,8 +21,10 @@ export function LeaderboardPage() {
   const [filters, setFilters] = useState<LeaderboardFiltersState>(() => {
     // Deep-link support (Phase 7): ClubsDirectoryPage's "View leaderboard" card action links here
     // with ?mode=one-club&clubId=X&clubName=Y — read once at mount, same as a normal initial state.
+    // Phase 10: NationsDirectoryPage's own card links with ?mode=nations&nationality=X.
     const mode = searchParams.get("mode");
-    return mode === "one-club" ? { ...DEFAULT_LEADERBOARD_FILTERS, mode: "one-club" } : DEFAULT_LEADERBOARD_FILTERS;
+    if (mode === "one-club" || mode === "nations") return { ...DEFAULT_LEADERBOARD_FILTERS, mode };
+    return DEFAULT_LEADERBOARD_FILTERS;
   });
   // A specific club, deep-linked or picked from the Mode row — kept separate from the Chip-row
   // filters above since 173 real clubs is far too many to render as a chip row (see
@@ -32,6 +34,9 @@ export function LeaderboardPage() {
     const name = searchParams.get("clubName");
     return id && name ? { id, name } : null;
   });
+  // Same pattern for a specific nation (Phase 10) — the nationality string doubles as both id and
+  // display label, so this is a plain string rather than clubFilter's {id, name} pair.
+  const [nationFilter, setNationFilter] = useState<string | null>(() => searchParams.get("nationality"));
   const [entries, setEntries] = useState<LeaderboardEntryDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [leagueNames, setLeagueNames] = useState<string[]>([]);
@@ -61,10 +66,20 @@ export function LeaderboardPage() {
         ...(filters.formation === "all" ? {} : { formation: filters.formation }),
         ...(filters.leagueName === "all" ? {} : { leagueName: filters.leagueName }),
         ...(clubFilter ? { refClubId: clubFilter.id } : {}),
+        ...(nationFilter ? { nationality: nationFilter } : {}),
       })
       .then(setEntries)
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load the leaderboard"));
-  }, [filters.mode, filters.difficulty, filters.ratingsMode, filters.formation, filters.leagueName, filters.timeWindow, clubFilter]);
+  }, [
+    filters.mode,
+    filters.difficulty,
+    filters.ratingsMode,
+    filters.formation,
+    filters.leagueName,
+    filters.timeWindow,
+    clubFilter,
+    nationFilter,
+  ]);
 
   // Squad tier has no server-side column (its thresholds already live client-side in
   // lib/squadRatings.ts) — filtered here instead of round-tripping the same bucketing to the API.
@@ -123,6 +138,22 @@ export function LeaderboardPage() {
                   onClick={() => setClubFilter(null)}
                   className="text-teal-400 hover:text-teal-200"
                   title="Clear club filter"
+                >
+                  &times;
+                </button>
+              </span>
+            </div>
+          )}
+
+          {nationFilter && (
+            <div className="flex justify-center">
+              <span className="notch-sm inline-flex items-center gap-2 border border-plum-500/40 bg-plum-500/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-plum-300">
+                {nationFilter}
+                <button
+                  type="button"
+                  onClick={() => setNationFilter(null)}
+                  className="text-plum-400 hover:text-plum-200"
+                  title="Clear nation filter"
                 >
                   &times;
                 </button>

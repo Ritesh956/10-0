@@ -2,22 +2,47 @@ import { Link, useNavigate } from "react-router-dom";
 import { SiteFooter } from "../components/SiteFooter";
 import { Button } from "../components/ui/Button";
 
-interface OtherModeCard {
+interface ModeCard {
   title: string;
   description: string;
   icon: string;
+  to: string;
 }
 
-const OTHER_MODES: OtherModeCard[] = [
+/** Phase 10: every shipped mode as a real, clickable card — this used to render only "One-Club
+    Legacy"/"Daily Card" as opacity-70 "Not yet" stubs (stale placeholder copy left over from
+    before Phases 7/8 actually shipped those modes), and never mentioned Multiplayer or Nations at
+    all here. All five modes now link straight to where they actually live. */
+const MODE_CARDS: ModeCard[] = [
   {
-    title: "One-Club Legacy",
-    description: "Draft one club's greatest XI, pulled from across its own history.",
-    icon: "\u{1F3DF}️",
+    title: "Classic Draft",
+    description: "Spin a random club-season from any top-5 league and build your fantasy XI, shirt by shirt.",
+    icon: "\u{1F3C6}",
+    to: "/setup",
   },
   {
-    title: "Daily Card",
-    description: "One fresh matchup a day. Same draw for everyone, one attempt.",
-    icon: "\u{1F5D3}️",
+    title: "Head to Head",
+    description: "Two players, one device, same rules — draw, draft, and settle it on the pitch.",
+    icon: "\u{26BD}",
+    to: "/multiplayer",
+  },
+  {
+    title: "One-Club XI",
+    description: "Draft one real club's greatest XI, pulled from across its own history.",
+    icon: "\u{1F3DF}\u{FE0F}",
+    to: "/clubs",
+  },
+  {
+    title: "Daily Challenge",
+    description: "One fresh, themed puzzle a day. Same draw for everyone, five attempts.",
+    icon: "\u{1F5D3}\u{FE0F}",
+    to: "/daily",
+  },
+  {
+    title: "Nations Trophy",
+    description: "Draft a nation's XI, pulled from every player of that nationality across the top-5.",
+    icon: "\u{1F30D}",
+    to: "/nations",
   },
 ];
 
@@ -26,6 +51,29 @@ const HOW_IT_WORKS: Array<[string, string]> = [
   ["Draw a name", "Land on a random club and season, then pick a player out of that exact squad."],
   ["Fill the shirt", "Repeat until all 11 spots are taken — redraw if a name doesn't work out."],
   ["Kick off", "Simulate a season and see how close your XI gets to going unbeaten."],
+];
+
+const FAQ: Array<[string, string]> = [
+  [
+    "Is this affiliated with any real league or club?",
+    "No. Futbol is an independent fan project. Club, player, and manager names reflect real people and real historical rosters (top-5 European leagues, 2012–2024), included for factual reference — but all ratings, tactics, and match outcomes are our own calculation, not sourced from or endorsed by any official body.",
+  ],
+  [
+    "Do I need an account to play?",
+    "No — you can draft and simulate a full season as a guest. Sign in (or upgrade a guest account) only when you want your trophies, history, and leaderboard runs to persist.",
+  ],
+  [
+    "How is a match actually simulated?",
+    "Every match runs through a deterministic engine, minute by minute — player attributes, tactics, fatigue, and momentum all feed into chances, cards, and injuries. The same inputs always produce the same result, so a run is fully reproducible.",
+  ],
+  [
+    "What's the difference between Season and Prime ratings?",
+    "Season rates a player exactly as they were in the drawn season. Prime swaps in their career-best season's rating and attributes instead, while keeping the drawn club-season as display context.",
+  ],
+  [
+    "What counts as going unbeaten?",
+    "No losses across the whole league season earns Unbeaten. Winning every single match — a true 38-0 record — earns the rarer Invincible trophy instead.",
+  ],
 ];
 
 export function LandingPage() {
@@ -95,50 +143,33 @@ export function LandingPage() {
         </div>
 
         <section className="mt-20">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-smoke-600">Bring a mate</p>
-          <Link
-            to="/multiplayer"
-            className="notch flex items-center justify-between border border-ink-800 bg-ink-900/50 p-5 transition hover:border-plum-500/60"
-          >
-            <span className="flex items-center gap-4">
-              <span className="notch-sm flex h-10 w-10 items-center justify-center border border-plum-500/40 bg-plum-500/10 text-xl">
-                &#9917;
-              </span>
-              <span>
-                <span className="block font-display font-bold uppercase tracking-wide text-paper">Head to Head</span>
-                <span className="block text-sm text-smoke-500">Two players, one device, same rules — draw, draft, and settle it on the pitch.</span>
-              </span>
-            </span>
-            <span className="text-smoke-600">&rarr;</span>
-          </Link>
-        </section>
-
-        <section className="mt-10">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-smoke-600">Other modes</p>
-          <div className="space-y-3">
-            {OTHER_MODES.map((card, i) => {
+          <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-smoke-600">Game modes</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {MODE_CARDS.map((card, i) => {
               const tint = [
-                { border: "border-teal-500/20", bg: "bg-teal-500/5" },
-                { border: "border-crimson-500/20", bg: "bg-crimson-500/5" },
-              ][i % 2]!;
+                { border: "border-mint-500/25", bg: "bg-mint-500/5" },
+                { border: "border-plum-500/25", bg: "bg-plum-500/5" },
+                { border: "border-teal-500/25", bg: "bg-teal-500/5" },
+                { border: "border-crimson-500/25", bg: "bg-crimson-500/5" },
+                { border: "border-mint-500/25", bg: "bg-mint-500/5" },
+              ][i % 5]!;
               return (
-              <div
-                key={card.title}
-                className={`notch flex items-center justify-between border-2 ${tint.border} bg-ink-900/30 p-5 opacity-70`}
-              >
-                <span className="flex items-center gap-4">
-                  <span className={`notch-sm flex h-10 w-10 items-center justify-center border ${tint.border} ${tint.bg} text-xl`}>
-                    {card.icon}
+                <Link
+                  key={card.title}
+                  to={card.to}
+                  className={`notch flex items-center justify-between gap-3 border-2 ${tint.border} bg-ink-900/40 p-5 transition hover:bg-ink-900/70`}
+                >
+                  <span className="flex items-center gap-4">
+                    <span className={`notch-sm flex h-10 w-10 shrink-0 items-center justify-center border ${tint.border} ${tint.bg} text-xl`}>
+                      {card.icon}
+                    </span>
+                    <span>
+                      <span className="block font-display font-bold uppercase tracking-wide text-paper">{card.title}</span>
+                      <span className="block text-sm text-smoke-500">{card.description}</span>
+                    </span>
                   </span>
-                  <span>
-                    <span className="block font-display font-bold uppercase tracking-wide text-paper">{card.title}</span>
-                    <span className="block text-sm text-smoke-500">{card.description}</span>
-                  </span>
-                </span>
-                <span className="notch-sm border border-ink-700 bg-ink-800 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-smoke-500">
-                  Not yet
-                </span>
-              </div>
+                  <span className="shrink-0 text-smoke-600">&rarr;</span>
+                </Link>
               );
             })}
           </div>
@@ -169,6 +200,26 @@ export function LandingPage() {
               );
             })}
           </ol>
+        </section>
+
+        <section id="faq" className="mt-20 scroll-mt-20">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-smoke-600">FAQ</p>
+          <div className="space-y-2">
+            {FAQ.map(([question, answer]) => (
+              <details
+                key={question}
+                className="notch group border border-ink-800 bg-ink-900/40 p-4 open:bg-ink-900/70"
+              >
+                <summary className="cursor-pointer list-none font-display text-sm font-semibold text-paper marker:content-none">
+                  <span className="flex items-center justify-between gap-3">
+                    {question}
+                    <span className="shrink-0 text-smoke-600 transition-transform group-open:rotate-45">+</span>
+                  </span>
+                </summary>
+                <p className="mt-2 text-sm leading-relaxed text-smoke-500">{answer}</p>
+              </details>
+            ))}
+          </div>
         </section>
       </div>
       <SiteFooter />
