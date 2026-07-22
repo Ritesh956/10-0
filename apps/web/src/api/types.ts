@@ -70,6 +70,11 @@ export interface WorldClubDto {
 export interface WorldSettingsDto {
   europeanNights: boolean;
   januaryWindow: boolean;
+  /** Phase 7 (One-Club XI) — the RefClub this world's draft was locked to, or undefined for a
+      normal fantasy-XI world. Read-only from the frontend's perspective (set once at world
+      creation); the backend derives leaderboard mode/refClubId from this, never from a submission
+      body — see LeaderboardService.submitRun. */
+  oneClubClubId?: string;
 }
 
 export interface WorldDto {
@@ -141,6 +146,21 @@ export interface CatalogFilter {
   positions?: string[];
   clubSeasonId?: string;
   ratingsMode?: "season" | "prime";
+  /** One-Club mode (Phase 7): scopes a club-season pool fetch to a single real club's whole
+      history instead of a league. */
+  clubId?: string;
+}
+
+/** A distinct real club (Phase 7's One-Club directory), one row per club at its most recent
+    season — currentLeagueId/-Name double as the "AI-fill this league" scope for createSeason,
+    same convention as the normal per-league draft flow. */
+export interface RealClubDto {
+  id: string;
+  name: string;
+  country: string;
+  badgeRef: string | null;
+  currentLeagueId: string;
+  currentLeagueName: string;
 }
 
 export interface MatchGoalDto {
@@ -270,7 +290,16 @@ export interface JanuaryResultDto {
 
 // Hand-mirrored from @futbol/domain's TrophyKey (apps/web has zero workspace deps by design —
 // see CLAUDE.md — so this stays a plain string union kept in sync by hand, same as JanuaryEventType).
-export type TrophyKey = "invincible" | "unbeaten" | "champions" | "golden-boot" | "playmaker" | "golden-glove" | "mvp";
+export type TrophyKey =
+  | "invincible"
+  | "unbeaten"
+  | "champions"
+  | "golden-boot"
+  | "playmaker"
+  | "golden-glove"
+  | "mvp"
+  | "club-record-breaker"
+  | "club-worst-ever";
 
 export interface FinalizeRunResultDto {
   trophies: TrophyKey[];
@@ -286,4 +315,57 @@ export interface WorldHistoryRowDto {
   formation: string | null;
   pointsTotal: number | null;
   trophies: TrophyKey[];
+}
+
+export type LeaderboardDifficulty = "easy" | "normal" | "hard";
+export type LeaderboardRatingsMode = "season" | "prime";
+export type LeaderboardTimeWindow = "today" | "week" | "all";
+
+export interface SubmitLeaderboardDto {
+  handle: string;
+  difficulty: LeaderboardDifficulty;
+  ratingsMode: LeaderboardRatingsMode;
+}
+
+export interface LeaderboardEntryDto {
+  id: string;
+  worldId: string;
+  userId: string;
+  handle: string;
+  mode: string;
+  difficulty: LeaderboardDifficulty;
+  ratingsMode: LeaderboardRatingsMode;
+  formation: string;
+  squadOverall: number;
+  clubName: string;
+  leagueName: string | null;
+  /** Set only for mode="one-club" (Phase 7) — the RefClub this run was locked to. */
+  refClubId: string | null;
+  won: number;
+  drawn: number;
+  lost: number;
+  goalDiff: number;
+  points: number;
+  verified: boolean;
+  reportCount: number;
+  createdAt: string;
+}
+
+/** Submission also returns any trophy newly unlocked *by this submission specifically*
+    (club-record-breaker/club-worst-ever, Phase 7) — comparative trophies that can only be known at
+    the moment of submission, unlike finalizeRun's per-run trophies. */
+export interface SubmitLeaderboardResultDto {
+  entry: LeaderboardEntryDto;
+  newTrophies: TrophyKey[];
+}
+
+export interface LeaderboardQuery {
+  mode?: string;
+  difficulty?: LeaderboardDifficulty;
+  ratingsMode?: LeaderboardRatingsMode;
+  formation?: string;
+  leagueName?: string;
+  refClubId?: string;
+  timeWindow?: LeaderboardTimeWindow;
+  limit?: number;
 }

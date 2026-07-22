@@ -12,5 +12,12 @@ export const trophyKey = z.enum([
   "playmaker",
   "golden-glove",
   "mvp",
+  // Phase 7 (One-Club XI) — evaluated at leaderboard-submission time against prior LeaderboardEntry
+  // rows for the same refClubId, not by trophy-evaluation.ts's per-run evaluateTrophies (see
+  // leaderboard.logic.ts's evaluateClubRecordTrophies). Real per-season historical standings don't
+  // exist anywhere in our dataset (RefClubSeason has no points/table data), so these benchmark
+  // against prior *simulated* runs for the club within this game, not real-world history.
+  "club-record-breaker",
+  "club-worst-ever",
 ]);
 export type TrophyKey = z.infer<typeof trophyKey>;

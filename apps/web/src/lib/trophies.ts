@@ -54,4 +54,16 @@ export const TROPHY_CATALOG: Record<TrophyKey, TrophyMeta> = {
     icon: "⭐",
     colorClass: "text-plum-300 border-plum-400/60",
   },
+  "club-record-breaker": {
+    name: "Club Record Breaker",
+    description: "The best points total anyone has ever posted with this club's One-Club XI.",
+    icon: "📈",
+    colorClass: "text-amber-300 border-amber-400/60",
+  },
+  "club-worst-ever": {
+    name: "Club Worst Ever",
+    description: "The lowest points total anyone has ever posted with this club's One-Club XI.",
+    icon: "📉",
+    colorClass: "text-crimson-300 border-crimson-400/60",
+  },
 };

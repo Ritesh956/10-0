@@ -611,6 +611,50 @@ model Achievement {
   @@map("achievements")
 }
 
+/// One row per finished, submitted run (Phase 6). `worldId` is unique — resubmitting the same
+/// world (e.g. re-visiting the stats hub, or a re-simulated season) upserts in place rather than
+/// piling up duplicate rows for one save. `difficulty`/`ratingsMode` are self-reported Setup/Draft
+/// config the backend never otherwise persists (DraftContext-only today); `formation`/`clubName`/
+/// `won`/`drawn`/`lost`/`goalDiff`/`points`/`squadOverall` are all re-derived server-side from the
+/// world's own standings/lineup at submit time, not trusted from the client, so the RESULT a viewer
+/// sees is always what our own simulation actually produced. `verified` is always true in this
+/// codebase — there is no client-side simulation path, so every run's matches were produced by the
+/// sim-worker (see CLAUDE.md's "Simulation engine contract"); the column exists for schema parity
+/// with 38-0's anti-tamper badge and to leave room for a future unverified submission path.
+model LeaderboardEntry {
+  id           String   @id @default(cuid())
+  worldId      String   @unique
+  userId       String
+  handle       String
+  /// "solo" (the default fantasy-XI mode) or "one-club" (Phase 7 — a squad drawn entirely from one
+  /// real club's history). Derived server-side from World.settings.oneClubClubId at submission
+  /// time, never trusted from the client — see leaderboard.service.ts's submitRun.
+  mode         String   @default("solo")
+  difficulty   String
+  ratingsMode  String
+  formation    String
+  squadOverall Int
+  clubName     String
+  leagueName   String?
+  /// The RefClub this run's squad was locked to, set only for mode="one-club" — a stronger,
+  /// join-friendly identity than clubName (a fantasy XI's free-text name could coincidentally
+  /// collide with a real club's name). Scopes the per-club leaderboard and the club-record-breaker/
+  /// club-worst-ever trophy comparisons in leaderboard.service.ts.
+  refClubId    String?
+  won          Int
+  drawn        Int
+  lost         Int
+  goalDiff     Int
+  points       Int
+  verified     Boolean  @default(true)
+  reportCount  Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([mode, points])
+  @@index([mode, refClubId, points])
+  @@map("leaderboard_entries")
+}
+
 model LeagueMembership {
   id      String @id @default(cuid())
   worldId String

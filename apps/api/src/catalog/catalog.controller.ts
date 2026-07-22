@@ -1,6 +1,11 @@
-import { Controller, Get, Inject, Query } from "@nestjs/common";
+import { Controller, Get, Inject, Param, Query } from "@nestjs/common";
 import { CatalogService } from "./catalog.service.js";
-import { clubSeasonFilterSchema, playerSeasonFilterSchema } from "./catalog.schemas.js";
+import {
+  clubPositionCoverageQuerySchema,
+  clubSeasonFilterSchema,
+  playerSeasonFilterSchema,
+  type ClubPositionCoverageQueryDto,
+} from "./catalog.schemas.js";
 import { ZodValidationPipe } from "../common/zod-validation.pipe.js";
 
 @Controller("catalog")
@@ -10,6 +15,22 @@ export class CatalogController {
   @Get("eras")
   listEras() {
     return this.catalog.listEras();
+  }
+
+  // Registered before "club-seasons"/"roll" etc. only matters for literal-vs-param collisions —
+  // "clubs" and "clubs/:clubId/positions" don't collide with any existing static segment, so
+  // ordering relative to the rest of this controller is unconstrained.
+  @Get("clubs")
+  listClubs() {
+    return this.catalog.listClubs();
+  }
+
+  @Get("clubs/:clubId/positions")
+  getClubPositionCoverage(
+    @Param("clubId") clubId: string,
+    @Query(new ZodValidationPipe(clubPositionCoverageQuerySchema)) query: ClubPositionCoverageQueryDto,
+  ) {
+    return this.catalog.getClubPositionCoverage(clubId, query.eraId);
   }
 
   @Get("leagues")

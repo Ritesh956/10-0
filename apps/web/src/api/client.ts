@@ -12,13 +12,18 @@ import type {
   JanuaryResultDto,
   KnockoutRound,
   KnockoutTieDto,
+  LeaderboardEntryDto,
+  LeaderboardQuery,
   LeagueDto,
   ManagerDto,
   ManagerStatsDto,
   MatchSummaryDto,
   PlayerSeasonDto,
+  RealClubDto,
   SeasonDto,
   StandingsDto,
+  SubmitLeaderboardDto,
+  SubmitLeaderboardResultDto,
   SummaryDto,
   TeamStatsDto,
   WorldDto,
@@ -47,6 +52,7 @@ function toQuery(filter: CatalogFilter): string {
   if (filter.positions?.length) params.set("positions", filter.positions.join(","));
   if (filter.clubSeasonId) params.set("clubSeasonId", filter.clubSeasonId);
   if (filter.ratingsMode) params.set("ratingsMode", filter.ratingsMode);
+  if (filter.clubId) params.set("clubId", filter.clubId);
   return params.toString();
 }
 
@@ -115,8 +121,15 @@ export const api = {
 
   rollManager: () => request<ManagerDto>("/catalog/roll-manager"),
 
-  createWorld: (eraId: string, settings?: { europeanNights: boolean; januaryWindow: boolean }) =>
-    request<WorldDto>("/worlds", { method: "POST", body: JSON.stringify({ eraId, type: "SINGLE", settings }) }),
+  listClubs: () => request<RealClubDto[]>("/catalog/clubs"),
+
+  getClubPositionCoverage: (clubId: string, eraId?: string) =>
+    request<string[]>(`/catalog/clubs/${clubId}/positions${eraId ? `?eraId=${eraId}` : ""}`),
+
+  createWorld: (
+    eraId: string,
+    settings?: { europeanNights: boolean; januaryWindow: boolean; oneClubClubId?: string },
+  ) => request<WorldDto>("/worlds", { method: "POST", body: JSON.stringify({ eraId, type: "SINGLE", settings }) }),
 
   listWorlds: () => request<WorldDto[]>("/worlds"),
 
@@ -207,4 +220,26 @@ export const api = {
     request<FinalizeRunResultDto>(`/worlds/${worldId}/seasons/${seasonId}/finalize`, { method: "POST" }),
 
   getHistory: () => request<WorldHistoryRowDto[]>("/worlds/history"),
+
+  submitToLeaderboard: (worldId: string, seasonId: string, dto: SubmitLeaderboardDto) =>
+    request<SubmitLeaderboardResultDto>(`/worlds/${worldId}/seasons/${seasonId}/leaderboard`, {
+      method: "POST",
+      body: JSON.stringify(dto),
+    }),
+
+  getLeaderboard: (query: LeaderboardQuery = {}) => {
+    const params = new URLSearchParams();
+    if (query.mode) params.set("mode", query.mode);
+    if (query.difficulty) params.set("difficulty", query.difficulty);
+    if (query.ratingsMode) params.set("ratingsMode", query.ratingsMode);
+    if (query.formation) params.set("formation", query.formation);
+    if (query.leagueName) params.set("leagueName", query.leagueName);
+    if (query.refClubId) params.set("refClubId", query.refClubId);
+    if (query.timeWindow) params.set("timeWindow", query.timeWindow);
+    if (query.limit) params.set("limit", String(query.limit));
+    return request<LeaderboardEntryDto[]>(`/leaderboard?${params.toString()}`);
+  },
+
+  reportLeaderboardEntry: (entryId: string) =>
+    request<LeaderboardEntryDto>(`/leaderboard/${entryId}/report`, { method: "POST" }),
 };

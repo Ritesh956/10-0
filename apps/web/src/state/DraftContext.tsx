@@ -14,11 +14,22 @@ export interface DraftConfig {
   showRatings: boolean;
   draftMode: DraftMode;
   playerRatings: PlayerRatingsMode;
-  eraYearMin?: number;
-  eraYearMax?: number;
+  // "| undefined" (not just "?:") on these four — exactOptionalPropertyTypes rejects explicitly
+  // assigning `undefined` through setConfig's Partial<DraftConfig> patch otherwise, and both
+  // ClubsDirectoryPage (clearing the era-year narrowing) and SetupPage's "draft a full league
+  // instead" escape hatch (clearing the club lock) need to do exactly that.
+  eraYearMin?: number | undefined;
+  eraYearMax?: number | undefined;
   managers: boolean;
   europeanNights: boolean;
   januaryWindow: boolean;
+  /** One-Club XI mode (Phase 7): set together by ClubsDirectoryPage when a club card is picked.
+      When present, DraftPage's pool fetch draws from this club's entire real history (by clubId)
+      instead of config.leagueIds, and playerRatings is force-set to "season" alongside it (a
+      career-best "Prime" row could belong to a different club). Cleared by SetupPage's "draft a
+      full league instead" escape hatch. */
+  lockedClubId?: string | undefined;
+  lockedClubName?: string | undefined;
 }
 
 const DEFAULT_CONFIG: DraftConfig = {

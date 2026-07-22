@@ -9,6 +9,7 @@ import { DraftModule } from "./draft/draft.module.js";
 import { SeasonsModule } from "./seasons/seasons.module.js";
 import { EuropeModule } from "./europe/europe.module.js";
 import { JanuaryModule } from "./january/january.module.js";
+import { LeaderboardModule } from "./leaderboard/leaderboard.module.js";
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { JanuaryModule } from "./january/january.module.js";
     SeasonsModule,
     EuropeModule,
     JanuaryModule,
+    LeaderboardModule,
   ],
 })
 export class AppModule {}

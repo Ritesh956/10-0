@@ -23,6 +23,16 @@ export function SiteHeader({ onRequestSaveProgress }: Props) {
           <span className="font-display text-sm font-bold uppercase tracking-[0.2em] text-paper">Futbol</span>
         </Link>
 
+        {/* Public — no ownership/auth gate, unlike History, so both sit outside the isAuthenticated branch below. */}
+        <div className="flex shrink-0 items-center gap-4 text-sm text-smoke-500">
+          <Link to="/clubs" className="transition hover:text-paper">
+            One-Club XI
+          </Link>
+          <Link to="/leaderboard" className="transition hover:text-paper">
+            Leaderboard
+          </Link>
+        </div>
+
         {isAuthenticated ? (
           <div className="flex min-w-0 flex-wrap items-center gap-3 text-sm text-smoke-500">
             <Link to="/history" className="shrink-0 transition hover:text-paper">

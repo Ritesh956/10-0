@@ -23,6 +23,7 @@ import { GuestPersistPrompt } from "../components/GuestPersistPrompt";
 import { JanuaryShareCard } from "../components/JanuaryShareCard";
 import { JanuaryWindow } from "../components/JanuaryWindow";
 import { KnockoutBracket } from "../components/KnockoutBracket";
+import { LeaderboardSubmitBlock } from "../components/LeaderboardSubmitBlock";
 import { ManagerStatCard } from "../components/ManagerStatCard";
 import { MatchLog } from "../components/MatchLog";
 import { MatchPopupReel } from "../components/MatchPopupReel";
@@ -101,6 +102,10 @@ interface CachedStatsHub {
   /** Trophies unlocked this run (SeasonsService.finalizeRun's persisted Achievement rows echoed
       straight back). Optional for backward compat with cache entries saved before Phase 5. */
   trophies?: TrophyKey[];
+  /** The domestic Season's id — needed to submit this run to the leaderboard (Phase 6), which is
+      scoped to a season the same way finalizeRun is. Optional for backward compat; a cache entry
+      saved before Phase 6 just won't offer the submit block until the next fresh run. */
+  domesticSeasonId?: string;
 }
 
 // A finished run's standings/stats are cached per-world so leaving /season and coming back (or
@@ -174,6 +179,7 @@ export function SeasonPage() {
   const [europeCompetitionStats, setEuropeCompetitionStats] = useState<CompetitionStatsDto | null>(null);
   const [europeTeamStats, setEuropeTeamStats] = useState<TeamStatsDto | null>(null);
   const [trophies, setTrophies] = useState<TrophyKey[]>([]);
+  const [domesticSeasonId, setDomesticSeasonId] = useState<string | null>(null);
 
   // Lets an "announcement" phase auto-advance after a short pause, or resolve immediately if the
   // user clicks past it — same escape-hatch pattern as MatchPopupReel's "Skip ahead".
@@ -231,6 +237,7 @@ export function SeasonPage() {
         setJanuaryOutcome(cached.januaryOutcome ?? null);
         setLeagueManagerStats(cached.leagueManagerStats ?? null);
         setTrophies(cached.trophies ?? []);
+        setDomesticSeasonId(cached.domesticSeasonId ?? null);
         setStatsTab(cached.qualified ? "europe" : "league");
         setPhase("stats-hub");
       })
@@ -270,6 +277,7 @@ export function SeasonPage() {
   async function runSeasonPipeline(wId: string, domesticSeason: SeasonDto, w: WorldDto) {
     const userClub = w.clubs.find((c) => c.managedByUserId);
     const domesticSeasonId = domesticSeason.id;
+    setDomesticSeasonId(domesticSeasonId);
 
     // The January Transfer Window pauses the domestic season at its exact halfway matchday —
     // derived from the already-generated fixture list (double round-robin, so the total is always
@@ -388,6 +396,7 @@ export function SeasonPage() {
         januaryOutcome: outcome,
         leagueManagerStats: managerStats,
         trophies: unlockedTrophies,
+        domesticSeasonId,
       });
       return;
     }
@@ -457,6 +466,7 @@ export function SeasonPage() {
       januaryOutcome: outcome,
       leagueManagerStats: managerStats,
       trophies: unlockedTrophies,
+      domesticSeasonId,
     });
   }
 
@@ -738,6 +748,15 @@ export function SeasonPage() {
 
           <ShareCard summary={summary} />
           {januaryOutcome && <JanuaryShareCard outcome={januaryOutcome} />}
+          {worldId && domesticSeasonId && userClub && (
+            <LeaderboardSubmitBlock
+              worldId={worldId}
+              seasonId={domesticSeasonId}
+              difficulty={config.difficulty}
+              ratingsMode={config.playerRatings}
+              defaultHandle={userClub.name}
+            />
+          )}
           <GuestPersistPrompt />
 
           {qualified && (

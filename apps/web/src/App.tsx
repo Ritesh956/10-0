@@ -11,6 +11,8 @@ import { DraftPage } from "./pages/DraftPage";
 import { SeasonPage } from "./pages/SeasonPage";
 import { MultiplayerPage } from "./pages/MultiplayerPage";
 import { HistoryPage } from "./pages/HistoryPage";
+import { LeaderboardPage } from "./pages/LeaderboardPage";
+import { ClubsDirectoryPage } from "./pages/ClubsDirectoryPage";
 import { SiteHeader } from "./components/SiteHeader";
 import { SaveProgressModal } from "./components/SaveProgressModal";
 
@@ -40,6 +42,8 @@ function Shell() {
               <Route path="/season" element={<SeasonPage />} />
               <Route path="/multiplayer" element={<MultiplayerPage />} />
               <Route path="/history" element={<HistoryPage />} />
+              <Route path="/leaderboard" element={<LeaderboardPage />} />
+              <Route path="/clubs" element={<ClubsDirectoryPage />} />
             </Routes>
           </motion.div>
         </AnimatePresence>

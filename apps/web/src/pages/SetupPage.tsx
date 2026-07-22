@@ -10,8 +10,9 @@ import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { Toggle } from "../components/ui/Toggle";
 import { Chip } from "../components/ui/Chip";
 import { SiteFooter } from "../components/SiteFooter";
-import { isFormation } from "../lib/formations";
+import { isFormation, positionLabel } from "../lib/formations";
 import { isRealCountry } from "../lib/leagues";
+import { checkFormationFillable } from "../lib/oneClubValidation";
 import { useDraft, type Difficulty, type DraftMode, type PlayerRatingsMode } from "../state/DraftContext";
 
 type SectionAccent = "mint" | "teal" | "plum" | "crimson";
@@ -117,6 +118,33 @@ export function SetupPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.eraId]);
 
+  // One-Club XI (Phase 7): a cheap feasibility check for "can this formation actually be filled
+  // from this club's real history" — null while unlocked or still loading, so the CTA only ever
+  // gets disabled once we actually know the answer, not by default.
+  const [clubPositions, setClubPositions] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (!config.lockedClubId) {
+      setClubPositions(null);
+      return;
+    }
+    let cancelled = false;
+    setClubPositions(null);
+    void api
+      .getClubPositionCoverage(config.lockedClubId, config.eraId)
+      .then((positions) => {
+        if (!cancelled) setClubPositions(positions);
+      })
+      .catch(() => {
+        if (!cancelled) setClubPositions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [config.lockedClubId, config.eraId]);
+
+  const checkingFit = Boolean(config.lockedClubId) && clubPositions === null;
+  const fillability = config.lockedClubId && clubPositions ? checkFormationFillable(config.formation, clubPositions) : null;
+
   const activeEra = eras.find((e) => e.id === config.eraId);
   const yearMin = activeEra?.startYear ?? 1992;
   const yearMax = activeEra?.endYear ?? new Date().getFullYear();
@@ -135,20 +163,50 @@ export function SetupPage() {
 
       {error && <p className="text-center text-sm text-crimson-400">{error}</p>}
 
-      <Section title="League" accent="mint">
-        <LeaguePicker
-          leagues={leagues}
-          selectedIds={config.leagueIds}
-          onChange={(leagueIds) => setConfig({ leagueIds })}
-          singleSelect
-        />
-      </Section>
+      {config.lockedClubId ? (
+        <Section title="Club" accent="mint">
+          <div className="notch flex flex-wrap items-center justify-between gap-3 border border-mint-500/30 bg-mint-500/5 p-4">
+            <div>
+              <p className="text-[10px] uppercase tracking-wide text-smoke-600">One-Club XI</p>
+              <p className="font-display text-lg font-bold text-paper">{config.lockedClubName}</p>
+            </div>
+            <div className="flex flex-col items-end gap-1 text-xs">
+              <button type="button" onClick={() => navigate("/clubs")} className="text-mint-400 underline">
+                Pick a different club
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfig({ lockedClubId: undefined, lockedClubName: undefined })}
+                className="text-smoke-500 underline hover:text-smoke-400"
+              >
+                Draft a full league instead
+              </button>
+            </div>
+          </div>
+        </Section>
+      ) : (
+        <Section title="League" accent="mint">
+          <LeaguePicker
+            leagues={leagues}
+            selectedIds={config.leagueIds}
+            onChange={(leagueIds) => setConfig({ leagueIds })}
+            singleSelect
+          />
+        </Section>
+      )}
 
       <Section title="Formation" accent="teal">
         <FormationPicker
           value={config.formation}
           onChange={(formation) => isFormation(formation) && setConfig({ formation })}
         />
+        {config.lockedClubId && fillability && !fillability.fillable && (
+          <p className="notch-sm border border-crimson-500/40 bg-crimson-500/10 p-3 text-center text-xs text-crimson-300">
+            {config.lockedClubName}&apos;s recorded history has nobody who can play{" "}
+            {fillability.missingPositions.map((p) => positionLabel(p)).join(", ")} — try a different formation.
+          </p>
+        )}
+        {checkingFit && <p className="text-center text-xs text-smoke-600">Checking this club&apos;s history fits this formation...</p>}
       </Section>
 
       <Section title="Difficulty" accent="crimson">
@@ -201,18 +259,27 @@ export function SetupPage() {
         />
       </Section>
 
-      <Section title="Player Ratings" accent="teal">
-        <SegmentedControl<PlayerRatingsMode>
-          accent="teal"
-          columns={2}
-          value={config.playerRatings}
-          onChange={(playerRatings) => setConfig({ playerRatings })}
-          options={[
-            { value: "season", label: "Season", description: "Players rated as they were that exact season" },
-            { value: "prime", label: "Prime", description: "Every player drafted at their career-best rating" },
-          ]}
-        />
-      </Section>
+      {config.lockedClubId ? (
+        <Section title="Player Ratings" accent="teal">
+          <p className="notch-sm border border-ink-800 bg-ink-900/40 px-3 py-2 text-center text-xs text-smoke-500">
+            Forced to <span className="font-semibold text-paper">Season</span> for One-Club XI — a career-best
+            &quot;Prime&quot; row could belong to a different club.
+          </p>
+        </Section>
+      ) : (
+        <Section title="Player Ratings" accent="teal">
+          <SegmentedControl<PlayerRatingsMode>
+            accent="teal"
+            columns={2}
+            value={config.playerRatings}
+            onChange={(playerRatings) => setConfig({ playerRatings })}
+            options={[
+              { value: "season", label: "Season", description: "Players rated as they were that exact season" },
+              { value: "prime", label: "Prime", description: "Every player drafted at their career-best rating" },
+            ]}
+          />
+        </Section>
+      )}
 
       <Section title="Era" accent="plum">
         <div className="flex flex-wrap gap-2">
@@ -281,6 +348,7 @@ export function SetupPage() {
       <Button
         size="lg"
         fullWidth
+        disabled={checkingFit || (fillability !== null && !fillability.fillable)}
         onClick={() => {
           resetDraft();
           navigate("/draft");

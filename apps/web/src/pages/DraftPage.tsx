@@ -198,7 +198,12 @@ export function DraftPage() {
     let cancelled = false;
     (async () => {
       try {
-        const raw = await api.listClubSeasons({ eraId: config.eraId, leagueIds: config.leagueIds });
+        // One-Club XI (Phase 7): scope the pool to this club's entire real history (any era it
+        // has data for) instead of config.leagueIds — every spin then draws a different season of
+        // the same club, so a squad can genuinely mix e.g. 2015 and 2019 versions of one club.
+        const raw = config.lockedClubId
+          ? await api.listClubSeasons({ eraId: config.eraId, clubId: config.lockedClubId })
+          : await api.listClubSeasons({ eraId: config.eraId, leagueIds: config.leagueIds });
         const filtered = raw.filter(
           (cs) =>
             cs.seasonYear >= (config.eraYearMin ?? 0) &&
@@ -214,12 +219,17 @@ export function DraftPage() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config.eraId, config.leagueIds.join(","), config.eraYearMin, config.eraYearMax]);
+  }, [config.eraId, config.leagueIds.join(","), config.eraYearMin, config.eraYearMax, config.lockedClubId]);
 
   async function loadPlayersFor(club: ClubSeasonDto): Promise<PlayerSeasonDto[] | null> {
     setLoadingPlayers(true);
     try {
-      const players = await api.listPlayerSeasons({ clubSeasonId: club.id, ratingsMode: config.playerRatings });
+      // Defensive re-assertion of "Force Season ratings" for One-Club XI, alongside the Setup-time
+      // enforcement (ClubsDirectoryPage sets config.playerRatings to "season" when locking a club,
+      // and SetupPage hides the toggle) — a career-best "Prime" row could belong to a different
+      // club entirely, which would break the "this really is this club's XI" premise of the mode.
+      const ratingsMode = config.lockedClubId ? "season" : config.playerRatings;
+      const players = await api.listPlayerSeasons({ clubSeasonId: club.id, ratingsMode });
       setPlayerPool(players);
       return players;
     } catch (err) {
@@ -401,6 +411,7 @@ export function DraftPage() {
       const world = await api.createWorld(config.eraId, {
         europeanNights: config.europeanNights,
         januaryWindow: config.januaryWindow,
+        ...(config.lockedClubId ? { oneClubClubId: config.lockedClubId } : {}),
       });
       setWorldId(world.id);
       const refPlayerSeasonIds = slots.map((_, i) => picks[i]?.id).filter((id): id is string => Boolean(id));
@@ -498,9 +509,16 @@ export function DraftPage() {
       <div className="mb-8 border-b border-ink-800 pb-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <span className="notch-sm inline-flex items-center gap-2 border-2 border-mint-500/30 bg-mint-500/5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-smoke-400">
-              Building your XI
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="notch-sm inline-flex items-center gap-2 border-2 border-mint-500/30 bg-mint-500/5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-smoke-400">
+                Building your XI
+              </span>
+              {config.lockedClubId && (
+                <span className="notch-sm inline-flex items-center gap-2 border-2 border-teal-500/30 bg-teal-500/5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-teal-300">
+                  One-Club &middot; {config.lockedClubName}
+                </span>
+              )}
+            </div>
             <h1 className="mt-4 font-display text-3xl font-bold uppercase leading-tight tracking-tight text-paper sm:text-4xl">
               Draft Room
             </h1>
