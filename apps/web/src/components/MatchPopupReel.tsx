@@ -12,6 +12,10 @@ interface Props {
   userClubId: string | undefined;
   /** Minimum milliseconds each revealed card stays up before the next one appears. */
   intervalMs?: number;
+  /** While true, more matches are still being simulated/streamed in — the reel keeps revealing what
+      it has but must NOT fire `onComplete` on catching up (more cards are still coming). The driver
+      flips this to false once the season is fully simulated, letting the reel finish naturally. */
+  streaming?: boolean;
   onComplete: () => void;
 }
 
@@ -92,15 +96,21 @@ function StatStrip({ record }: { record: ClubRecord }) {
     popup this replaced (which showed a single card, fully replacing it with the next). A running
     W/D/L/Pts/GD strip builds up alongside it, so the story of the run is legible as it goes rather
     than only knowable once every match has revealed. */
-export function MatchPopupReel({ matches, clubs, userClubId, intervalMs = 1200, onComplete }: Props) {
+export function MatchPopupReel({ matches, clubs, userClubId, intervalMs = 1200, streaming = false, onComplete }: Props) {
   const nameFor = (clubId: string) => clubs.find((c) => c.id === clubId)?.name ?? clubId;
 
-  // The first card appears immediately (computed as the initial state, not via an effect) —
-  // otherwise the feed would sit blank for a render pass before anything shows up. Every
-  // subsequent card waits out a hold timer instead.
-  const [revealedCount, setRevealedCount] = useState(() => (matches.length > 0 ? 1 : 0));
+  // When the full match list is known up front (non-streaming callers), the first card appears
+  // immediately. When streaming, `matches` starts empty and grows as the worker finishes matchdays,
+  // so we start at 0 and let the effect reveal the first card the moment one arrives.
+  const [revealedCount, setRevealedCount] = useState(() => (matches.length > 0 && !streaming ? 1 : 0));
   const [skipped, setSkipped] = useState(false);
   const completedRef = useRef(false);
+  // Read the latest matches through a ref so the hold-timer effect can depend on `matches.length`
+  // (which only changes when a genuinely new match streams in) rather than the array identity
+  // (a fresh reference every parent render, which would otherwise reset the timer mid-hold and stall
+  // the reveal while the driver is polling).
+  const matchesRef = useRef(matches);
+  matchesRef.current = matches;
 
   function fireOnce() {
     if (completedRef.current) return;
@@ -111,16 +121,25 @@ export function MatchPopupReel({ matches, clubs, userClubId, intervalMs = 1200, 
   useEffect(() => {
     if (skipped) return;
     if (revealedCount >= matches.length) {
-      fireOnce();
+      // Caught up (this also covers the empty-list case where both are 0). Only finish if no more
+      // are coming — while streaming, hold and wait for the next matchday to stream in (this effect
+      // re-runs when matches.length grows).
+      if (!streaming) fireOnce();
       return;
     }
-    const justRevealed = matches[revealedCount - 1]!;
+    // Matches exist but nothing revealed yet (streaming: they arrived after mount): reveal the first.
+    // Ordered after the check above so matches[revealedCount-1] is never indexed at -1.
+    if (revealedCount === 0) {
+      setRevealedCount(1);
+      return;
+    }
+    const justRevealed = matchesRef.current[revealedCount - 1]!;
     const goalCount = userClubId ? summarizeForClub(justRevealed, userClubId).yourGoals.length : 0;
     const holdMs = intervalMs + goalCount * GOAL_HOLD_BONUS_MS;
     const timer = setTimeout(() => setRevealedCount((n) => n + 1), holdMs);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [revealedCount, matches, skipped, intervalMs]);
+  }, [revealedCount, matches.length, skipped, intervalMs, streaming]);
 
   function handleSkip() {
     setSkipped(true);
@@ -135,11 +154,16 @@ export function MatchPopupReel({ matches, clubs, userClubId, intervalMs = 1200, 
 
   if (!userClubId) return null; // nothing to summarize a "your results" feed against
 
+  // While streaming, the reel has caught up to everything simulated so far and is waiting for the
+  // next matchday's result to land.
+  const awaitingNext = streaming && revealedCount >= matches.length;
+
   return (
     <div className="space-y-4">
       {revealed.length > 0 && (
         <p className="text-center text-xs font-semibold uppercase tracking-widest text-smoke-600">
-          Matchday {revealed[revealed.length - 1]!.matchday} &middot; {revealed.length} / {matches.length}
+          Matchday {revealed[revealed.length - 1]!.matchday} &middot; {revealed.length}
+          {streaming ? "" : ` / ${matches.length}`} played
         </p>
       )}
 
@@ -149,9 +173,15 @@ export function MatchPopupReel({ matches, clubs, userClubId, intervalMs = 1200, 
         ))}
       </div>
 
+      {awaitingNext && (
+        <p className="animate-mint-pulse text-center text-xs font-semibold uppercase tracking-widest text-mint-400">
+          {revealed.length > 0 ? "Results rolling in…" : "Kicking off…"}
+        </p>
+      )}
+
       {record && <StatStrip record={record} />}
 
-      {!skipped && revealedCount < matches.length && (
+      {!skipped && (streaming || revealedCount < matches.length) && (
         <div className="text-center">
           <Button variant="ghost" size="sm" onClick={handleSkip}>
             Skip ahead &rarr;

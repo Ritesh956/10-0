@@ -81,6 +81,86 @@ export function runBatch(config: BatchConfig): BatchStats {
   };
 }
 
+/** Maps an `overall` (70-99) to engine quality the same way packages/db/prisma/seed-real.ts does,
+    so league simulations here mirror what real drafted squads actually feed the engine. */
+export function overallToQuality(overall: number): number {
+  return Math.min(1, Math.max(0, 0.42 + ((overall - 70) / 29) * 0.58));
+}
+
+export interface LeagueStats {
+  seasons: number;
+  avgChampionPoints: number;
+  avgLastPoints: number;
+  avgSpread: number;
+  avgGoalsPerGame: number;
+  strongestWinsTitlePct: number;
+}
+
+/**
+ * Plays `seasons` full double round-robins over a fixed set of team overalls and aggregates
+ * league-shape realism: champion/last points, the 1st-to-last spread, and how often the single
+ * strongest squad actually finishes top. This is the accuracy signal individual-match win rates
+ * miss — over 38 games, per-match variance can wash out quality and compress the table unless the
+ * engine's quality sensitivity is tuned for it.
+ */
+export function simulateLeagueSeasons(overalls: number[], seasons: number): LeagueStats {
+  const n = overalls.length;
+  const strongest = Math.max(...overalls);
+  let champPts = 0;
+  let lastPts = 0;
+  let spread = 0;
+  let goals = 0;
+  let strongestTitles = 0;
+
+  for (let seed = 0; seed < seasons; seed++) {
+    const rng = createRng(BigInt(seed * 7919 + 1));
+    const pts = new Array(n).fill(0);
+    const gd = new Array(n).fill(0);
+    let gf = 0;
+    let game = 0;
+    for (let h = 0; h < n; h++) {
+      for (let a = 0; a < n; a++) {
+        if (h === a) continue;
+        const setup = generateMatchSetup(rng, {
+          matchId: `L${seed}-${game}`,
+          worldId: "league",
+          homeClubId: `h${h}`,
+          awayClubId: `a${a}`,
+          homeQuality: overallToQuality(overalls[h]!),
+          awayQuality: overallToQuality(overalls[a]!),
+        });
+        const r = simulate(setup, BigInt(seed * 1_000_003 + game + 1));
+        game++;
+        gf += r.homeScore + r.awayScore;
+        gd[h] += r.homeScore - r.awayScore;
+        gd[a] += r.awayScore - r.homeScore;
+        if (r.homeScore > r.awayScore) pts[h] += 3;
+        else if (r.homeScore < r.awayScore) pts[a] += 3;
+        else {
+          pts[h] += 1;
+          pts[a] += 1;
+        }
+      }
+    }
+    const order = [...Array(n).keys()].sort((x, y) => pts[y] - pts[x] || gd[y] - gd[x]);
+    champPts += pts[order[0]!];
+    lastPts += pts[order[n - 1]!];
+    spread += pts[order[0]!] - pts[order[n - 1]!];
+    goals += gf;
+    if (overalls[order[0]!] === strongest) strongestTitles += 1;
+  }
+
+  const gamesPerSeason = n * (n - 1);
+  return {
+    seasons,
+    avgChampionPoints: champPts / seasons,
+    avgLastPoints: lastPts / seasons,
+    avgSpread: spread / seasons,
+    avgGoalsPerGame: goals / (seasons * gamesPerSeason),
+    strongestWinsTitlePct: (strongestTitles / seasons) * 100,
+  };
+}
+
 export interface GapPoint {
   gap: number;
   favoriteWinPct: number;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { favoriteWinRateByGap, runBatch } from "./stats.js";
+import { favoriteWinRateByGap, runBatch, simulateLeagueSeasons } from "./stats.js";
 
 /**
  * This is the calibration harness from the architecture doc (§6): it asserts
@@ -53,4 +53,27 @@ describe("sim-lab calibration", () => {
     // but a big gap should still be won by the favorite more often than not
     expect(bigGap.favoriteWinPct).toBeGreaterThan(50);
   });
+
+  it("a full league season produces a realistic table, not a compressed one", () => {
+    // A realistic top-league spread of team-average overalls (elite ~89 down to relegation ~73).
+    const overalls = [89, 87, 86, 85, 84, 83, 82, 81, 81, 80, 80, 79, 79, 78, 78, 77, 76, 75, 74, 73];
+    const stats = simulateLeagueSeasons(overalls, 12);
+
+    // The champion must pull clear of the pack — a compressed table (everyone bunched ~60-75 pts)
+    // was the symptom of quality washing out over 38 games. Real title totals sit ~80-95.
+    expect(stats.avgChampionPoints).toBeGreaterThan(78);
+    expect(stats.avgChampionPoints).toBeLessThan(98);
+
+    // 1st-to-last spread should look like a real division (~55-70), not a flat ~45.
+    expect(stats.avgSpread).toBeGreaterThan(48);
+
+    // Quality must translate to standings: the single strongest squad should win the title far more
+    // often than the 1-in-20 a coin-flip league would give — while still leaving room for upsets.
+    expect(stats.strongestWinsTitlePct).toBeGreaterThan(40);
+    expect(stats.strongestWinsTitlePct).toBeLessThan(90);
+
+    // Season-long scoring stays realistic.
+    expect(stats.avgGoalsPerGame).toBeGreaterThan(2.3);
+    expect(stats.avgGoalsPerGame).toBeLessThan(3.2);
+  }, 30000);
 });

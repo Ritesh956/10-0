@@ -319,11 +319,19 @@ export class SeasonsService {
    * snapshot, not the ref catalog — matches what actually played, including any mid-world changes).
    * Ordered by matchday so the frontend can play them back like a season unfolding.
    */
-  async getMatchesWithEvents(worldId: string, seasonId: string, userId: string) {
+  async getMatchesWithEvents(worldId: string, seasonId: string, userId: string, clubId?: string) {
     await this.worlds.assertOwnership(worldId, userId);
 
     const fixtures = await this.prisma.fixture.findMany({
-      where: { worldId, seasonId, status: "COMPLETED" },
+      // `clubId` narrows to just that club's fixtures (~38 for a domestic season instead of 380) —
+      // used by the season page's live streaming reveal, which polls this repeatedly while the
+      // worker is still simulating and only needs the user's own matches to feed the reel.
+      where: {
+        worldId,
+        seasonId,
+        status: "COMPLETED",
+        ...(clubId ? { OR: [{ homeClubId: clubId }, { awayClubId: clubId }] } : {}),
+      },
       orderBy: { matchday: "asc" },
       include: { match: { include: { events: { orderBy: { seq: "asc" } } } } },
     });

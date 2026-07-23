@@ -117,7 +117,9 @@ export function applyTactics(ratings: UnitRatings, tactics: Tactics): UnitRating
   };
 }
 
-export const HOME_ADVANTAGE = 0.08;
+// Amplified by CHANCE_QUALITY_EXPONENT along with every other rating edge, so a smaller raw factor
+// than the pre-exponent 0.08 now lands the even-match home-win rate at a realistic ~45%.
+export const HOME_ADVANTAGE = 0.05;
 
 /** Applies the well-documented home-field boost to attack/creation/defence. */
 export function applyHomeAdvantage(ratings: UnitRatings, isHome: boolean, neutralVenue: boolean): UnitRatings {

@@ -58,8 +58,9 @@ export class SeasonsController {
     @CurrentUser() user: AuthTokenPayload,
     @Param("worldId") worldId: string,
     @Param("seasonId") seasonId: string,
+    @Query("clubId") clubId?: string,
   ) {
-    return this.seasons.getMatchesWithEvents(worldId, seasonId, user.sub);
+    return this.seasons.getMatchesWithEvents(worldId, seasonId, user.sub, clubId);
   }
 
   @Get(":seasonId/team-stats")

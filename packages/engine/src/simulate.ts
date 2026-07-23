@@ -4,6 +4,9 @@ import {
   BASE_FOUL_RATE,
   BASE_INJURY_RATE,
   CARD_PROBABILITY_ON_FOUL,
+  CHANCE_QUALITY_EXPONENT,
+  ONTARGET_QUALITY_WEIGHT,
+  XG_QUALITY_WEIGHT,
   FATIGUE_MAX,
   INJURY_PRONE_MULTIPLIER,
   MOMENTUM_BOOST_WEIGHT,
@@ -70,19 +73,24 @@ function processAttack(
 
   attacker.possessionUnits += offense;
 
-  const chanceProb = clamp(BASE_CHANCE_RATE * (offense / (offense + defense)) * 2, 0.02, 0.6);
+  // Quality edge → chance-share, steepened by CHANCE_QUALITY_EXPONENT. At equal quality this is
+  // exactly 0.5 regardless of the exponent, so the even-strength calibration is unaffected; a real
+  // gap is amplified so it compounds into a realistic league table over a full season.
+  const ok = Math.pow(offense, CHANCE_QUALITY_EXPONENT);
+  const dk = Math.pow(defense, CHANCE_QUALITY_EXPONENT);
+  const chanceProb = clamp(BASE_CHANCE_RATE * (ok / (ok + dk)) * 2, 0.02, 0.6);
   if (rng() >= chanceProb) return 0;
 
   attacker.shots += 1;
   const qualityDelta = offense - defense;
-  const xg = clamp(0.28 + 0.25 * qualityDelta + (rng() - 0.5) * 0.3 * varMult, 0.03, 0.95);
+  const xg = clamp(0.28 + XG_QUALITY_WEIGHT * qualityDelta + (rng() - 0.5) * 0.3 * varMult, 0.03, 0.95);
   attacker.xgTotal += xg;
 
   const shooterId = pickShooter(attacker, rng);
   const shooterContrib = attacker.contributions.get(shooterId);
   if (shooterContrib) shooterContrib.shots += 1;
 
-  const onTargetProb = clamp(0.4 + 0.3 * qualityDelta, 0.15, 0.8);
+  const onTargetProb = clamp(0.4 + ONTARGET_QUALITY_WEIGHT * qualityDelta, 0.15, 0.8);
   const onTarget = rng() < onTargetProb;
 
   if (!onTarget) {

@@ -77,6 +77,27 @@ interface RealCatalog {
   playerSeasons: RealPlayerSeason[];
 }
 
+/**
+ * Maps a stored `overall` (70-99 after the rating recalibration — see tools/data-etl/) onto the
+ * engine's [0,1] `quality`, which seeds `generateAttributes()`.
+ *
+ * NOT a plain `overall / 99`: that compresses the whole real-player pool into quality 0.71-1.0,
+ * and since the engine derives per-unit ratings from `6 + quality*12` attribute centers, that left
+ * barely any gap between a great side and a poor one — a 90-rated team beat a 75-rated team only
+ * ~56% of the time in sim-lab (a title team vs a relegation team should be far more decisive).
+ * Instead we stretch [70,99] across [0.42,1.0], restoring a realistic spread: sim-lab then shows
+ * 90v75 ≈ 71% and 99v70 ≈ 87% favorite wins (upsets still ~4-11%), while even matchups across the
+ * whole range stay within the engine's calibrated targets (2.3-3.0 goals, 23-28% draws, home edge).
+ * Keep the floor/cap in sync with the OVR curve's [70,99] in tools/data-etl.
+ */
+const QUALITY_OVR_FLOOR = 70;
+const QUALITY_OVR_CAP = 99;
+const QUALITY_AT_FLOOR = 0.42;
+function overallToEngineQuality(overall: number): number {
+  const t = (overall - QUALITY_OVR_FLOOR) / (QUALITY_OVR_CAP - QUALITY_OVR_FLOOR);
+  return Math.min(1, Math.max(0, QUALITY_AT_FLOOR + t * (1 - QUALITY_AT_FLOOR)));
+}
+
 function loadCatalog(): RealCatalog {
   const gz = readFileSync(DATA_PATH);
   const json = gunzipSync(gz).toString("utf-8");
@@ -156,7 +177,7 @@ async function main(): Promise<void> {
 
   const rng = createRng(42n);
   const playerSeasonRows: Prisma.RefPlayerSeasonCreateManyInput[] = catalog.playerSeasons.map((ps) => {
-    const quality = Math.min(1, Math.max(0, ps.overall / 99));
+    const quality = overallToEngineQuality(ps.overall);
     return {
       id: ps.id,
       playerId: ps.playerId,
@@ -175,6 +196,33 @@ async function main(): Promise<void> {
     await prisma.refPlayerSeason.createMany({ data: batch, skipDuplicates: true });
   }
   console.log(`Inserted ${playerSeasonRows.length} player-seasons.`);
+
+  // Same skipDuplicates caveat as photoUrl above: createMany won't touch rows
+  // that already exist, so a rerun after the overall-scale recalibration (see
+  // tools/data-etl/rescale_existing_overall.py) wouldn't otherwise update the
+  // ratings — or the attributes generated from them — on previously-seeded
+  // player-seasons. Explicitly sync overall/potential/attributes so a plain
+  // `pnpm seed:real` rerun applies the new curve without a wipe.
+  for (const batch of chunk(playerSeasonRows, 500)) {
+    await prisma.$transaction(
+      batch.map((ps) =>
+        prisma.refPlayerSeason.update({
+          where: { id: ps.id! },
+          data: { overall: ps.overall, potential: ps.potential, attributes: ps.attributes },
+        }),
+      ),
+    );
+  }
+  console.log(`Synced overall/potential/attributes for ${playerSeasonRows.length} player-seasons.`);
+
+  // Club-season reputation is derived from the mean overall of its players, so
+  // it shifts with the recalibration too — sync it for the same reason.
+  for (const batch of chunk(clubSeasonRows, 500)) {
+    await prisma.$transaction(
+      batch.map((cs) => prisma.refClubSeason.update({ where: { id: cs.id! }, data: { reputation: cs.reputation } })),
+    );
+  }
+  console.log(`Synced reputation for ${clubSeasonRows.length} club-seasons.`);
 
   console.log("Done.");
 }

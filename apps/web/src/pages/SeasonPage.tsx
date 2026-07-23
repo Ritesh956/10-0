@@ -60,21 +60,11 @@ const ROUND_LABEL: Record<KnockoutRound, string> = { QF: "Quarter-Final", SF: "S
 
 async function pollUntilCompleted(worldId: string, seasonId: string): Promise<void> {
   for (;;) {
-    await new Promise((resolve) => setTimeout(resolve, 1200));
+    // Check before sleeping: after the streaming reveal the season is usually already COMPLETED, so
+    // this returns on the first call with no needless 1.2s pause (only a skip-ahead leaves real work).
     const season = await api.getSeason(worldId, seasonId);
     if (season.status === "COMPLETED") return;
-  }
-}
-
-/** Same polling shape as pollUntilCompleted, but resolves once every fixture up to (and
-    including) `matchday` is COMPLETED — used to detect the January halfway pause point, which
-    leaves the Season itself IN_PROGRESS (the back half is still SCHEDULED) rather than COMPLETED. */
-async function pollUntilMatchdayComplete(worldId: string, seasonId: string, matchday: number): Promise<void> {
-  for (;;) {
     await new Promise((resolve) => setTimeout(resolve, 1200));
-    const season = await api.getSeason(worldId, seasonId);
-    const upToMatchday = season.fixtures.filter((f) => f.matchday <= matchday);
-    if (upToMatchday.length > 0 && upToMatchday.every((f) => f.status === "COMPLETED")) return;
   }
 }
 
@@ -151,6 +141,9 @@ export function SeasonPage() {
   // used as the reel's `key` so its internal reveal state resets cleanly for the second half.
   const [domesticReelMatches, setDomesticReelMatches] = useState<MatchSummaryDto[]>([]);
   const [domesticReelHalf, setDomesticReelHalf] = useState(0);
+  // True while the worker is still simulating and the reel is being fed matchday-by-matchday as
+  // results land (the "instant start" streaming reveal), so the reel holds instead of finishing.
+  const [reelStreaming, setReelStreaming] = useState(false);
   const [januaryOutcome, setJanuaryOutcome] = useState<JanuaryResultDto | null>(null);
   const [standings, setStandings] = useState<StandingsDto | null>(null);
   const [teamStats, setTeamStats] = useState<TeamStatsDto | null>(null);
@@ -202,6 +195,58 @@ export function SeasonPage() {
     return new Promise((resolve) => {
       replayResolveRef.current = resolve;
     });
+  }
+
+  /**
+   * The "instant start" reveal: instead of waiting for the whole 380-fixture season to finish
+   * simulating (~60-90s against Neon) before showing anything, we drop straight into the reel and
+   * poll for the user's own fixtures as the worker completes each matchday, feeding them in live.
+   * The reel starts within a couple seconds (as soon as matchday 1 lands) and stays fed because a
+   * full replay (~38 cards paced a couple seconds each) takes about as long as the simulation does.
+   *
+   * `toMatchday` bounds the reveal to a matchday range (the January first half stops at the midpoint;
+   * `null` streams to the end of the season). Returns once the reel has finished revealing — either
+   * naturally (all in-range matches shown after simulation of that range completed) or via "Skip".
+   */
+  async function streamDomesticReel(
+    wId: string,
+    seasonId: string,
+    userClubId: string | undefined,
+    opts: { fromMatchday: number; toMatchday: number | null; half: 0 | 1 },
+  ): Promise<void> {
+    setDomesticReelMatches([]);
+    setDomesticReelHalf(opts.half);
+    setReelStreaming(true);
+    setPhase("domestic-replay");
+
+    const replayDone = waitForReplay();
+    let stopped = false;
+    void replayDone.then(() => {
+      stopped = true; // "Skip ahead" fires onComplete early — stop polling
+    });
+    const inRange = (m: MatchSummaryDto) =>
+      m.matchday >= opts.fromMatchday && (opts.toMatchday === null || m.matchday <= opts.toMatchday);
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    let rangeDone = false;
+    while (!rangeDone && !stopped) {
+      const [season, userMatches] = await Promise.all([
+        api.getSeason(wId, seasonId),
+        api.getMatchesWithEvents(wId, seasonId, userClubId),
+      ]);
+      setDomesticReelMatches(userMatches.filter(inRange));
+      rangeDone =
+        opts.toMatchday === null
+          ? season.status === "COMPLETED"
+          : (() => {
+              const upTo = season.fixtures.filter((f) => f.matchday <= opts.toMatchday!);
+              return upTo.length > 0 && upTo.every((f) => f.status === "COMPLETED");
+            })();
+      if (!rangeDone && !stopped) await sleep(900);
+    }
+
+    setReelStreaming(false); // range fully simulated — let the reel reveal any backlog and finish
+    await replayDone;
   }
 
   const januaryResolveRef = useRef<((result: JanuaryResultDto | null) => void) | null>(null);
@@ -292,52 +337,52 @@ export function SeasonPage() {
     let outcome: JanuaryResultDto | null = null;
 
     if (januaryEnabled) {
-      setPhase("simulating");
-      setSimulatingLabel("Simulating the first half of the season…");
+      // First half streams in live as the worker simulates matchdays 1..mid (no upfront wait).
       await api.simulateSeason(wId, domesticSeasonId, { throughMatchday: midMatchday });
-      await pollUntilMatchdayComplete(wId, domesticSeasonId, midMatchday);
-
-      const firstHalf = await api.getMatchesWithEvents(wId, domesticSeasonId);
-      setDomesticReelMatches(firstHalf);
-      setDomesticReelHalf(0);
-      setPhase("domestic-replay");
-      await waitForReplay();
+      await streamDomesticReel(wId, domesticSeasonId, userClub?.id, {
+        fromMatchday: 1,
+        toMatchday: midMatchday,
+        half: 0,
+      });
 
       setPhase("january");
       outcome = await waitForJanuary();
       setJanuaryOutcome(outcome);
 
-      setPhase("simulating");
-      setSimulatingLabel("Simulating the rest of the season…");
+      // Second half streams in the same way once the roster change is locked in.
       await api.simulateSeason(wId, domesticSeasonId);
-      await pollUntilCompleted(wId, domesticSeasonId);
+      await streamDomesticReel(wId, domesticSeasonId, userClub?.id, {
+        fromMatchday: midMatchday + 1,
+        toMatchday: null,
+        half: 1,
+      });
 
+      setPhase("simulating");
+      setSimulatingLabel("Wrapping up the season…");
+      await pollUntilCompleted(wId, domesticSeasonId); // instant unless the user skipped ahead
       const [allMatches, finalStandings] = await Promise.all([
         api.getMatchesWithEvents(wId, domesticSeasonId),
         api.getStandings(wId, domesticSeasonId),
       ]);
       matches = allMatches;
       standingsRes = finalStandings;
-
-      setDomesticReelMatches(allMatches.filter((m) => m.matchday > midMatchday));
-      setDomesticReelHalf(1);
-      setPhase("domestic-replay");
-      await waitForReplay();
     } else {
-      setPhase("simulating");
       await api.simulateSeason(wId, domesticSeasonId);
-      await pollUntilCompleted(wId, domesticSeasonId);
+      await streamDomesticReel(wId, domesticSeasonId, userClub?.id, {
+        fromMatchday: 1,
+        toMatchday: null,
+        half: 0,
+      });
 
+      setPhase("simulating");
+      setSimulatingLabel("Wrapping up the season…");
+      await pollUntilCompleted(wId, domesticSeasonId); // instant unless the user skipped ahead
       const [m, s] = await Promise.all([
         api.getMatchesWithEvents(wId, domesticSeasonId),
         api.getStandings(wId, domesticSeasonId),
       ]);
       matches = m;
       standingsRes = s;
-      setDomesticReelMatches(matches);
-      setDomesticReelHalf(0);
-      setPhase("domestic-replay");
-      await waitForReplay();
     }
 
     setDomesticMatches(matches);
@@ -600,6 +645,7 @@ export function SeasonPage() {
           matches={onlyMine(domesticReelMatches)}
           clubs={world.clubs}
           userClubId={userClub?.id}
+          streaming={reelStreaming}
           onComplete={() => replayResolveRef.current?.()}
         />
       )}

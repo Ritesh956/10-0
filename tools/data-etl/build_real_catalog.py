@@ -22,9 +22,19 @@ import gzip
 import json
 import re
 from pathlib import Path
+from statistics import NormalDist
 
 import numpy as np
 import pandas as pd
+
+# Target OVERALL curve. See the long comment where these are used below: the
+# blended score is quantile-mapped onto a normal(mean, sd) clamped to
+# [floor, cap], so the final rating distribution looks like real football
+# (floor 70, bulk clustered in the low 80s, thin elite tail to 99) instead of
+# the near-flat 40-99 spread a raw linear map produced. Keep these in sync with
+# rescale_existing_overall.py, which applies the identical curve to the already
+# shipped dataset.
+OVR_MEAN, OVR_SD, OVR_FLOOR, OVR_CAP = 81.5, 5.0, 70, 99
 
 TOP5 = {"GB1": "England", "ES1": "Spain", "IT1": "Italy", "L1": "Germany", "FR1": "France"}
 TOP5_NAMES = {"GB1": "Premier League", "ES1": "LaLiga", "IT1": "Serie A", "L1": "Bundesliga", "FR1": "Ligue 1"}
@@ -158,10 +168,27 @@ def main() -> None:
     w_inv = np.where(is_def, 0.25, np.where(is_atk, 0.20, 0.20))
 
     blend = w_value * agg["value_score"] + w_perf * agg["perf_score"] + w_inv * agg["minutes_score"]
-    agg["overall"] = (40 + 59 * blend).round().clip(40, 99).astype(int)
+
+    # Map the blended score onto a realistic, football-shaped overall curve.
+    # The old `40 + 59*blend` linear map produced a nearly FLAT distribution:
+    # because `blend` is itself a weighted average of percentile ranks (roughly
+    # uniform), every 5-point band from 40 to 99 ended up holding ~equal share.
+    # That read as "too much gap / not consistent" and handed fringe top-5-league
+    # players implausible sub-50 ratings. Instead we quantile-map the blend's
+    # percentile rank through the normal target (OVR_MEAN, OVR_SD) clamped to
+    # [70, 99]. This preserves the blend's rank ordering exactly while reshaping
+    # the SCALE: floor pinned at a realistic 70, the bulk clustered in the
+    # high-70s/low-80s the way real squad ratings are, and a thin elite tail that
+    # only the single best season reaches 99. Ranking on the continuous blend
+    # (not the rounded overall) keeps the mapping smooth and tie-free.
+    nd = NormalDist(OVR_MEAN, OVR_SD)
+    pct = blend.rank(pct=True, method="average")
+    eps = 0.5 / len(agg)
+    pct = pct.clip(eps, 1 - eps)  # avoid inv_cdf(0)/inv_cdf(1) = +/-inf
+    agg["overall"] = pct.map(nd.inv_cdf).round().clip(OVR_FLOOR, OVR_CAP).astype(int)
 
     age_bonus = ((25 - agg["age"]).clip(lower=0) * 0.8).round()
-    agg["potential"] = (agg["overall"] + age_bonus).clip(upper=99)
+    agg["potential"] = (agg["overall"] + age_bonus).clip(upper=OVR_CAP)
     agg["potential"] = agg[["overall", "potential"]].max(axis=1).astype(int)
 
     agg["preferred_foot"] = agg["foot"].map({"right": "right", "left": "left", "both": "both"}).fillna("right")

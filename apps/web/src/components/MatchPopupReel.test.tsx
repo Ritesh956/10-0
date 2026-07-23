@@ -100,6 +100,42 @@ describe("MatchPopupReel", () => {
     expect(container.textContent).toContain("GD +1");
   }, 8000);
 
+  it("while streaming, holds without completing even after revealing everything delivered so far", async () => {
+    const onComplete = vi.fn();
+    // Starts empty (worker hasn't finished a matchday yet) — must show the "kicking off" hint and
+    // must NOT fire onComplete, since more results are still coming.
+    const { container, rerender } = render(
+      <MatchPopupReel matches={[]} clubs={clubs} userClubId="home" intervalMs={50} streaming onComplete={onComplete} />,
+    );
+    expect(container.textContent).toContain("Kicking off");
+
+    // First matchday lands: reveal it, but still hold (streaming) — no completion.
+    rerender(
+      <MatchPopupReel matches={[match("f1", 1, 0, 1)]} clubs={clubs} userClubId="home" intervalMs={50} streaming onComplete={onComplete} />,
+    );
+    await waitFor(() => expect(container.textContent).toContain("GW1"));
+    await new Promise((r) => setTimeout(r, 200));
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Results rolling in");
+  }, 8000);
+
+  it("finishes once streaming flips off and the last streamed matches have revealed", async () => {
+    const onComplete = vi.fn();
+    const matches = [match("f1", 1, 0, 1), match("f2", 2, 1, 2)];
+    const { rerender } = render(
+      <MatchPopupReel matches={matches} clubs={clubs} userClubId="home" intervalMs={50} streaming onComplete={onComplete} />,
+    );
+    // Still streaming: even after both reveal, it must not complete.
+    await new Promise((r) => setTimeout(r, 300));
+    expect(onComplete).not.toHaveBeenCalled();
+
+    // Simulation done — driver flips streaming off; now the reel is allowed to finish.
+    rerender(
+      <MatchPopupReel matches={matches} clubs={clubs} userClubId="home" intervalMs={50} onComplete={onComplete} />,
+    );
+    await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1), { timeout: 4000, interval: 50 });
+  }, 8000);
+
   it("renders nothing when there is no user club to summarize the feed for", () => {
     const onComplete = vi.fn();
     const { container } = render(

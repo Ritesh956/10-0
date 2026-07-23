@@ -193,8 +193,10 @@ export const api = {
   getSummary: (worldId: string, seasonId: string) =>
     request<SummaryDto>(`/worlds/${worldId}/seasons/${seasonId}/summary`),
 
-  getMatchesWithEvents: (worldId: string, seasonId: string) =>
-    request<MatchSummaryDto[]>(`/worlds/${worldId}/seasons/${seasonId}/matches`),
+  getMatchesWithEvents: (worldId: string, seasonId: string, clubId?: string) =>
+    request<MatchSummaryDto[]>(
+      `/worlds/${worldId}/seasons/${seasonId}/matches${clubId ? `?clubId=${clubId}` : ""}`,
+    ),
 
   getTeamStats: (worldId: string, seasonId: string, clubId: string) =>
     request<TeamStatsDto>(`/worlds/${worldId}/seasons/${seasonId}/team-stats?clubId=${clubId}`),
