@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Futbol: a football universe simulator (draft a squad → simulate a season → chase an unbeaten record → share the result), inspired by 38-0/FIFA Career Mode/Football Manager. Built as a pnpm/Turborepo monorepo. The original MVP architecture/database design lives in `plans/i-want-to-build-shiny-candy.md`; the phased **38-0 parity revamp** tracked in `plans/futbol-38-0-revamp-plan.md` is now **all 11 phases (0-10) complete as of 2026-07-23** — formations/settings foundation, draft-room polish, the animated season reveal, the January Transfer Window, the end-of-season narrative/awards, persistence/trophies/history, the Leaderboard, One-Club XI, Daily Challenge, async Leagues + real-time Live Draft multiplayer, and (most recently) Nations Trophy + content/SEO pages + landing/platform polish — read that doc's phase-by-phase completion notes before making structural changes; each phase's note records what was actually built vs. originally scoped, and §19 lists what's deliberately out of scope going forward (a multi-league Europe stretch item, dynamic per-route meta tags, pre-2012 dataset depth, and a few smaller flagged items).
 
+**Current "what next" (2026-10-03):** `plans/38-0-vs-futbol-comparison-2026-10.md` — a fresh live comparison against 38-0 with a P0–P3 roadmap. Its P0 bugs are fixed (branch `fix/p0-audit-fixes`); start from its "Status & next session" section (next up: projection/rating calibration, then the P1 UX parity list).
+
 ## Commands
 
 All commands run from the repo root unless noted. Package manager is **pnpm** (`packageManager` pinned in root `package.json`); Node >= 22.

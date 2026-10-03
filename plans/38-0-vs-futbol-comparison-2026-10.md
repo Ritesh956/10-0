@@ -8,6 +8,19 @@
 
 ---
 
+## Status & next session (updated 2026-10-03, branch `fix/p0-audit-fixes`)
+
+**Done this session (all P0s in §3 except B20):** B1 lineup fidelity (user slot choices are stored and simulated exactly; illegal placements 400; auto-fill now exact → compatible → same group → anything) · B2 legend colours · B3/B4 narrative verdict + composition · B5 daily copy · B6 reveal counter across January · B7 (fixed by B1) · B8 `formatSeason` "2013/14" · B9/B10 season header + Double copy · B11 Europe "top eight" copy · B12 live landing stats + "Play with Mates" card · B13 draft persistence + "Continue your draft" · B14 scroll-to-top · B15 404 + `/signin` redirect · B16 GET retry/backoff + friendly 5xx copy · B17 daily pre-generation · B18 bracket aggregate scores + stage labels in the Europe log · B19 "Kings of Europe" + "The Double" trophies. Also: Premier League default league, era slider bounded by each league's real season span (`minSeasonYear`/`maxSeasonYear` on `/catalog/leagues`), redundant era presets hidden.
+
+**Verified:** `pnpm typecheck` green (10 packages); api 97 tests, web 135 tests green. Live against the real API/worker/DB: lineup stored exactly as submitted (and an illegal one rejected); full season + Europe run showed scored ties ("5-1 agg", Final "1-2"); a run that won the league and the Final was awarded `champions, european-champion, the-double`; `/daily/today` answers in <1s; landing stats render 5 leagues / 141 nationalities / 173 clubs / 2012/13–2024/25; Setup defaults and slider; scroll reset; reload mid-draft keeps the draft. Not clicked through visually end to end (the Browser pane was hidden, which freezes the draft-wheel animation).
+
+**Start next session here (in order):**
+1. **B20 + §5 credibility work** — calibrate `apps/web/src/lib/preseasonOdds.ts` against real simulated seasons (sim-lab: N seasons per overall bucket with a realistic AI-filled league), then the OVR top-tail re-fit (`tools/data-etl`), percentile-based squad/unit tiers, AI-league table realism (add a table-shape metric to sim-lab). Evidence: overall 90 projects "4th / 89 pts" but the champion scored 69; an XI of ten 98-rated players finished 2nd; nothing under ~100 projects 1st.
+2. **Daily completion odds start at 0%** (`lib/dailyOdds.ts`) + yesterday recap/attempts (§4.13).
+3. **P1 UX parity list** (§10): compact mobile header/nav, compact Setup, inline "Place in" pills + valid-slot highlighting + all eligible position chips, no nested scrolls + sticky action bar, single Simulate click / no username gate, faster reveal + speed + skip-to-January, January event-type layer, results hub reorder (story first, League tab default), image share cards, Europe opt-in + rename from "Champions League", collapsed leaderboard filters + wipe test data, club display names + flags, per-route titles, colour semantics (§6.1).
+
+**Housekeeping:** test guest users/worlds from this session ("AuditTester", "LineupE2E", "EuropeE2E") remain in the dev DB. Screenshots in `plans/assets/38-0-vs-futbol-2026-10/` include 38-0 UI captures for internal research — consider keeping them out of any public repo.
+
 ## 0. TL;DR — the 12 things that matter most
 
 | # | Finding | Severity |
