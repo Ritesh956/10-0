@@ -57,7 +57,9 @@ const DEFAULT_CONFIG: DraftConfig = {
   difficulty: "normal",
   showRatings: true,
   draftMode: "squad-first",
-  playerRatings: "season",
+  // Prime by default (2026-10): with Season ratings a typical drafted XI projects mid-table, which
+  // undersells the draft; Prime gives the "build a super-team" feel. Season is one tap away in Setup.
+  playerRatings: "prime",
   managers: true,
   europeanNights: true,
   januaryWindow: true,

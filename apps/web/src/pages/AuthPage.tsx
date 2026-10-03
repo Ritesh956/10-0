@@ -1,12 +1,15 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth-context";
+import { PasswordlessSignIn } from "../components/PasswordlessSignIn";
 
 export function AuthPage() {
   const navigate = useNavigate();
   const { user, playAsGuest, login } = useAuth();
   // A guest already has a username — the only useful thing left here is signing in to a saved account.
   const [showSignIn, setShowSignIn] = useState(Boolean(user?.isGuest));
+  // Passwordless (Google / email link) is the main path; passwords stay for accounts that have one.
+  const [usePassword, setUsePassword] = useState(false);
 
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
@@ -96,55 +99,69 @@ export function AuthPage() {
                 }}
                 className="mt-3 w-full text-center text-xs text-smoke-500 underline-offset-2 hover:text-smoke-300 hover:underline"
               >
-                Already saved your progress? Sign in
+                Have an account? Sign in
               </button>
             </>
           ) : (
             <>
-              <form onSubmit={handleSignIn} className="space-y-4">
-                <div>
-                  <label className="mb-1 block text-xs font-medium uppercase tracking-widest text-smoke-600">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    className="notch-sm w-full border border-ink-800 bg-ink-950 px-3 py-2 text-sm text-paper outline-none focus:border-mint-500"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs font-medium uppercase tracking-widest text-smoke-600">
-                    Password
-                  </label>
-                  <input
-                    type="password"
-                    className="notch-sm w-full border border-ink-800 bg-ink-950 px-3 py-2 text-sm text-paper outline-none focus:border-mint-500"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    minLength={8}
-                  />
-                </div>
+              {!usePassword ? (
+                <PasswordlessSignIn onSignedIn={() => navigate("/profile")} emailCta="Email me a sign-in link" />
+              ) : (
+                <form onSubmit={handleSignIn} className="space-y-4">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium uppercase tracking-widest text-smoke-600">
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      className="notch-sm w-full border border-ink-800 bg-ink-950 px-3 py-2 text-sm text-paper outline-none focus:border-mint-500"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium uppercase tracking-widest text-smoke-600">
+                      Password
+                    </label>
+                    <input
+                      type="password"
+                      className="notch-sm w-full border border-ink-800 bg-ink-950 px-3 py-2 text-sm text-paper outline-none focus:border-mint-500"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      minLength={8}
+                    />
+                  </div>
 
-                {error && <p className="text-sm text-crimson-400">{error}</p>}
+                  {error && <p className="text-sm text-crimson-400">{error}</p>}
 
-                <button
-                  type="submit"
-                  disabled={busy}
-                  className="notch-sm w-full bg-mint-500 py-2 text-sm font-display font-semibold uppercase tracking-wide text-ink-950 transition hover:bg-mint-400 disabled:opacity-50"
-                >
-                  {busy ? "Please wait..." : "Sign in"}
-                </button>
-              </form>
+                  <button
+                    type="submit"
+                    disabled={busy}
+                    className="notch-sm w-full bg-mint-500 py-2 text-sm font-display font-semibold uppercase tracking-wide text-ink-950 transition hover:bg-mint-400 disabled:opacity-50"
+                  >
+                    {busy ? "Please wait..." : "Sign in"}
+                  </button>
+                </form>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setUsePassword((v) => !v);
+                  setError(null);
+                }}
+                className="mt-4 w-full text-center text-xs text-smoke-500 underline-offset-2 hover:text-smoke-300 hover:underline"
+              >
+                {usePassword ? "Sign in without a password" : "Use a password instead"}
+              </button>
               <button
                 type="button"
                 onClick={() => {
                   setShowSignIn(false);
                   setError(null);
                 }}
-                className="mt-4 w-full text-center text-xs text-smoke-500 underline-offset-2 hover:text-smoke-300 hover:underline"
+                className="mt-2 w-full text-center text-xs text-smoke-500 underline-offset-2 hover:text-smoke-300 hover:underline"
               >
                 Back to play now
               </button>

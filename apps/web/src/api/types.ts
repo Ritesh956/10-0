@@ -473,6 +473,13 @@ export interface ProfileDto {
   runs: ProfileRunDto[];
 }
 
+/** GET /auth/providers — which passwordless sign-in methods this server offers. */
+export interface AuthProvidersDto {
+  emailLink: boolean;
+  google: boolean;
+  googleClientId: string | null;
+}
+
 /** GET /stats — public counters for the landing page. */
 export interface SiteStatsDto {
   seasonsSimulated: number;

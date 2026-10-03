@@ -7,6 +7,7 @@ const DEFAULT_TITLE = "Futbol — Draft. Simulate. Go Unbeaten.";
 const TITLES: Record<string, string> = {
   "/": DEFAULT_TITLE,
   "/signin": "Sign in",
+  "/auth/magic": "Signing in",
   "/setup": "Set the rules",
   "/draft": "Draft room",
   "/season": "Your season",

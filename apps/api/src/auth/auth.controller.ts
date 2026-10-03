@@ -1,4 +1,4 @@
-import { Body, Controller, Inject, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Headers, HttpCode, Inject, Post, UseGuards } from "@nestjs/common";
 import { AuthService } from "./auth.service.js";
 import type { AuthTokenPayload } from "./auth.service.js";
 import {
@@ -6,6 +6,12 @@ import {
   loginSchema,
   registerSchema,
   upgradeSchema,
+  googleSignInSchema,
+  magicLinkRequestSchema,
+  magicLinkVerifySchema,
+  type GoogleSignInDto,
+  type MagicLinkRequestDto,
+  type MagicLinkVerifyDto,
   type GuestDto,
   type LoginDto,
   type RegisterDto,
@@ -43,5 +49,36 @@ export class AuthController {
     @Body(new ZodValidationPipe(upgradeSchema)) dto: UpgradeDto,
   ) {
     return this.authService.upgrade(user.sub, dto);
+  }
+
+  /** Which passwordless methods are available (Google only once GOOGLE_CLIENT_ID is set). */
+  @Get("providers")
+  providers() {
+    return this.authService.providers();
+  }
+
+  /** Emails a one-time sign-in link. A guest session (optional Bearer token) becomes the account. */
+  @Post("magic-link")
+  @HttpCode(202)
+  requestMagicLink(
+    @Headers("authorization") authorization: string | undefined,
+    @Body(new ZodValidationPipe(magicLinkRequestSchema)) dto: MagicLinkRequestDto,
+  ) {
+    return this.authService.requestMagicLink(dto.email, this.authService.optionalUserId(authorization), dto.redirect);
+  }
+
+  @Post("magic-link/verify")
+  @HttpCode(200)
+  verifyMagicLink(@Body(new ZodValidationPipe(magicLinkVerifySchema)) dto: MagicLinkVerifyDto) {
+    return this.authService.verifyMagicLink(dto.token);
+  }
+
+  @Post("google")
+  @HttpCode(200)
+  google(
+    @Headers("authorization") authorization: string | undefined,
+    @Body(new ZodValidationPipe(googleSignInSchema)) dto: GoogleSignInDto,
+  ) {
+    return this.authService.signInWithGoogle(dto.credential, this.authService.optionalUserId(authorization));
   }
 }

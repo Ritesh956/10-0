@@ -32,11 +32,30 @@ model User {
   passwordHash String?
   displayName  String
   isGuest      Boolean  @default(false)
+  /// Google account subject ("sub" claim) for Sign in with Google — set on first Google sign-in.
+  googleId     String?  @unique
   createdAt    DateTime @default(now())
 
   worlds World[]
 
   @@map("users")
+}
+
+/// One-time email sign-in links (passwordless). Only a SHA-256 of the token is stored, so a leaked
+/// table can't be replayed; a token works once (usedAt) and expires after 15 minutes.
+model MagicLinkToken {
+  id        String    @id @default(cuid())
+  email     String
+  tokenHash String    @unique
+  /// The guest whose session asked for the link — on verify, that guest becomes the account (its
+  /// runs carry over), unless the email already belongs to another account.
+  guestUserId String?
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([email])
+  @@map("magic_link_tokens")
 }
 
 // ============================================================================

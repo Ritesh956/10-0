@@ -7,6 +7,7 @@ import { fadeSlide } from "./lib/motion";
 import { routeTitle } from "./lib/routeTitles";
 import { useOnline } from "./lib/install";
 import { AuthPage } from "./pages/AuthPage";
+import { MagicLinkPage } from "./pages/MagicLinkPage";
 import { LandingPage } from "./pages/LandingPage";
 import { SetupPage } from "./pages/SetupPage";
 import { DraftPage } from "./pages/DraftPage";
@@ -65,6 +66,7 @@ function Shell() {
             <Routes location={location}>
               <Route path="/" element={<LandingPage />} />
               <Route path="/signin" element={<AuthPage />} />
+              <Route path="/auth/magic" element={<MagicLinkPage />} />
               <Route path="/setup" element={<SetupPage />} />
               <Route path="/draft" element={<DraftPage />} />
               <Route path="/season" element={<SeasonPage />} />

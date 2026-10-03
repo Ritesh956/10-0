@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useAuth } from "../lib/auth-context";
+import { PasswordlessSignIn } from "./PasswordlessSignIn";
 
 interface Props {
   onClose: () => void;
@@ -11,6 +12,7 @@ export function SaveProgressModal({ onClose }: Props) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [usePassword, setUsePassword] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -34,8 +36,22 @@ export function SaveProgressModal({ onClose }: Props) {
         </span>
         <h2 className="font-display text-lg font-bold uppercase tracking-wide text-paper">Save your progress</h2>
         <p className="mt-1 text-sm text-smoke-500">
-          Add an email and password so your worlds and history stick around across devices.
+          Link Google or an email so your seasons, trophies and history stick around on every device.
         </p>
+
+        {!usePassword ? (
+          <div className="mt-4 space-y-3">
+            <PasswordlessSignIn onSignedIn={onClose} emailCta="Save with an email link" redirect="/profile" />
+            <div className="flex justify-between text-xs">
+              <button type="button" onClick={() => setUsePassword(true)} className="text-smoke-500 hover:text-smoke-300">
+                Use a password instead
+              </button>
+              <button type="button" onClick={onClose} className="text-smoke-500 hover:text-smoke-300">
+                Not now
+              </button>
+            </div>
+          </div>
+        ) : (
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div>
@@ -79,6 +95,7 @@ export function SaveProgressModal({ onClose }: Props) {
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );

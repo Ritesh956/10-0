@@ -356,8 +356,8 @@ export function SetupPage() {
             value={config.playerRatings}
             onChange={(playerRatings) => setConfig({ playerRatings })}
             options={[
-              { value: "season", label: "Season", description: "Players rated as they were that exact season" },
               { value: "prime", label: "Prime", description: "Every player drafted at their career-best rating" },
+              { value: "season", label: "Season", description: "Players rated as they were that exact season" },
             ]}
           />
         </Section>

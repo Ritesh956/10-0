@@ -47,6 +47,7 @@ import type {
   RunIndexDto,
   SiteStatsDto,
   BestXiSlotDto,
+  AuthProvidersDto,
 } from "./types";
 
 const API_BASE_URL = (import.meta.env["VITE_API_URL"] as string | undefined) ?? "http://localhost:4000";
@@ -149,6 +150,21 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ displayName }),
     }),
+
+  getAuthProviders: () => request<AuthProvidersDto>("/auth/providers"),
+
+  /** Emails a one-time sign-in link; the current guest session (if any) rides along automatically. */
+  requestMagicLink: (email: string, redirect?: string) =>
+    request<{ sent: boolean }>("/auth/magic-link", {
+      method: "POST",
+      body: JSON.stringify(redirect ? { email, redirect } : { email }),
+    }),
+
+  verifyMagicLink: (token: string) =>
+    request<AuthResponse>("/auth/magic-link/verify", { method: "POST", body: JSON.stringify({ token }) }),
+
+  signInWithGoogle: (credential: string) =>
+    request<AuthResponse>("/auth/google", { method: "POST", body: JSON.stringify({ credential }) }),
 
   upgradeAccount: (email: string, password: string) =>
     request<AuthResponse>("/auth/upgrade", {
