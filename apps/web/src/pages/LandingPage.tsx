@@ -1,4 +1,9 @@
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { api } from "../api/client";
+import { isRealCountry } from "../lib/leagues";
+import { formatSeason } from "../lib/season";
+import { storedDraftProgress } from "../state/DraftContext";
 import { SiteFooter } from "../components/SiteFooter";
 import { Button } from "../components/ui/Button";
 
@@ -21,8 +26,8 @@ const MODE_CARDS: ModeCard[] = [
     to: "/setup",
   },
   {
-    title: "Head to Head",
-    description: "Two players, one device, same rules — draw, draft, and settle it on the pitch.",
+    title: "Play with Mates",
+    description: "Async leagues on your own time, or a live turn-by-turn draft room. Same rules, best season wins.",
     icon: "\u{26BD}",
     to: "/multiplayer",
   },
@@ -47,7 +52,7 @@ const MODE_CARDS: ModeCard[] = [
 ];
 
 const HOW_IT_WORKS: Array<[string, string]> = [
-  ["Set the rules", "Pick a league (or every league), a formation, and how forgiving the draw should be."],
+  ["Set the rules", "Pick one of Europe's top-5 leagues, a formation, and how forgiving the draw should be."],
   ["Draw a name", "Land on a random club and season, then pick a player out of that exact squad."],
   ["Fill the shirt", "Repeat until all 11 spots are taken — redraw if a name doesn't work out."],
   ["Kick off", "Simulate a season and see how close your XI gets to going unbeaten."],
@@ -76,8 +81,52 @@ const FAQ: Array<[string, string]> = [
   ],
 ];
 
+interface ArchiveStats {
+  leagues: number;
+  nationalities: number;
+  clubs: number;
+  seasons: string;
+}
+
+/** Live numbers from the real (top-5) catalog. These used to be hard-coded ("12 leagues · 9
+    countries · 1992–2025"), which counted the fictional placeholder leagues and contradicted the
+    footer's own "top-5, 2012–2024" disclaimer. */
+async function loadArchiveStats(): Promise<ArchiveStats> {
+  const eras = await api.listEras();
+  const [leagueLists, clubs, nations] = await Promise.all([
+    Promise.all(eras.map((e) => api.listLeagues(e.id))),
+    api.listClubs(),
+    api.listNations(),
+  ]);
+  const leagues = leagueLists.flat().filter((l) => isRealCountry(l.country));
+  const mins = leagues.map((l) => l.minSeasonYear).filter((y): y is number => typeof y === "number");
+  const maxes = leagues.map((l) => l.maxSeasonYear).filter((y): y is number => typeof y === "number");
+  const seasons = mins.length && maxes.length ? `${formatSeason(Math.min(...mins))}–${formatSeason(Math.max(...maxes))}` : "—";
+  return { leagues: leagues.length, nationalities: nations.length, clubs: clubs.length, seasons };
+}
+
 export function LandingPage() {
   const navigate = useNavigate();
+  const [archive, setArchive] = useState<ArchiveStats | null>(null);
+  // An unfinished draft from an earlier visit (persisted by DraftContext) — offer to pick it back up.
+  const [draftProgress] = useState(() => {
+    const progress = storedDraftProgress();
+    return progress && progress.picks < 11 ? progress : null;
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    loadArchiveStats()
+      .then((stats) => {
+        if (!cancelled) setArchive(stats);
+      })
+      .catch(() => {
+        // Non-critical decoration — leave the "—" placeholders rather than show an error on the landing page.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <>
@@ -103,8 +152,15 @@ export function LandingPage() {
               at a time. Then simulate a season and see how far an unbeaten run gets you.
             </p>
 
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Button size="lg" onClick={() => navigate("/setup")}>
+            {draftProgress && (
+              <div className="mt-8">
+                <Button size="lg" fullWidth onClick={() => navigate("/draft")}>
+                  Continue your draft ({draftProgress.picks}/11) &rarr;
+                </Button>
+              </div>
+            )}
+            <div className={`${draftProgress ? "mt-3" : "mt-8"} flex flex-col gap-3 sm:flex-row`}>
+              <Button size="lg" variant={draftProgress ? "outline" : "primary"} onClick={() => navigate("/setup")}>
                 Start a draft &rarr;
               </Button>
               <a href="#how-it-works">
@@ -124,19 +180,19 @@ export function LandingPage() {
             <dl className="relative mt-4 grid grid-cols-2 gap-4">
               <div>
                 <dt className="text-[10px] uppercase tracking-wide text-smoke-600">Leagues</dt>
-                <dd className="font-display text-3xl font-bold text-mint-400">12</dd>
+                <dd className="font-display text-3xl font-bold text-mint-400">{archive?.leagues ?? "—"}</dd>
               </div>
               <div>
-                <dt className="text-[10px] uppercase tracking-wide text-smoke-600">Countries</dt>
-                <dd className="font-display text-3xl font-bold text-teal-400">9</dd>
+                <dt className="text-[10px] uppercase tracking-wide text-smoke-600">Nationalities</dt>
+                <dd className="font-display text-3xl font-bold text-teal-400">{archive?.nationalities ?? "—"}</dd>
               </div>
               <div>
                 <dt className="text-[10px] uppercase tracking-wide text-smoke-600">Clubs</dt>
-                <dd className="font-display text-3xl font-bold text-plum-400">200+</dd>
+                <dd className="font-display text-3xl font-bold text-plum-400">{archive?.clubs ?? "—"}</dd>
               </div>
               <div>
-                <dt className="text-[10px] uppercase tracking-wide text-smoke-600">Seasons span</dt>
-                <dd className="font-display text-xl font-bold text-crimson-400">1992–2025</dd>
+                <dt className="text-[10px] uppercase tracking-wide text-smoke-600">Seasons</dt>
+                <dd className="font-display text-xl font-bold text-crimson-400">{archive?.seasons ?? "—"}</dd>
               </div>
             </dl>
           </div>

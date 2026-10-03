@@ -48,7 +48,7 @@ const STEPS: Step[] = [
   {
     title: "7. Chase Europe",
     body:
-      "Finish in the top 4 and your XI carries on into a scaled-down Champions League: a league phase, then quarter-final, semi-final, and a single neutral-venue final.",
+      "Finish in the top 8 and your XI carries on into a scaled-down Champions League: a league phase, then quarter-final, semi-final, and a single neutral-venue final.",
     accent: "plum",
   },
   {

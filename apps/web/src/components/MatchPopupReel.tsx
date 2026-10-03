@@ -8,6 +8,10 @@ import { RESULT_BADGE, RESULT_ROW } from "./MatchLog";
 
 interface Props {
   matches: MatchSummaryDto[];
+  /** Already-played matches from before this reveal (e.g. the first half, when resuming after the
+      January window). Shown at once beneath the new cards and counted in the played total and the
+      W/D/L strip, so the season reads as one continuous run rather than restarting at 0. */
+  priorMatches?: MatchSummaryDto[];
   clubs: WorldClubDto[];
   userClubId: string | undefined;
   /** Minimum milliseconds each revealed card stays up before the next one appears. */
@@ -96,7 +100,15 @@ function StatStrip({ record }: { record: ClubRecord }) {
     popup this replaced (which showed a single card, fully replacing it with the next). A running
     W/D/L/Pts/GD strip builds up alongside it, so the story of the run is legible as it goes rather
     than only knowable once every match has revealed. */
-export function MatchPopupReel({ matches, clubs, userClubId, intervalMs = 1200, streaming = false, onComplete }: Props) {
+export function MatchPopupReel({
+  matches,
+  priorMatches = [],
+  clubs,
+  userClubId,
+  intervalMs = 1200,
+  streaming = false,
+  onComplete,
+}: Props) {
   const nameFor = (clubId: string) => clubs.find((c) => c.id === clubId)?.name ?? clubId;
 
   // When the full match list is known up front (non-streaming callers), the first card appears
@@ -146,7 +158,8 @@ export function MatchPopupReel({ matches, clubs, userClubId, intervalMs = 1200, 
     fireOnce();
   }
 
-  const revealed = matches.slice(0, revealedCount);
+  const revealed = [...priorMatches, ...matches.slice(0, revealedCount)];
+  const totalMatches = priorMatches.length + matches.length;
   const record = useMemo(
     () => (userClubId ? accumulateRecord(revealed, userClubId) : null),
     [revealed, userClubId],
@@ -163,7 +176,7 @@ export function MatchPopupReel({ matches, clubs, userClubId, intervalMs = 1200, 
       {revealed.length > 0 && (
         <p className="text-center text-xs font-semibold uppercase tracking-widest text-smoke-600">
           Matchday {revealed[revealed.length - 1]!.matchday} &middot; {revealed.length}
-          {streaming ? "" : ` / ${matches.length}`} played
+          {streaming ? "" : ` / ${totalMatches}`} played
         </p>
       )}
 

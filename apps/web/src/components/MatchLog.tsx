@@ -7,7 +7,14 @@ interface Props {
   matches: MatchSummaryDto[];
   clubs: WorldClubDto[];
   userClubId?: string | undefined;
+  /** Optional per-fixture stage label + ordering (e.g. "QF · Leg 2", "Final") for competitions
+      whose stages each restart matchday numbering — a European run used to list knockout legs as
+      "GW1"/"GW2" mixed in with the league phase's GW1-7. Higher `order` sorts first (newest). */
+  stageFor?: ((fixtureId: string) => { label: string; order: number } | undefined) | undefined;
 }
+
+/** Ordering for stage-less matches: after any staged ones' orders, by matchday. */
+const LEAGUE_ORDER = 0;
 
 export const RESULT_BADGE: Record<MatchResult, string> = {
   W: "border-teal-500/50 bg-teal-500/15 text-teal-300",
@@ -24,14 +31,15 @@ export const RESULT_ROW: Record<MatchResult, string> = {
 /** Persistent, scrollable "your results" feed — most recent first — with a colored W/D/L badge
     and goalscorers per match, so a finished run's story stays browsable from the stats hub instead
     of only ever being visible once during the one-shot animated season reveal. */
-export function MatchLog({ matches, clubs, userClubId }: Props) {
+export function MatchLog({ matches, clubs, userClubId, stageFor }: Props) {
   const nameFor = (clubId: string) => clubs.find((c) => c.id === clubId)?.name ?? clubId;
 
   if (!userClubId || matches.length === 0) return null;
 
+  const orderOf = (fixtureId: string) => stageFor?.(fixtureId)?.order ?? LEAGUE_ORDER;
   const rows = matches
     .map((match) => summarizeForClub(match, userClubId))
-    .sort((a, b) => b.match.matchday - a.match.matchday);
+    .sort((a, b) => orderOf(b.match.fixtureId) - orderOf(a.match.fixtureId) || b.match.matchday - a.match.matchday);
 
   return (
     <motion.div
@@ -54,8 +62,11 @@ export function MatchLog({ matches, clubs, userClubId }: Props) {
           </span>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-paper">
-              <span className="text-smoke-600">GW{match.matchday}</span> {nameFor(opponentId)}{" "}
-              <span className="text-smoke-600">({isHome ? "H" : "A"})</span>
+              <span className="text-smoke-600">{stageFor?.(match.fixtureId)?.label ?? `GW${match.matchday}`}</span>{" "}
+              {nameFor(opponentId)}{" "}
+              <span className="text-smoke-600">
+                ({stageFor?.(match.fixtureId)?.label === "Final" ? "N" : isHome ? "H" : "A"})
+              </span>
             </p>
             {yourGoals.length > 0 && (
               <p className="truncate text-xs text-smoke-500">

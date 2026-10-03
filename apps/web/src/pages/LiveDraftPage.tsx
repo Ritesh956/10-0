@@ -16,6 +16,7 @@ import { Button } from "../components/ui/Button";
 import { useAuth } from "../lib/auth-context";
 import { createLiveDraftSocket } from "../lib/liveDraftSocket";
 import { useDraft } from "../state/DraftContext";
+import { formatSeason } from "../lib/season";
 
 function toPlayerSeasonDto(p: LiveDraftSpinPlayer): PlayerSeasonDto {
   return {
@@ -245,7 +246,7 @@ export function LiveDraftPage() {
             {spinResult && (
               <div className="space-y-2">
                 <p className="text-center text-sm font-semibold text-paper">
-                  {spinResult.club.name} {spinResult.club.seasonYear}
+                  {spinResult.club.name} {formatSeason(spinResult.club.seasonYear)}
                 </p>
                 {isMyTurn ? (
                   <div className="max-h-96 space-y-1.5 overflow-y-auto pr-1">

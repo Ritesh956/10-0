@@ -77,15 +77,46 @@ export class ApiError extends Error {
   }
 }
 
+/** Backoff before each retry of an idempotent GET. The hosted Postgres sleeps when idle and the
+    first queries after a wake-up fail outright (the API returns a 500), so a page's very first
+    load used to show a raw "Internal server error". Two quick retries ride out the wake-up. */
+const GET_RETRY_DELAYS_MS = [700, 1800];
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
   headers.set("Content-Type", "application/json");
   if (authToken) headers.set("Authorization", `Bearer ${authToken}`);
 
-  const res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  const isGet = (options.method ?? "GET").toUpperCase() === "GET";
+  const retryDelays = isGet ? GET_RETRY_DELAYS_MS : [];
+  let res: Response | undefined;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+    } catch (err) {
+      // Network failure (API down/restarting): retry GETs, otherwise surface it.
+      if (attempt < retryDelays.length) {
+        await sleep(retryDelays[attempt]!);
+        continue;
+      }
+      throw new ApiError("Can't reach the server right now — check your connection and try again.", 0);
+    }
+    if (res.status >= 500 && attempt < retryDelays.length) {
+      await sleep(retryDelays[attempt]!);
+      continue;
+    }
+    break;
+  }
+
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { message?: unknown };
-    const message = typeof body.message === "string" ? body.message : `Request failed (${res.status})`;
+    const serverMessage = typeof body.message === "string" ? body.message : undefined;
+    const message =
+      res.status >= 500
+        ? "The archive is taking a moment to wake up — please try again."
+        : (serverMessage ?? `Request failed (${res.status})`);
     throw new ApiError(message, res.status);
   }
   if (res.status === 204) return undefined as T;

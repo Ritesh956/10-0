@@ -24,5 +24,11 @@ export const trophyKey = z.enum([
   // "champions" (same position===1 condition), gated on RunSummary.nationsLocked so a normal
   // fantasy-XI title doesn't also earn this one.
   "nations-champion",
+  // European competition — evaluated by evaluateTrophies from RunSummary.europeChampion, which
+  // finalizeRun derives from the world's CONTINENTAL competition's FINAL tie. SeasonPage calls
+  // finalizeRun a second time once Europe finishes (it's idempotent), since the first call runs
+  // right after the domestic season, before any European tie exists.
+  "european-champion",
+  "the-double",
 ]);
 export type TrophyKey = z.infer<typeof trophyKey>;

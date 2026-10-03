@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth-context";
 
 export function AuthPage() {
   const navigate = useNavigate();
-  const { playAsGuest, login } = useAuth();
-  const [showSignIn, setShowSignIn] = useState(false);
+  const { user, playAsGuest, login } = useAuth();
+  // A guest already has a username — the only useful thing left here is signing in to a saved account.
+  const [showSignIn, setShowSignIn] = useState(Boolean(user?.isGuest));
 
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
@@ -40,6 +41,9 @@ export function AuthPage() {
       setBusy(false);
     }
   }
+
+  // Fully signed-in users have nothing to do here (this page used to offer them "Pick a username").
+  if (user && !user.isGuest) return <Navigate to="/" replace />;
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-ink-950 bg-grass-lines px-6">

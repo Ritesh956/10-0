@@ -18,11 +18,27 @@ export class CatalogService {
     return this.prisma.era.findMany({ orderBy: { startYear: "asc" } });
   }
 
-  listLeagues(eraId?: string) {
-    return this.prisma.refLeague.findMany({
-      ...(eraId ? { where: { eraId } } : {}),
-      orderBy: { name: "asc" },
-    });
+  /** Each league carries the season span it actually has data for, so the web era slider and the
+      landing page's archive stats reflect the real catalog instead of the era's nominal range (the
+      all-time era is 1992–2025 nominally, but the real top-5 data only covers 2012–2024). */
+  async listLeagues(eraId?: string) {
+    const [leagues, spans] = await Promise.all([
+      this.prisma.refLeague.findMany({
+        ...(eraId ? { where: { eraId } } : {}),
+        orderBy: { name: "asc" },
+      }),
+      this.prisma.refClubSeason.groupBy({
+        by: ["leagueId"],
+        _min: { seasonYear: true },
+        _max: { seasonYear: true },
+      }),
+    ]);
+    const spanByLeague = new Map(spans.map((s) => [s.leagueId, s]));
+    return leagues.map((league) => ({
+      ...league,
+      minSeasonYear: spanByLeague.get(league.id)?._min.seasonYear ?? null,
+      maxSeasonYear: spanByLeague.get(league.id)?._max.seasonYear ?? null,
+    }));
   }
 
   listClubSeasons(filter: ClubSeasonFilterDto) {

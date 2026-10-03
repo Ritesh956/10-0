@@ -72,4 +72,16 @@ export const TROPHY_CATALOG: Record<TrophyKey, TrophyMeta> = {
     icon: "🌍",
     colorClass: "text-plum-300 border-plum-400/60",
   },
+  "european-champion": {
+    name: "Kings of Europe",
+    description: "Won the European competition's Final.",
+    icon: "🏆",
+    colorClass: "text-amber-300 border-amber-400/60",
+  },
+  "the-double": {
+    name: "The Double",
+    description: "Won the league and the European competition in the same season.",
+    icon: "👑",
+    colorClass: "text-amber-300 border-amber-400/60",
+  },
 };

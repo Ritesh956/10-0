@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   computePoolStats,
   computeScore,
+  describeConstraint,
   generateChallenge,
   pickFormation,
   type DailyCandidate,
@@ -126,8 +127,8 @@ describe("computePoolStats", () => {
 
 describe("computeScore", () => {
   const constraints = [
-    { type: "nationality" as const, value: "Brazil", label: "Brazil", required: 2, description: "2 other Brazil players" },
-    { type: "club" as const, value: "club-a", label: "Alpha FC", required: 1, description: "1 other player whose featured season was at Alpha FC" },
+    { type: "nationality" as const, value: "Brazil", label: "Brazil", required: 2, description: "2 other Brazilian players" },
+    { type: "club" as const, value: "club-a", label: "Alpha FC", required: 1, description: "1 other Alpha FC player (any season at the club)" },
   ];
 
   it("awards full marks (== maxScore) for exactly meeting every requirement", () => {
@@ -168,5 +169,17 @@ describe("computeScore", () => {
     const result = computeScore(picks, constraints);
     const nationalityResult = result.results.find((r) => r.constraint.type === "nationality")!;
     expect(nationalityResult.matched).toBe(1);
+  });
+});
+
+describe("describeConstraint", () => {
+  it("pluralises only the noun and uses a demonym for nationalities", () => {
+    expect(describeConstraint("club", "US Salernitana 1919", 2)).toBe("2 other US Salernitana 1919 players (any season at the club)");
+    expect(describeConstraint("nationality", "Senegal", 1)).toBe("1 other Senegalese player");
+    expect(describeConstraint("nationality", "Croatia", 2)).toBe("2 other Croatian players");
+  });
+
+  it("falls back to 'from <country>' for an unmapped nationality", () => {
+    expect(describeConstraint("nationality", "Atlantis", 2)).toBe("2 other players from Atlantis");
   });
 });

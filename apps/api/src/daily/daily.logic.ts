@@ -100,14 +100,42 @@ function groupByAtLeast(pool: DailyCandidate[], keyFn: (c: DailyCandidate) => st
   return groups;
 }
 
+/** Nationality (as stored, i.e. the country name) -> adjective, for readable briefs ("2 other
+    Croatian players", not "2 other Croatia players"). Anything missing falls back to "from X". */
+const DEMONYMS: Record<string, string> = {
+  Algeria: "Algerian", Argentina: "Argentine", Australia: "Australian", Austria: "Austrian",
+  Belgium: "Belgian", "Bosnia-Herzegovina": "Bosnian", Brazil: "Brazilian", Cameroon: "Cameroonian",
+  Canada: "Canadian", Chile: "Chilean", Colombia: "Colombian", "Cote d'Ivoire": "Ivorian",
+  Croatia: "Croatian", "Czech Republic": "Czech", Denmark: "Danish", Ecuador: "Ecuadorian",
+  Egypt: "Egyptian", England: "English", Finland: "Finnish", France: "French", Gabon: "Gabonese",
+  Germany: "German", Ghana: "Ghanaian", Greece: "Greek", Guinea: "Guinean", Iceland: "Icelandic",
+  Ireland: "Irish", Italy: "Italian", Jamaica: "Jamaican", Japan: "Japanese", "Korea, South": "South Korean",
+  Mali: "Malian", Mexico: "Mexican", Morocco: "Moroccan", Netherlands: "Dutch", Nigeria: "Nigerian",
+  "Northern Ireland": "Northern Irish", Norway: "Norwegian", Paraguay: "Paraguayan", Peru: "Peruvian",
+  Poland: "Polish", Portugal: "Portuguese", Romania: "Romanian", Russia: "Russian", Scotland: "Scottish",
+  Senegal: "Senegalese", Serbia: "Serbian", Slovakia: "Slovak", Slovenia: "Slovenian", Spain: "Spanish",
+  Sweden: "Swedish", Switzerland: "Swiss", Tunisia: "Tunisian", Turkey: "Turkish", Ukraine: "Ukrainian",
+  "United States": "American", Uruguay: "Uruguayan", Venezuela: "Venezuelan", Wales: "Welsh",
+};
+
+/** User-facing brief for a constraint. Only the noun is pluralised — appending "s" to the whole
+    phrase once produced "…whose featured season was at US Salernitana 1919s". */
+export function describeConstraint(type: DailyConstraintType, label: string, required: number): string {
+  const players = required === 1 ? "player" : "players";
+  if (type === "nationality") {
+    const adjective = DEMONYMS[label];
+    return adjective ? `${required} other ${adjective} ${players}` : `${required} other ${players} from ${label}`;
+  }
+  return `${required} other ${label} ${players} (any season at the club)`;
+}
+
 function makeConstraint(type: DailyConstraintType, value: string, label: string, required: number): DailyConstraint {
-  const noun = type === "nationality" ? `${label} player` : `player whose featured season was at ${label}`;
   return {
     type,
     value,
     label,
     required,
-    description: `${required} other ${noun}${required === 1 ? "" : "s"}`,
+    description: describeConstraint(type, label, required),
   };
 }
 

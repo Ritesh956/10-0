@@ -6,6 +6,7 @@ import { PRISMA } from "../prisma/prisma.module.js";
 import { WorldsService } from "../worlds/worlds.service.js";
 import { SeasonsService } from "../seasons/seasons.service.js";
 import { generateSingleRoundRobin } from "../seasons/round-robin.js";
+import { aggregateTieScore, type PlayedLeg } from "./europe.logic.js";
 
 /**
  * The world is a single 20-club league (not several real leagues feeding a 36-team UCL), so this
@@ -41,7 +42,7 @@ export class EuropeService {
       where: { worldId, type: "CONTINENTAL" },
     });
     const ties = competition
-      ? await this.prisma.knockoutTie.findMany({ where: { worldId, competitionId: competition.id } })
+      ? await this.withScores(await this.prisma.knockoutTie.findMany({ where: { worldId, competitionId: competition.id } }))
       : [];
 
     return {
@@ -113,7 +114,7 @@ export class EuropeService {
     const ties = await this.prisma.knockoutTie.findMany({ where: { worldId, competitionId, round } });
     if (ties.length === 0) throw new NotFoundException(`No ${round} ties found for this competition`);
 
-    const resolvedTies = await Promise.all(ties.map((tie) => this.resolveTie(tie)));
+    const resolvedTies = await this.withScores(await Promise.all(ties.map((tie) => this.resolveTie(tie))));
 
     if (round === "FINAL") {
       return { resolvedRound: round, resolvedTies, champion: resolvedTies[0]?.winnerClubId };
@@ -137,7 +138,31 @@ export class EuropeService {
 
   async getBracket(worldId: string, competitionId: string, userId: string) {
     await this.worlds.assertOwnership(worldId, userId);
-    return this.prisma.knockoutTie.findMany({ where: { worldId, competitionId }, orderBy: { round: "asc" } });
+    return this.withScores(
+      await this.prisma.knockoutTie.findMany({ where: { worldId, competitionId }, orderBy: { round: "asc" } }),
+    );
+  }
+
+  /** Attaches each tie's aggregate score (from the tie's own home/away perspective) so the bracket
+      can show results — it used to show only "WON"/"PENS" chips with no scoreline, even for the Final. */
+  private async withScores<T extends { homeClubId: string; awayClubId: string; firstLegFixtureId: string | null; secondLegFixtureId: string | null }>(
+    ties: T[],
+  ): Promise<(T & { score: ReturnType<typeof aggregateTieScore> })[]> {
+    const legIds = ties.flatMap((t) => [t.firstLegFixtureId, t.secondLegFixtureId]).filter((id): id is string => id !== null);
+    const fixtures = legIds.length
+      ? await this.prisma.fixture.findMany({ where: { id: { in: legIds } }, include: { match: true } })
+      : [];
+    const legById = new Map<string, PlayedLeg>();
+    for (const f of fixtures) {
+      if (!f.match) continue;
+      legById.set(f.id, { homeClubId: f.homeClubId, awayClubId: f.awayClubId, homeScore: f.match.homeScore, awayScore: f.match.awayScore });
+    }
+    return ties.map((tie) => {
+      const legs = [tie.firstLegFixtureId, tie.secondLegFixtureId]
+        .map((id) => (id ? legById.get(id) : undefined))
+        .filter((leg): leg is PlayedLeg => leg !== undefined);
+      return { ...tie, score: aggregateTieScore(tie, legs) };
+    });
   }
 
   /** Mini-standings for the league-phase season — same shape as the domestic table, scoped to just the 8 qualifiers. */

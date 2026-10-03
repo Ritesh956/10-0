@@ -23,6 +23,9 @@ export interface LeagueDto {
   name: string;
   country: string;
   tier: number;
+  /** First/last season start year this league actually has club-season data for (null if none). */
+  minSeasonYear?: number | null;
+  maxSeasonYear?: number | null;
 }
 
 export interface ClubSeasonDto {
@@ -254,6 +257,8 @@ export interface KnockoutTieDto {
   secondLegFixtureId: string | null;
   winnerClubId: string | null;
   wentToPenalties: boolean;
+  /** Aggregate from the tie's own home/away perspective; null/absent until a leg has been played. */
+  score?: { homeGoals: number; awayGoals: number; legsPlayed: number } | null;
 }
 
 export interface EuropeStatusDto {
@@ -315,7 +320,9 @@ export type TrophyKey =
   | "mvp"
   | "club-record-breaker"
   | "club-worst-ever"
-  | "nations-champion";
+  | "nations-champion"
+  | "european-champion"
+  | "the-double";
 
 export interface FinalizeRunResultDto {
   trophies: TrophyKey[];

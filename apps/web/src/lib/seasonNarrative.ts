@@ -2,6 +2,7 @@ import type { JanuaryResultDto, MatchSummaryDto, SquadPositionOverallDto, TeamSt
 import { computePreseasonOdds } from "./preseasonOdds";
 import { POSITION_GROUP, type Position } from "./formations";
 import { summarizeForClub } from "./matchResult";
+import { formatSeason } from "./season";
 
 /** Auto-generated end-of-season narrative (38-0 §6b) — a template bank keyed by signals, no LLM.
     Every signal is pure and unit-testable in isolation; buildSeasonNarrative() just assembles them
@@ -27,9 +28,18 @@ export function computeVerdict(position: number, seasonSize: number, squadOveral
     return { label: "AS EXPECTED", colorClass: "text-smoke-400" };
   }
   const projectedFinish = computePreseasonOdds(squadOverall).projectedFinish;
+  // A title is always a story: winning it from anywhere below 1st beats the projection, however
+  // small the gap looks in places (projected 4th -> champions used to read "AS EXPECTED").
+  if (position === 1) {
+    return projectedFinish > 1
+      ? { label: "OVERACHIEVED", colorClass: "text-mint-400" }
+      : { label: "DELIVERED", colorClass: "text-mint-400" };
+  }
+  // Scale the "meaningful gap" to the league instead of a flat 4 places: 3 in a 20- or 18-club league.
+  const threshold = Math.max(2, Math.round(seasonSize * 0.15));
   const delta = projectedFinish - position; // positive = finished better than projected (lower position number)
-  if (delta >= 4) return { label: "OVERACHIEVED", colorClass: "text-mint-400" };
-  if (delta <= -4) return { label: "FLATTERED TO DECEIVE", colorClass: "text-crimson-400" };
+  if (delta >= threshold) return { label: "OVERACHIEVED", colorClass: "text-mint-400" };
+  if (delta <= -threshold) return { label: "FLATTERED TO DECEIVE", colorClass: "text-crimson-400" };
   return { label: "AS EXPECTED", colorClass: "text-smoke-400" };
 }
 
@@ -77,13 +87,31 @@ export function groupSquadUnits(squad: SquadPositionOverallDto[]): UnitRatings {
   };
 }
 
-/** Names the squad's strongest + weakest unit — the "composition sentence" signal. */
+const UNIT_NOUN: Record<keyof UnitRatings, string> = {
+  attack: "attack",
+  midfield: "midfield",
+  defence: "defence",
+  goalkeeping: "goalkeeper",
+};
+
+function withArticle(word: string): string {
+  return /^[aeiou]/i.test(word) ? `an ${word}` : `a ${word}`;
+}
+
+/** Names the squad's strongest + weakest unit — the "composition sentence" signal. Only calls a
+    unit the weak link when it actually sits in a lower tier band; when every unit shares a band the
+    sentence says so instead (an all-Elite XI used to be told its attack was "shakier"). */
 export function compositionSentence(units: UnitRatings): string {
   const entries = Object.entries(units) as [keyof UnitRatings, number][];
   const strongest = entries.reduce((a, b) => (b[1] > a[1] ? b : a));
   const weakest = entries.reduce((a, b) => (b[1] < a[1] ? b : a));
-  if (strongest[0] === weakest[0]) return `A balanced squad built around its ${strongest[0]}.`;
-  return `Built on a ${unitTierLabel(strongest[1]).toLowerCase()} ${strongest[0]}, undermined at times by a shakier ${weakest[0]}.`;
+  const strongTier = unitTierLabel(strongest[1]).toLowerCase();
+  const weakTier = unitTierLabel(weakest[1]).toLowerCase();
+  if (strongest[0] === weakest[0]) return `A balanced squad built around its ${UNIT_NOUN[strongest[0]]}.`;
+  if (strongTier === weakTier) {
+    return `${withArticle(strongTier).replace(/^a/, "A")} side right across the pitch, with the ${UNIT_NOUN[strongest[0]]} just shading it.`;
+  }
+  return `Built on ${withArticle(strongTier)} ${UNIT_NOUN[strongest[0]]}; the ${UNIT_NOUN[weakest[0]]} (${weakTier}) was the weak link.`;
 }
 
 export type FinishBracket = "champion" | "top4" | "europa" | "mid-table" | "relegation-scrap" | "relegated";
@@ -145,7 +173,7 @@ export function finishParagraph(
 export function januaryLines(outcome: JanuaryResultDto | null | undefined): string[] {
   if (!outcome) return [];
   return [
-    `In January, ${outcome.inPlayer.name} arrived (OVR ${outcome.inPlayer.overall}) from ${outcome.inPlayer.clubName} ${outcome.inPlayer.seasonYear}.`,
+    `In January, ${outcome.inPlayer.name} arrived (OVR ${outcome.inPlayer.overall}) from ${outcome.inPlayer.clubName} ${formatSeason(outcome.inPlayer.seasonYear)}.`,
     `${outcome.outPlayer.name} (OVR ${outcome.outPlayer.overall}) made way for them — a swing of ${outcome.delta > 0 ? "+" : ""}${outcome.delta} OVR.`,
   ];
 }

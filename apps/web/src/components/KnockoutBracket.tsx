@@ -40,9 +40,17 @@ export function KnockoutBracket({ ties, clubs, highlightClubId }: Props) {
                     {nameFor(tie.homeClubId)}
                     {tie.homeClubId === highlightClubId && <span className="ml-1 text-[10px] font-normal text-mint-400">(You)</span>}
                   </span>
-                  <span className="shrink-0 text-[10px] uppercase text-smoke-600">
-                    {round === "FINAL" ? "final" : "vs"}
-                  </span>
+                  {tie.score ? (
+                    <span
+                      className="shrink-0 text-center font-display text-sm font-bold text-paper"
+                      title={tie.score.legsPlayed > 1 ? "Aggregate over two legs" : undefined}
+                    >
+                      {tie.score.homeGoals}-{tie.score.awayGoals}
+                      {tie.score.legsPlayed > 1 && <span className="ml-1 text-[9px] font-normal uppercase text-smoke-600">agg</span>}
+                    </span>
+                  ) : (
+                    <span className="shrink-0 text-[10px] uppercase text-smoke-600">{round === "FINAL" ? "final" : "vs"}</span>
+                  )}
                   <span className={`min-w-0 flex-1 truncate text-right ${awayWon ? "font-bold text-mint-300" : "text-paper"}`}>
                     {tie.awayClubId === highlightClubId && <span className="mr-1 text-[10px] font-normal text-mint-400">(You)</span>}
                     {nameFor(tie.awayClubId)}

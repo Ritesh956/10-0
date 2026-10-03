@@ -123,6 +123,28 @@ function loadStatsHubCache(worldId: string): CachedStatsHub | null {
   }
 }
 
+const KNOCKOUT_STAGE: Record<KnockoutTieDto["round"], { label: string; order: number }> = {
+  QF: { label: "QF", order: 1 },
+  SF: { label: "SF", order: 2 },
+  FINAL: { label: "Final", order: 3 },
+};
+
+/** Fixture id -> knockout stage label ("QF · Leg 1", "Final") for the Europe campaign log, whose
+    league phase and each knockout round all restart matchday numbering at 1. */
+function knockoutStageFor(ties: KnockoutTieDto[]) {
+  const byFixture = new Map<string, { label: string; order: number }>();
+  for (const tie of ties) {
+    const stage = KNOCKOUT_STAGE[tie.round];
+    if (tie.round === "FINAL") {
+      if (tie.firstLegFixtureId) byFixture.set(tie.firstLegFixtureId, { label: "Final", order: stage.order * 10 });
+      continue;
+    }
+    if (tie.firstLegFixtureId) byFixture.set(tie.firstLegFixtureId, { label: `${stage.label} · Leg 1`, order: stage.order * 10 });
+    if (tie.secondLegFixtureId) byFixture.set(tie.secondLegFixtureId, { label: `${stage.label} · Leg 2`, order: stage.order * 10 + 1 });
+  }
+  return (fixtureId: string) => byFixture.get(fixtureId);
+}
+
 export function SeasonPage() {
   const navigate = useNavigate();
   const { worldId, config } = useDraft();
@@ -140,6 +162,9 @@ export function SeasonPage() {
   // waves through the same "domestic-replay" phase. `domesticReelHalf` is bumped between waves and
   // used as the reel's `key` so its internal reveal state resets cleanly for the second half.
   const [domesticReelMatches, setDomesticReelMatches] = useState<MatchSummaryDto[]>([]);
+  // Matches before this wave's range (the first half, once the post-January wave starts) — handed to
+  // the reel so its played-count, W/D/L strip and feed carry on across January instead of resetting.
+  const [domesticReelPrior, setDomesticReelPrior] = useState<MatchSummaryDto[]>([]);
   const [domesticReelHalf, setDomesticReelHalf] = useState(0);
   // True while the worker is still simulating and the reel is being fed matchday-by-matchday as
   // results land (the "instant start" streaming reveal), so the reel holds instead of finishing.
@@ -215,6 +240,7 @@ export function SeasonPage() {
     opts: { fromMatchday: number; toMatchday: number | null; half: 0 | 1 },
   ): Promise<void> {
     setDomesticReelMatches([]);
+    setDomesticReelPrior([]);
     setDomesticReelHalf(opts.half);
     setReelStreaming(true);
     setPhase("domestic-replay");
@@ -235,6 +261,7 @@ export function SeasonPage() {
         api.getMatchesWithEvents(wId, seasonId, userClubId),
       ]);
       setDomesticReelMatches(userMatches.filter(inRange));
+      setDomesticReelPrior(userMatches.filter((m) => m.matchday < opts.fromMatchday));
       rangeDone =
         opts.toMatchday === null
           ? season.status === "COMPLETED"
@@ -499,11 +526,16 @@ export function SeasonPage() {
     const europeMatches = [...leagueMatches, ...knockoutHistory];
     setEuropeAllMatches(europeMatches);
 
-    const [summaryRes, europeStats, europeTeam] = await Promise.all([
+    const [summaryRes, europeStats, europeTeam, europeFinalize] = await Promise.all([
       api.getSummary(wId, domesticSeasonId),
       api.getCompetitionStats(wId, competitionId),
       userClub ? api.getTeamStatsForCompetition(wId, competitionId, userClub.id) : Promise.resolve(null),
+      // Second (idempotent) finalize now that the Final exists — the first ran before Europe, so it
+      // couldn't award the European trophies ("european-champion" / "the-double").
+      userClub ? api.finalizeRun(wId, domesticSeasonId).catch(() => null) : Promise.resolve(null),
     ]);
+    const runTrophies = europeFinalize?.trophies ?? unlockedTrophies;
+    setTrophies(runTrophies);
     setSummary(summaryRes);
     setEuropeCompetitionStats(europeStats);
     setEuropeTeamStats(europeTeam);
@@ -524,7 +556,7 @@ export function SeasonPage() {
       europeMatches,
       januaryOutcome: outcome,
       leagueManagerStats: managerStats,
-      trophies: unlockedTrophies,
+      trophies: runTrophies,
       domesticSeasonId,
     });
   }
@@ -622,7 +654,9 @@ export function SeasonPage() {
     <div className="mx-auto max-w-3xl space-y-8 px-6 py-12">
       <div className="text-center">
         <h1 className="font-display text-3xl font-bold uppercase tracking-wide text-paper">{userClub?.name ?? "Your XI"}</h1>
-        <p className="mt-1 text-sm text-smoke-500">{world.clubs.length} clubs in this save</p>
+        <p className="mt-1 text-sm text-smoke-500">
+          {world.clubs.length > 1 ? `${world.clubs.length}-club league` : "Your XI is ready — kick off when you are."}
+        </p>
       </div>
 
       {error && <p className="text-center text-sm text-crimson-400">{error}</p>}
@@ -643,6 +677,7 @@ export function SeasonPage() {
         <MatchPopupReel
           key={`domestic-half-${domesticReelHalf}`}
           matches={onlyMine(domesticReelMatches)}
+          priorMatches={onlyMine(domesticReelPrior)}
           clubs={world.clubs}
           userClubId={userClub?.id}
           streaming={reelStreaming}
@@ -793,7 +828,9 @@ export function SeasonPage() {
           {qualified && champion && (
             <p className="text-center text-sm text-amber-400">
               {champion === userClub?.id
-                ? "European champions this season — the treble of storylines complete!"
+                ? summary.position === 1
+                  ? "The Double — league champions and European champions in the same season!"
+                  : "European champions this season!"
                 : `${nameFor(champion)} lifted the Champions League this season.`}
             </p>
           )}
@@ -885,7 +922,12 @@ export function SeasonPage() {
                   <h3 className="text-center font-display text-base font-semibold uppercase tracking-wide text-paper">
                     Campaign Results
                   </h3>
-                  <MatchLog matches={onlyMine(europeAllMatches)} clubs={world.clubs} userClubId={userClub?.id} />
+                  <MatchLog
+                    matches={onlyMine(europeAllMatches)}
+                    clubs={world.clubs}
+                    userClubId={userClub?.id}
+                    stageFor={knockoutStageFor(allTies)}
+                  />
                 </>
               )}
             </div>

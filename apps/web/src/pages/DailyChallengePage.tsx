@@ -11,6 +11,7 @@ import { buildOddsInput, computeCompletionOdds, countMatches } from "../lib/dail
 import { canPlayPosition, isFormation, positionLabel, slotsForFormation, type Formation } from "../lib/formations";
 import { isRealCountry } from "../lib/leagues";
 import { surname } from "../lib/positionColors";
+import { formatSeason } from "../lib/season";
 
 const DAILY_REROLLS = 3;
 const MAX_ATTEMPTS = 5;
@@ -375,7 +376,7 @@ export function DailyChallengePage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-semibold text-paper">
-                      {currentClub.club.name} {currentClub.seasonYear}
+                      {currentClub.club.name} {formatSeason(currentClub.seasonYear)}
                     </p>
                     <div className="flex gap-1">
                       <Button size="sm" variant={sortMode === "rating" ? "primary" : "ghost"} onClick={() => setSortMode("rating")}>

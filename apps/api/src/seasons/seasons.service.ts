@@ -638,6 +638,13 @@ export class SeasonsService {
     // WorldSettingsShape — only the one field finalizeRun actually needs.
     const nationsLocked = Boolean((world.settings as { nationsNationality?: string } | null)?.nationsNationality);
 
+    // Null until Europe has actually been played to a Final — the first finalizeRun call (straight
+    // after the domestic season) sees no Final yet; SeasonPage calls again once Europe finishes.
+    const europeFinal = await this.prisma.knockoutTie.findFirst({
+      where: { worldId, round: "FINAL", winnerClubId: { not: null } },
+    });
+    const europeChampion = europeFinal?.winnerClubId === userClub.id;
+
     const trophies = evaluateTrophies({
       userClubId: userClub.id,
       played: userRow.played,
@@ -650,6 +657,7 @@ export class SeasonsService {
       goldenGloveClubId: competitionStats.goldenGlove?.clubId,
       mvpClubId: competitionStats.mvp?.clubId,
       nationsLocked,
+      europeChampion,
     });
 
     const awardRows: { worldId: string; seasonId: string; name: string; winnerId: string }[] = [];

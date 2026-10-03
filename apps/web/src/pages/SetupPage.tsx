@@ -14,6 +14,7 @@ import { isFormation, positionLabel } from "../lib/formations";
 import { isRealCountry } from "../lib/leagues";
 import { checkFormationFillable } from "../lib/oneClubValidation";
 import { useDraft, type Difficulty, type DraftMode, type PlayerRatingsMode } from "../state/DraftContext";
+import { formatSeason } from "../lib/season";
 
 type SectionAccent = "mint" | "teal" | "plum" | "crimson";
 
@@ -109,9 +110,12 @@ export function SetupPage() {
         setLeagues(real);
         // A specific league is required now (no "All Leagues") — AI-fill builds the season out of
         // that league's own current clubs, so default to the first one rather than leave it unset.
+        // Default to the Premier League (the most familiar starting point) rather than whatever
+        // sorts first alphabetically — that used to make the Bundesliga everyone's default.
         if (config.leagueIds.length === 0 && real.length > 0) {
           const sorted = [...real].sort((a, b) => a.tier - b.tier || a.name.localeCompare(b.name));
-          setConfig({ leagueIds: [sorted[0]!.id] });
+          const preferred = sorted.find((l) => l.name === "Premier League") ?? sorted[0]!;
+          setConfig({ leagueIds: [preferred.id] });
         }
       })
       .catch(() => setLeagues([]));
@@ -146,8 +150,26 @@ export function SetupPage() {
   const fillability = config.lockedClubId && clubPositions ? checkFormationFillable(config.formation, clubPositions) : null;
 
   const activeEra = eras.find((e) => e.id === config.eraId);
-  const yearMin = activeEra?.startYear ?? 1992;
-  const yearMax = activeEra?.endYear ?? new Date().getFullYear();
+  // Bound the era slider by the seasons the chosen league(s) really have, not the era's nominal
+  // range — otherwise most of the slider (1992–2011) selects nothing at all.
+  const selectedLeagues = leagues.filter((l) => config.leagueIds.includes(l.id));
+  const spanMins = selectedLeagues.map((l) => l.minSeasonYear).filter((y): y is number => typeof y === "number");
+  const spanMaxes = selectedLeagues.map((l) => l.maxSeasonYear).filter((y): y is number => typeof y === "number");
+  const yearMin = spanMins.length ? Math.min(...spanMins) : (activeEra?.startYear ?? 1992);
+  const yearMax = spanMaxes.length ? Math.max(...spanMaxes) : (activeEra?.endYear ?? new Date().getFullYear());
+
+  // Keep the chosen range inside the bounds whenever they change (league switch, data loading).
+  useEffect(() => {
+    const curMin = config.eraYearMin ?? yearMin;
+    const curMax = config.eraYearMax ?? yearMax;
+    let nextMin = Math.min(Math.max(curMin, yearMin), yearMax);
+    let nextMax = Math.min(Math.max(curMax, yearMin), yearMax);
+    if (nextMin > nextMax) [nextMin, nextMax] = [yearMin, yearMax];
+    if (nextMin !== config.eraYearMin || nextMax !== config.eraYearMax) {
+      setConfig({ eraYearMin: nextMin, eraYearMax: nextMax });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yearMin, yearMax]);
 
   if (loading) {
     return <p className="px-6 py-16 text-center text-smoke-500">Loading...</p>;
@@ -339,7 +361,9 @@ export function SetupPage() {
 
       <Section title="Era" accent="plum">
         <div className="flex flex-wrap gap-2">
-          {ERA_PRESETS.map((preset) => (
+          {/* Skip presets that start at/before the league's first season — on a 2012+ dataset
+              "2000s+" and "2010s+" are just "All-time" again, and all three lit up at once. */}
+          {ERA_PRESETS.filter((preset) => preset.startYear === 0 || preset.startYear > yearMin).map((preset) => (
             <Chip
               key={preset.label}
               active={config.eraYearMin === Math.max(preset.startYear, yearMin) && config.eraYearMax === yearMax}
@@ -355,7 +379,11 @@ export function SetupPage() {
           valueMin={config.eraYearMin ?? yearMin}
           valueMax={config.eraYearMax ?? yearMax}
           onChange={(min, max) => setConfig({ eraYearMin: min, eraYearMax: max })}
+          formatLabel={formatSeason}
         />
+        <p className="text-center text-xs text-smoke-500">
+          {(config.eraYearMax ?? yearMax) - (config.eraYearMin ?? yearMin) + 1} of {yearMax - yearMin + 1} seasons
+        </p>
         <p className="text-center text-xs text-ink-600">
           Only club-seasons in this range can be drawn — narrow it to draft from an era you know.
         </p>
@@ -386,7 +414,7 @@ export function SetupPage() {
             <Toggle
               accent="teal"
               label="European Nights"
-              description="Finish in the top four and your XI plays on in Europe. Off = just the league."
+              description="Finish in the top eight and your XI plays on in Europe. Off = just the league."
               checked={config.europeanNights}
               onChange={(europeanNights) => setConfig({ europeanNights })}
             />

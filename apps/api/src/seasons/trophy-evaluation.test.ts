@@ -62,6 +62,18 @@ describe("evaluateTrophies", () => {
     expect(evaluateTrophies(run({ position: 1 }))).not.toContain("nations-champion");
   });
 
+  it("awards Kings of Europe for winning the European Final, and The Double only alongside the title", () => {
+    // Regression: winning the European competition used to award nothing at all.
+    const europeOnly = evaluateTrophies(run({ position: 3, europeChampion: true }));
+    expect(europeOnly).toContain("european-champion");
+    expect(europeOnly).not.toContain("the-double");
+
+    const double = evaluateTrophies(run({ position: 1, europeChampion: true }));
+    expect(double).toEqual(expect.arrayContaining(["champions", "european-champion", "the-double"]));
+
+    expect(evaluateTrophies(run({ position: 1 }))).not.toContain("the-double");
+  });
+
   it("can award multiple trophies at once for a dominant title-winning campaign", () => {
     const trophies = evaluateTrophies(
       run({

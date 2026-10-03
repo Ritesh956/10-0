@@ -45,7 +45,7 @@ const TOPICS: Topic[] = [
   {
     title: "European Nights",
     points: [
-      "Finish in the top 4 of your domestic league and your XI qualifies for a scaled-down Champions League: an 8-team league phase, then quarter-final, semi-final, and a single-match neutral-venue final.",
+      "Finish in the top 8 of your domestic league and your XI qualifies for a scaled-down Champions League: an 8-team league phase, then quarter-final, semi-final, and a single-match neutral-venue final.",
       "Turn it off in Setup and your world stays a pure single-league campaign.",
     ],
   },

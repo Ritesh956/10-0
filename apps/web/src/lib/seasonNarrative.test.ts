@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { JanuaryResultDto, MatchSummaryDto, SquadPositionOverallDto, TeamStatsDto } from "../api/types";
+import { computePreseasonOdds } from "./preseasonOdds";
 import {
   biggestWinText,
   buildSeasonNarrative,
@@ -31,6 +32,21 @@ describe("computeVerdict", () => {
   it("labels a finish close to projection AS EXPECTED", () => {
     const verdict = computeVerdict(10, 20, 75); // projectedFinish is ~10-11 for overall 75
     expect(verdict.label).toBe("AS EXPECTED");
+  });
+
+  it("calls a title won from below a 1st-place projection OVERACHIEVED", () => {
+    // Regression: projected 4th (overall 90) -> champions used to read "AS EXPECTED" because the
+    // gap was under a flat 4-place threshold.
+    const projected = computePreseasonOdds(90).projectedFinish;
+    expect(projected).toBeGreaterThan(1);
+    expect(computeVerdict(1, 20, 90).label).toBe("OVERACHIEVED");
+  });
+
+  it("scales the over/under-achievement gap to the league size", () => {
+    // overall 75 projects ~10th: 3 places better is now meaningful (was 4) in a 20-club league.
+    const projected = computePreseasonOdds(75).projectedFinish;
+    expect(computeVerdict(projected - 3, 20, 75).label).toBe("OVERACHIEVED");
+    expect(computeVerdict(projected - 2, 20, 75).label).toBe("AS EXPECTED");
   });
 
   it("falls back to a position-only heuristic when squadOverall is unavailable", () => {
@@ -83,6 +99,19 @@ describe("compositionSentence", () => {
     const text = compositionSentence({ attack: 90, midfield: 70, defence: 60, goalkeeping: 65 });
     expect(text).toContain("attack");
     expect(text).toContain("defence");
+  });
+
+  it("never calls a unit shaky when every unit shares a tier", () => {
+    // Regression: an all-Elite XI read "Built on a elite defence, undermined at times by a shakier attack."
+    const text = compositionSentence({ attack: 91, midfield: 88, defence: 92, goalkeeping: 89 });
+    expect(text).not.toMatch(/shak|weak link/i);
+    expect(text).toContain("defence");
+    expect(text).toMatch(/^An elite side/);
+  });
+
+  it("uses the right article and names the weak link with its tier", () => {
+    const text = compositionSentence({ attack: 90, midfield: 70, defence: 60, goalkeeping: 65 });
+    expect(text).toBe("Built on an elite attack; the defence (solid) was the weak link.");
   });
 
   it("describes a balanced squad when every unit is equal", () => {

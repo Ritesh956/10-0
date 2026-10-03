@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./lib/auth-context";
@@ -23,6 +23,7 @@ import { LeagueJoinPage } from "./pages/LeagueJoinPage";
 import { LeagueDetailPage } from "./pages/LeagueDetailPage";
 import { LiveDraftJoinPage } from "./pages/LiveDraftJoinPage";
 import { LiveDraftPage } from "./pages/LiveDraftPage";
+import { NotFoundPage } from "./pages/NotFoundPage";
 import { SiteHeader } from "./components/SiteHeader";
 import { SaveProgressModal } from "./components/SaveProgressModal";
 
@@ -30,6 +31,12 @@ function Shell() {
   const { isAuthenticated } = useAuth();
   const [showSaveModal, setShowSaveModal] = useState(false);
   const location = useLocation();
+
+  // A new page always starts at the top — without this, Setup -> Draft landed mid-page at Setup's
+  // old scroll offset.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
 
   return (
     <div className="relative min-h-screen bg-ink-950">
@@ -64,6 +71,7 @@ function Shell() {
               <Route path="/how-to-play" element={<HowToPlayPage />} />
               <Route path="/best-xi" element={<BestXiPage />} />
               <Route path="/story" element={<StoryPage />} />
+              <Route path="*" element={<NotFoundPage />} />
             </Routes>
           </motion.div>
         </AnimatePresence>

@@ -1,4 +1,12 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  type OnModuleDestroy,
+  type OnModuleInit,
+} from "@nestjs/common";
 import type { PrismaClient } from "@futbol/db";
 import { PRISMA } from "../prisma/prisma.module.js";
 import {
@@ -25,8 +33,44 @@ function toBirthMonthDay(dateOfBirth: Date): string {
 }
 
 @Injectable()
-export class DailyService {
+export class DailyService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(DailyService.name);
+  /** One shared generation per date, so concurrent first requests don't each load the full pool. */
+  private readonly generating = new Map<string, ReturnType<DailyService["generateFor"]>>();
+  private warmTimer: ReturnType<typeof setTimeout> | undefined;
+
   constructor(@Inject(PRISMA) private readonly prisma: PrismaClient) {}
+
+  /** Generating a day's puzzle loads the whole catalog (~30s against the hosted DB), which used to
+      land on whichever player opened /daily first that day. Generate it at boot and again just
+      after each UTC midnight instead, so player requests only ever read the stored row. */
+  onModuleInit(): void {
+    void this.warmToday();
+    this.scheduleNextWarm();
+  }
+
+  onModuleDestroy(): void {
+    if (this.warmTimer) clearTimeout(this.warmTimer);
+  }
+
+  private scheduleNextWarm(): void {
+    const now = new Date();
+    const nextMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+    this.warmTimer = setTimeout(() => {
+      void this.warmToday();
+      this.scheduleNextWarm();
+    }, nextMidnight - now.getTime() + 5_000);
+    this.warmTimer.unref?.();
+  }
+
+  private async warmToday(): Promise<void> {
+    try {
+      await this.getTodayChallenge();
+    } catch (err) {
+      // Not fatal — the first player request will generate it instead.
+      this.logger.warn(`Daily challenge pre-generation failed: ${err instanceof Error ? err.message : err}`);
+    }
+  }
 
   /**
    * Deterministic-per-date puzzle (Phase 8): the first `/daily/today` request of a calendar date
@@ -43,6 +87,15 @@ export class DailyService {
     const existing = await this.prisma.dailyChallenge.findUnique({ where: { date: dateValue } });
     if (existing) return this.toChallengeDto(existing);
 
+    let inflight = this.generating.get(dateKey);
+    if (!inflight) {
+      inflight = this.generateFor(dateKey, dateValue).finally(() => this.generating.delete(dateKey));
+      this.generating.set(dateKey, inflight);
+    }
+    return inflight;
+  }
+
+  private async generateFor(dateKey: string, dateValue: Date) {
     const pool = await this.loadPool();
     const generated = generateChallenge(dateKey, pool);
     const poolStats = computePoolStats(pool, generated.anchor, generated.constraints);

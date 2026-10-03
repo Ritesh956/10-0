@@ -19,6 +19,8 @@ export interface RunSummary {
       (World.settings.nationsNationality set) — gates "nations-champion" alongside the existing
       position===1 check so a normal fantasy-XI title doesn't also earn it. */
   nationsLocked?: boolean | undefined;
+  /** True when this world's European competition has been played and the user's club won the Final. */
+  europeChampion?: boolean | undefined;
 }
 
 /** Evaluates the trophy catalog (packages/domain's TrophyKey) against one finished run. "The
@@ -33,6 +35,8 @@ export function evaluateTrophies(run: RunSummary): TrophyKey[] {
   }
   if (run.position === 1) trophies.push("champions");
   if (run.position === 1 && run.nationsLocked) trophies.push("nations-champion");
+  if (run.europeChampion) trophies.push("european-champion");
+  if (run.europeChampion && run.position === 1) trophies.push("the-double");
   if (run.goldenBootClubId === run.userClubId) trophies.push("golden-boot");
   if (run.playmakerClubId === run.userClubId) trophies.push("playmaker");
   if (run.goldenGloveClubId === run.userClubId) trophies.push("golden-glove");

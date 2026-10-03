@@ -22,10 +22,11 @@ import {
 } from "../lib/formations";
 import { isRealCountry } from "../lib/leagues";
 import { computePreseasonOdds } from "../lib/preseasonOdds";
-import { surname } from "../lib/positionColors";
+import { GROUP_FILL, surname } from "../lib/positionColors";
 import { squadTierName, TIER_BORDER, TIER_TEXT } from "../lib/squadRatings";
 import { useAuth } from "../lib/auth-context";
 import { useDraft } from "../state/DraftContext";
+import { formatSeason } from "../lib/season";
 
 type SortMode = "rating" | "position" | "surname";
 type PostDraftStep = "review" | "manager" | "preseason";
@@ -653,16 +654,16 @@ export function DraftPage() {
 
           <div className="notch-sm mt-3 flex flex-wrap justify-center gap-x-3 gap-y-1 border border-ink-800 bg-ink-900/30 px-3 py-2 text-[10px] text-smoke-600">
             <span className="inline-flex items-center gap-1">
-              <span className="h-2 w-2 rounded-full bg-plum-400" /> Keeper
+              <span className={`h-2 w-2 rounded-full ${GROUP_FILL.GK}`} /> Keeper
             </span>
             <span className="inline-flex items-center gap-1">
-              <span className="h-2 w-2 rounded-full bg-mint-400" /> Defence
+              <span className={`h-2 w-2 rounded-full ${GROUP_FILL.DEF}`} /> Defence
             </span>
             <span className="inline-flex items-center gap-1">
-              <span className="h-2 w-2 rounded-full bg-teal-400" /> Midfield
+              <span className={`h-2 w-2 rounded-full ${GROUP_FILL.MID}`} /> Midfield
             </span>
             <span className="inline-flex items-center gap-1">
-              <span className="h-2 w-2 rounded-full bg-crimson-400" /> Attack
+              <span className={`h-2 w-2 rounded-full ${GROUP_FILL.ATT}`} /> Attack
             </span>
             <span className="inline-flex items-center gap-1">
               <span className="h-2 w-2 rounded-full bg-ink-700" /> Can&apos;t play there
@@ -684,10 +685,10 @@ export function DraftPage() {
                   )}
                 </div>
               </div>
-              <RatingBarOrEmpty label="Attack" value={groupOveralls.ATT.length ? squadRatings.attack : null} colorClass="bg-crimson-400" />
-              <RatingBarOrEmpty label="Midfield" value={groupOveralls.MID.length ? squadRatings.midfield : null} colorClass="bg-teal-400" />
-              <RatingBarOrEmpty label="Defence" value={groupOveralls.DEF.length ? squadRatings.defence : null} colorClass="bg-mint-400" />
-              <RatingBarOrEmpty label="Goalkeeping" value={groupOveralls.GK.length ? squadRatings.gk : null} colorClass="bg-plum-400" />
+              <RatingBarOrEmpty label="Attack" value={groupOveralls.ATT.length ? squadRatings.attack : null} colorClass={GROUP_FILL.ATT} />
+              <RatingBarOrEmpty label="Midfield" value={groupOveralls.MID.length ? squadRatings.midfield : null} colorClass={GROUP_FILL.MID} />
+              <RatingBarOrEmpty label="Defence" value={groupOveralls.DEF.length ? squadRatings.defence : null} colorClass={GROUP_FILL.DEF} />
+              <RatingBarOrEmpty label="Goalkeeping" value={groupOveralls.GK.length ? squadRatings.gk : null} colorClass={GROUP_FILL.GK} />
             </div>
           )}
         </div>
@@ -819,7 +820,7 @@ export function DraftPage() {
                   </div>
                   <div className="space-y-2 border-t border-ink-800 pt-3">
                     <OddsBar label="Win the league" pct={odds.winPct} colorClass="bg-amber-400" />
-                    <OddsBar label="Top 4 (Europe)" pct={odds.top4Pct} colorClass="bg-mint-400" />
+                    <OddsBar label="Top 4" pct={odds.top4Pct} colorClass="bg-mint-400" />
                     <OddsBar label="Top 6" pct={odds.top6Pct} colorClass="bg-teal-400" />
                     <OddsBar label="Top 10" pct={odds.top10Pct} colorClass="bg-plum-400" />
                     <OddsBar label="Relegation" pct={odds.relegationPct} colorClass="bg-crimson-400" />
@@ -907,7 +908,7 @@ export function DraftPage() {
                   </div>
                   <div className="mt-3 border-t border-ink-800 pt-3">
                     <p className="font-display text-xl font-bold uppercase tracking-wide text-paper">
-                      {currentClub.club.name} <span className="text-mint-400">{currentClub.seasonYear}</span>
+                      {currentClub.club.name} <span className="text-mint-400">{formatSeason(currentClub.seasonYear)}</span>
                     </p>
                     <p className="text-xs text-smoke-500">{currentClub.league.name}</p>
                   </div>

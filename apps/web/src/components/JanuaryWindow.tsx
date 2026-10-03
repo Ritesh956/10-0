@@ -5,6 +5,7 @@ import { DrawReel } from "./DrawReel";
 import { Button } from "./ui/Button";
 import { accumulateRecord } from "../lib/matchResult";
 import { staggerContainer, staggerItem, staggerItemBounce } from "../lib/motion";
+import { formatSeason } from "../lib/season";
 
 type Step = "choice" | "spinning" | "result";
 
@@ -101,7 +102,7 @@ export function JanuaryWindow({ matches, userClubId, totalMatchdays, matchdaysPl
             <p className="text-[10px] uppercase tracking-wide text-smoke-600">In</p>
             <p className="font-display text-base font-semibold text-paper">{result.inPlayer.name}</p>
             <p className="text-xs text-smoke-500">
-              OVR {result.inPlayer.overall} &middot; {result.inPlayer.clubName} {result.inPlayer.seasonYear}
+              OVR {result.inPlayer.overall} &middot; {result.inPlayer.clubName} {formatSeason(result.inPlayer.seasonYear)}
             </p>
           </div>
         </motion.div>
