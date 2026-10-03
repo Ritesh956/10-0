@@ -30,5 +30,91 @@ export const trophyKey = z.enum([
   // right after the domestic season, before any European tie exists.
   "european-champion",
   "the-double",
+  // P2 (2026-10) — season performance, scaled per game so 34-game leagues aren't locked out.
+  "top-four",
+  "centurion",
+  "goal-machine",
+  "fortress",
+  "overachievers",
+  "miracle",
+  "great-escape",
+  "bottle-job",
+  "relegated",
+  // P2 — squad composition: what you drafted, not just how it did. Most need the title too.
+  "united-nations",
+  "homegrown",
+  "foreign-legion",
+  "class-of",
+  "time-travellers",
+  "band-of-brothers",
+  "dads-army",
+  "fledglings",
+  "alphabet-soup",
+  // P2 — career milestones, earned once per player (stamped on the run that reached them).
+  "regular",
+  "veteran",
+  "serial-winner",
+  "dynasty",
+  "tactician",
+  "globetrotter",
+  "five-league-champion",
 ]);
 export type TrophyKey = z.infer<typeof trophyKey>;
+
+export type TrophyCategory = "season" | "awards" | "squad" | "career" | "europe" | "modes" | "fun";
+export type TrophyTier = "common" | "rare" | "epic" | "legendary";
+
+export interface TrophyDef {
+  category: TrophyCategory;
+  tier: TrophyTier;
+  /** Career trophies only: the count the progress bar fills towards. */
+  target?: number;
+}
+
+/** Category/tier/target for every trophy — the cabinet's ordering is this object's key order.
+    Display copy (name/description/icon) is apps/web's lib/trophies.ts. */
+export const TROPHY_DEFS: Record<TrophyKey, TrophyDef> = {
+  champions: { category: "season", tier: "common" },
+  "top-four": { category: "season", tier: "common" },
+  unbeaten: { category: "season", tier: "epic" },
+  invincible: { category: "season", tier: "legendary" },
+  centurion: { category: "season", tier: "epic" },
+  "goal-machine": { category: "season", tier: "rare" },
+  fortress: { category: "season", tier: "rare" },
+  overachievers: { category: "season", tier: "rare" },
+  miracle: { category: "season", tier: "legendary" },
+
+  "golden-boot": { category: "awards", tier: "common" },
+  playmaker: { category: "awards", tier: "common" },
+  "golden-glove": { category: "awards", tier: "common" },
+  mvp: { category: "awards", tier: "common" },
+
+  "united-nations": { category: "squad", tier: "epic" },
+  homegrown: { category: "squad", tier: "legendary" },
+  "foreign-legion": { category: "squad", tier: "rare" },
+  "class-of": { category: "squad", tier: "rare" },
+  "time-travellers": { category: "squad", tier: "rare" },
+  "band-of-brothers": { category: "squad", tier: "rare" },
+  "dads-army": { category: "squad", tier: "rare" },
+  fledglings: { category: "squad", tier: "epic" },
+
+  regular: { category: "career", tier: "common", target: 5 },
+  veteran: { category: "career", tier: "rare", target: 25 },
+  "serial-winner": { category: "career", tier: "epic", target: 5 },
+  dynasty: { category: "career", tier: "epic", target: 3 },
+  tactician: { category: "career", tier: "epic", target: 3 },
+  globetrotter: { category: "career", tier: "rare", target: 5 },
+  "five-league-champion": { category: "career", tier: "legendary", target: 5 },
+
+  "european-champion": { category: "europe", tier: "rare" },
+  "the-double": { category: "europe", tier: "epic" },
+
+  "nations-champion": { category: "modes", tier: "epic" },
+  "club-record-breaker": { category: "modes", tier: "rare" },
+  "club-worst-ever": { category: "modes", tier: "common" },
+
+  "great-escape": { category: "fun", tier: "rare" },
+  "bottle-job": { category: "fun", tier: "rare" },
+  relegated: { category: "fun", tier: "common" },
+  "alphabet-soup": { category: "fun", tier: "rare" },
+};

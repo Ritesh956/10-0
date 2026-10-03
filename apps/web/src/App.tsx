@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
-import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./lib/auth-context";
 import { DraftProvider } from "./state/DraftContext";
 import { fadeSlide } from "./lib/motion";
@@ -11,7 +11,7 @@ import { SetupPage } from "./pages/SetupPage";
 import { DraftPage } from "./pages/DraftPage";
 import { SeasonPage } from "./pages/SeasonPage";
 import { MultiplayerPage } from "./pages/MultiplayerPage";
-import { HistoryPage } from "./pages/HistoryPage";
+import { ProfilePage } from "./pages/ProfilePage";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
 import { ClubsDirectoryPage } from "./pages/ClubsDirectoryPage";
 import { NationsDirectoryPage } from "./pages/NationsDirectoryPage";
@@ -64,7 +64,8 @@ function Shell() {
               <Route path="/multiplayer/league/:leagueId" element={<LeagueDetailPage />} />
               <Route path="/multiplayer/live/join/:code" element={<LiveDraftJoinPage />} />
               <Route path="/multiplayer/live/:roomId" element={<LiveDraftPage />} />
-              <Route path="/history" element={<HistoryPage />} />
+              <Route path="/profile" element={<ProfilePage />} />
+              <Route path="/history" element={<Navigate to="/profile" replace />} />
               <Route path="/leaderboard" element={<LeaderboardPage />} />
               <Route path="/clubs" element={<ClubsDirectoryPage />} />
               <Route path="/nations" element={<NationsDirectoryPage />} />

@@ -350,7 +350,109 @@ export type TrophyKey =
   | "club-worst-ever"
   | "nations-champion"
   | "european-champion"
-  | "the-double";
+  | "the-double"
+  | "top-four"
+  | "centurion"
+  | "goal-machine"
+  | "fortress"
+  | "overachievers"
+  | "miracle"
+  | "great-escape"
+  | "bottle-job"
+  | "relegated"
+  | "united-nations"
+  | "homegrown"
+  | "foreign-legion"
+  | "class-of"
+  | "time-travellers"
+  | "band-of-brothers"
+  | "dads-army"
+  | "fledglings"
+  | "alphabet-soup"
+  | "regular"
+  | "veteran"
+  | "serial-winner"
+  | "dynasty"
+  | "tactician"
+  | "globetrotter"
+  | "five-league-champion";
+
+// Mirrors @futbol/domain's TrophyCategory / TrophyTier.
+export type TrophyCategory = "season" | "awards" | "squad" | "career" | "europe" | "modes" | "fun";
+export type TrophyTier = "common" | "rare" | "epic" | "legendary";
+
+export interface RunRefDto {
+  worldId: string;
+  clubName: string | null;
+  value: number;
+}
+
+export interface StreakDto {
+  current: number;
+  best: number;
+}
+
+export interface CabinetEntryDto {
+  key: TrophyKey;
+  category: TrophyCategory;
+  tier: TrophyTier;
+  count: number;
+  firstEarnedAt: string | null;
+  lastWorldId: string | null;
+  progress: { current: number; target: number } | null;
+  rarityPct: number | null;
+}
+
+export type RunMode = "solo" | "one-club" | "nations" | "league";
+
+export interface ProfileRunDto {
+  worldId: string;
+  createdAt: string;
+  clubName: string | null;
+  formation: string | null;
+  leagueId: string | null;
+  mode: RunMode;
+  finished: boolean;
+  points: number | null;
+  position: number | null;
+  leagueSize: number | null;
+  won: number | null;
+  drawn: number | null;
+  lost: number | null;
+  goalsFor: number | null;
+  goalsAgainst: number | null;
+  squadOverall: number | null;
+  longestWinStreak: number | null;
+  trophies: TrophyKey[];
+}
+
+export interface ProfileDto {
+  user: { displayName: string; isGuest: boolean; memberSince: string };
+  stats: {
+    seasonsStarted: number;
+    seasonsFinished: number;
+    titles: number;
+    topFours: number;
+    invincibles: number;
+    unbeatenSeasons: number;
+    europeanTitles: number;
+    bestPoints: RunRefDto | null;
+    bestRecord: { worldId: string; clubName: string | null; won: number; drawn: number; lost: number; points: number } | null;
+    winRate: number | null;
+    matchesPlayed: number;
+    goalsScored: number;
+    averageFinish: number | null;
+    favouriteFormation: string | null;
+    favouriteLeagueId: string | null;
+    topRatedXi: RunRefDto | null;
+    bestWinStreak: number | null;
+    trophiesEarned: number;
+  };
+  streaks: { titles: StreakDto; unbeaten: StreakDto; onTheUp: StreakDto; days: StreakDto };
+  cabinet: CabinetEntryDto[];
+  daily: { played: number; perfect: number; bestScore: number };
+  runs: ProfileRunDto[];
+}
 
 export interface FinalizeRunResultDto {
   trophies: TrophyKey[];

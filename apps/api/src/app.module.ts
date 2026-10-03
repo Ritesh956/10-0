@@ -13,6 +13,7 @@ import { LeaderboardModule } from "./leaderboard/leaderboard.module.js";
 import { DailyModule } from "./daily/daily.module.js";
 import { LeaguesModule } from "./leagues/leagues.module.js";
 import { LiveDraftModule } from "./live-draft/live-draft.module.js";
+import { ProfileModule } from "./profile/profile.module.js";
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { LiveDraftModule } from "./live-draft/live-draft.module.js";
     DailyModule,
     LeaguesModule,
     LiveDraftModule,
+    ProfileModule,
   ],
 })
 export class AppModule {}

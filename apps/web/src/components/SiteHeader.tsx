@@ -45,8 +45,8 @@ export function SiteHeader({ onRequestSaveProgress }: Props) {
             </NavLink>
           ))}
           {isAuthenticated && (
-            <NavLink to="/history" className={linkClass}>
-              History
+            <NavLink to="/profile" className={linkClass}>
+              Profile
             </NavLink>
           )}
         </nav>
@@ -114,8 +114,8 @@ export function SiteHeader({ onRequestSaveProgress }: Props) {
             </li>
             {isAuthenticated && (
               <li>
-                <NavLink to="/history" className="block py-2">
-                  History
+                <NavLink to="/profile" className="block py-2">
+                  Profile
                 </NavLink>
               </li>
             )}

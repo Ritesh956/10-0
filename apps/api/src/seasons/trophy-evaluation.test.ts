@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { evaluateTrophies, type RunSummary } from "./trophy-evaluation.js";
+import {
+  careerProgress,
+  evaluateCareerTrophies,
+  evaluateTrophies,
+  type CareerRun,
+  type RunSquadPlayer,
+  type RunSummary,
+} from "./trophy-evaluation.js";
 
 function run(overrides: Partial<RunSummary> = {}): RunSummary {
   return { userClubId: "us", played: 38, won: 20, drawn: 10, lost: 8, position: 5, ...overrides };
@@ -87,7 +94,144 @@ describe("evaluateTrophies", () => {
         mvpClubId: "us",
       }),
     );
-    expect(trophies).toEqual(expect.arrayContaining(["invincible", "champions", "golden-boot", "mvp"]));
-    expect(trophies).toHaveLength(4);
+    expect(trophies).toEqual(expect.arrayContaining(["invincible", "champions", "top-four", "golden-boot", "mvp"]));
+    expect(trophies).toHaveLength(5);
+  });
+
+  it("scales the points/goals trophies per game, so a 34-game league can earn them", () => {
+    expect(evaluateTrophies(run({ played: 38, points: 100 }))).toContain("centurion");
+    expect(evaluateTrophies(run({ played: 38, points: 99 }))).not.toContain("centurion");
+    expect(evaluateTrophies(run({ played: 34, points: 90 }))).toContain("centurion");
+    expect(evaluateTrophies(run({ played: 38, goalsFor: 95 }))).toContain("goal-machine");
+    expect(evaluateTrophies(run({ played: 38, goalsAgainst: 22 }))).toContain("fortress");
+    expect(evaluateTrophies(run({ played: 38, goalsAgainst: 23 }))).not.toContain("fortress");
+  });
+
+  it("compares the finish with the draft room's projection", () => {
+    expect(evaluateTrophies(run({ position: 3, projectedFinish: 8 }))).toContain("overachievers");
+    expect(evaluateTrophies(run({ position: 4, projectedFinish: 8 }))).not.toContain("overachievers");
+    expect(evaluateTrophies(run({ position: 1, projectedFinish: 8 }))).toContain("miracle");
+    expect(evaluateTrophies(run({ position: 1, projectedFinish: 7 }))).not.toContain("miracle");
+    expect(evaluateTrophies(run({ position: 6, projectedFinish: 1 }))).toContain("bottle-job");
+    expect(evaluateTrophies(run({ position: 4, projectedFinish: 1 }))).not.toContain("bottle-job");
+    expect(evaluateTrophies(run({ position: 1 }))).not.toContain("miracle");
+  });
+
+  it("knows the bottom of a 20- and an 18-club table", () => {
+    expect(evaluateTrophies(run({ position: 17, leagueSize: 20 }))).toContain("great-escape");
+    expect(evaluateTrophies(run({ position: 18, leagueSize: 20 }))).toContain("relegated");
+    expect(evaluateTrophies(run({ position: 18, leagueSize: 20 }))).not.toContain("great-escape");
+    expect(evaluateTrophies(run({ position: 16, leagueSize: 18 }))).toContain("relegated");
+    expect(evaluateTrophies(run({ position: 15, leagueSize: 18 }))).toContain("great-escape");
+  });
+});
+
+function player(i: number, overrides: Partial<RunSquadPlayer> = {}): RunSquadPlayer {
+  return {
+    name: `Player ${String.fromCharCode(65 + i)}son`,
+    nationality: "England",
+    age: 27,
+    seasonYear: 2015,
+    refClubId: `club-${i}`,
+    ...overrides,
+  };
+}
+const xi = (fn: (i: number) => Partial<RunSquadPlayer> = () => ({})) =>
+  Array.from({ length: 11 }, (_, i) => player(i, fn(i)));
+
+describe("evaluateTrophies — squad composition", () => {
+  const champs = (squad: RunSquadPlayer[], extra: Partial<RunSummary> = {}) =>
+    evaluateTrophies(run({ position: 1, leagueCountry: "England", squad, ...extra }));
+
+  it("United Nations needs eleven nationalities and the title", () => {
+    const squad = xi((i) => ({ nationality: `Nation ${i}` }));
+    expect(champs(squad)).toContain("united-nations");
+    expect(evaluateTrophies(run({ position: 2, squad }))).not.toContain("united-nations");
+    expect(champs(xi((i) => ({ nationality: `Nation ${Math.min(i, 9)}` })))).not.toContain("united-nations");
+  });
+
+  it("Homegrown / Foreign Legion read the league's own nationality, but not for a nations-locked XI", () => {
+    expect(champs(xi())).toContain("homegrown");
+    expect(champs(xi(), { nationsLocked: true })).not.toContain("homegrown");
+    expect(champs(xi(() => ({ nationality: "Brazil" })))).toContain("foreign-legion");
+    expect(champs(xi((i) => ({ nationality: i === 0 ? "England" : "Brazil" })))).not.toContain("foreign-legion");
+  });
+
+  it("season spread: one season is Class Of, eight or more is Time Travellers", () => {
+    expect(champs(xi())).toContain("class-of");
+    expect(champs(xi((i) => ({ seasonYear: 2012 + i })))).toContain("time-travellers");
+    expect(champs(xi((i) => ({ seasonYear: 2012 + (i % 7) })))).not.toContain("time-travellers");
+  });
+
+  it("Band of Brothers needs five from one real club, outside One-Club mode", () => {
+    const squad = xi((i) => ({ refClubId: i < 5 ? "arsenal" : `club-${i}` }));
+    expect(champs(squad)).toContain("band-of-brothers");
+    expect(champs(squad, { oneClubLocked: true })).not.toContain("band-of-brothers");
+    expect(champs(xi((i) => ({ refClubId: i < 4 ? "arsenal" : `club-${i}` })))).not.toContain("band-of-brothers");
+  });
+
+  it("average age: 30+ is Dad's Army, 24 or under is Fledglings", () => {
+    expect(champs(xi(() => ({ age: 31 })))).toContain("dads-army");
+    expect(champs(xi(() => ({ age: 23 })))).toContain("fledglings");
+    expect(champs(xi())).not.toContain("dads-army");
+    expect(champs(xi())).not.toContain("fledglings");
+  });
+
+  it("Alphabet Soup needs six surnames sharing an initial, accents ignored, any finish", () => {
+    const names = ["Mesut Özil", "Jan Oblak", "Nicolás Otamendi", "Divock Origi", "Dani Olmo", "Michael Olise"];
+    const squad = xi((i) => ({ name: names[i] ?? `Player ${i}` }));
+    expect(evaluateTrophies(run({ position: 12, squad }))).toContain("alphabet-soup");
+    expect(evaluateTrophies(run({ position: 12, squad: xi() }))).not.toContain("alphabet-soup");
+  });
+
+  it("skips composition trophies without a full XI", () => {
+    expect(champs(xi().slice(0, 10))).not.toContain("class-of");
+  });
+});
+
+describe("career trophies", () => {
+  const day = (n: number) => new Date(Date.UTC(2026, 0, 1 + n));
+  const runs = (flags: { champion?: boolean; leagueId?: string; formation?: string }[]): CareerRun[] =>
+    flags.map((f, i) => ({
+      createdAt: day(i),
+      leagueId: f.leagueId ?? "league-gb1",
+      formation: f.formation ?? "4-3-3",
+      champion: f.champion ?? false,
+    }));
+
+  it("counts seasons, titles and the best consecutive title run", () => {
+    const p = careerProgress(
+      runs([{ champion: true }, { champion: true }, {}, { champion: true }, { champion: true }, { champion: true }]),
+    );
+    expect(p.regular).toBe(6);
+    expect(p["serial-winner"]).toBe(5);
+    expect(p.dynasty).toBe(3);
+    expect(evaluateCareerTrophies(runs([{}, {}, {}, {}, {}]))).toEqual(["regular"]);
+  });
+
+  it("orders by date, not input order, for the title run", () => {
+    const shuffled = runs([{ champion: true }, {}, { champion: true }, { champion: true }]).reverse();
+    expect(careerProgress(shuffled).dynasty).toBe(2);
+  });
+
+  it("five-league champion and globetrotter count distinct leagues", () => {
+    const leagues = ["league-gb1", "league-es1", "league-it1", "league-l1", "league-fr1"];
+    const all = runs(leagues.map((leagueId) => ({ leagueId, champion: leagueId !== "league-fr1" })));
+    const p = careerProgress(all);
+    expect(p.globetrotter).toBe(5);
+    expect(p["five-league-champion"]).toBe(4);
+    expect(evaluateCareerTrophies(all)).toContain("globetrotter");
+    expect(evaluateCareerTrophies(all)).not.toContain("five-league-champion");
+  });
+
+  it("tactician counts formations among title wins only", () => {
+    const p = careerProgress(
+      runs([
+        { champion: true, formation: "4-3-3" },
+        { champion: true, formation: "4-4-2" },
+        { champion: false, formation: "3-5-2" },
+      ]),
+    );
+    expect(p.tactician).toBe(2);
   });
 });

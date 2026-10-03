@@ -41,7 +41,7 @@ import type {
   SummaryDto,
   TeamStatsDto,
   WorldDto,
-  WorldHistoryRowDto,
+  ProfileDto,
 } from "./types";
 
 const API_BASE_URL = (import.meta.env["VITE_API_URL"] as string | undefined) ?? "http://localhost:4000";
@@ -283,7 +283,7 @@ export const api = {
   finalizeRun: (worldId: string, seasonId: string) =>
     request<FinalizeRunResultDto>(`/worlds/${worldId}/seasons/${seasonId}/finalize`, { method: "POST" }),
 
-  getHistory: () => request<WorldHistoryRowDto[]>("/worlds/history"),
+  getProfile: () => request<ProfileDto>("/profile"),
 
   submitToLeaderboard: (worldId: string, seasonId: string, dto: SubmitLeaderboardDto) =>
     request<SubmitLeaderboardResultDto>(`/worlds/${worldId}/seasons/${seasonId}/leaderboard`, {

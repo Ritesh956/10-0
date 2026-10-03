@@ -9,7 +9,7 @@ const TITLES: Record<string, string> = {
   "/draft": "Draft room",
   "/season": "Your season",
   "/multiplayer": "Play with mates",
-  "/history": "Your history",
+  "/profile": "Your profile",
   "/leaderboard": "Leaderboard",
   "/clubs": "One-Club XI",
   "/nations": "Nations",

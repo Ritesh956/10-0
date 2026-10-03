@@ -38,6 +38,7 @@ import { staggerContainer, staggerItem, staggerItemBounce } from "../lib/motion"
 import { buildSeasonNarrative } from "../lib/seasonNarrative";
 import { worldClubLabel } from "../lib/clubNames";
 import { leagueLabel } from "../lib/leagues";
+import { statsHubCacheKey } from "../lib/statsHubCache";
 import { EuropeShareCard } from "../components/EuropeShareCard";
 import { squadTierName, TIER_TEXT } from "../lib/squadRatings";
 import { useDraft } from "../state/DraftContext";
@@ -105,9 +106,6 @@ interface CachedStatsHub {
 // just reloading) lands straight back on the stats hub instead of re-running the whole animated
 // pipeline for data that hasn't changed — "easy to navigate anytime unless you start a new run"
 // falls out naturally, since a new draft always gets a new worldId and finds no cache entry.
-function statsHubCacheKey(worldId: string): string {
-  return `futbol_stats_hub_${worldId}`;
-}
 function saveStatsHubCache(worldId: string, data: CachedStatsHub): void {
   try {
     localStorage.setItem(statsHubCacheKey(worldId), JSON.stringify(data));

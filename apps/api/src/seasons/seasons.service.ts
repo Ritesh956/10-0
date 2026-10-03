@@ -2,7 +2,7 @@ import { randomInt } from "node:crypto";
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import type { Queue } from "bullmq";
 import type { PrismaClient } from "@futbol/db";
-import { buildStandings, SEASON_SIM_QUEUE, type CompletedResult, type Position } from "@futbol/domain";
+import { buildStandings, SEASON_SIM_QUEUE, type CompletedResult, type Position, type TrophyKey } from "@futbol/domain";
 import { PRISMA } from "../prisma/prisma.module.js";
 import { SEASON_SIM_QUEUE_TOKEN } from "../queue/queue.module.js";
 import { WorldsService } from "../worlds/worlds.service.js";
@@ -10,7 +10,12 @@ import { buildLineup, type DraftCandidate } from "../common/lineup.js";
 import { instantiateWorldClub } from "../common/instantiate-world-club.js";
 import { generateDoubleRoundRobin } from "./round-robin.js";
 import { computeManagerStats, findGoalkeeperId } from "./season-stats.logic.js";
-import { evaluateTrophies } from "./trophy-evaluation.js";
+import {
+  CAREER_TROPHIES,
+  evaluateCareerTrophies,
+  evaluateTrophies,
+  type RunSquadPlayer,
+} from "./trophy-evaluation.js";
 import type { CreateSeasonDto } from "./seasons.schemas.js";
 
 const AI_CLUB_FORMATION = "4-4-2";
@@ -635,15 +640,31 @@ export class SeasonsService {
     }
 
     // Same cast-a-loosely-typed-Json pattern as JanuaryService/LeaderboardService's
-    // WorldSettingsShape — only the one field finalizeRun actually needs.
-    const nationsLocked = Boolean((world.settings as { nationsNationality?: string } | null)?.nationsNationality);
+    // WorldSettingsShape — only the fields finalizeRun actually needs.
+    const settings = (world.settings ?? {}) as {
+      nationsNationality?: string;
+      oneClubClubId?: string;
+      leagueId?: string;
+      projection?: { finish?: number };
+    };
+    const nationsLocked = Boolean(settings.nationsNationality);
 
     // Null until Europe has actually been played to a Final — the first finalizeRun call (straight
     // after the domestic season) sees no Final yet; SeasonPage calls again once Europe finishes.
-    const europeFinal = await this.prisma.knockoutTie.findFirst({
-      where: { worldId, round: "FINAL", winnerClubId: { not: null } },
-    });
+    const [europeFinal, leagueId, squad] = await Promise.all([
+      this.prisma.knockoutTie.findFirst({
+        where: { worldId, round: "FINAL", winnerClubId: { not: null } },
+      }),
+      settings.leagueId ? Promise.resolve(settings.leagueId) : this.inferLeagueId(world.clubs),
+      this.loadRunSquad(userClub.lineup),
+    ]);
     const europeChampion = europeFinal?.winnerClubId === userClub.id;
+    const league = leagueId ? await this.prisma.refLeague.findUnique({ where: { id: leagueId } }) : null;
+    // Worlds drafted before settings carried leagueId: record the inferred one so the profile's
+    // per-league stats and the career trophies can read it straight off settings from now on.
+    if (leagueId && !settings.leagueId) {
+      await this.prisma.world.update({ where: { id: worldId }, data: { settings: { ...settings, leagueId } } });
+    }
 
     const trophies = evaluateTrophies({
       userClubId: userClub.id,
@@ -657,7 +678,15 @@ export class SeasonsService {
       goldenGloveClubId: competitionStats.goldenGlove?.clubId,
       mvpClubId: competitionStats.mvp?.clubId,
       nationsLocked,
+      oneClubLocked: Boolean(settings.oneClubClubId),
       europeChampion,
+      goalsFor: userRow.goalsFor,
+      goalsAgainst: userRow.goalsAgainst,
+      points: userRow.points,
+      leagueSize: standings.rows.length,
+      projectedFinish: settings.projection?.finish,
+      leagueCountry: league?.country,
+      squad: squad.players,
     });
 
     const awardRows: { worldId: string; seasonId: string; name: string; winnerId: string }[] = [];
@@ -674,12 +703,22 @@ export class SeasonsService {
       awardRows.push({ worldId, seasonId, name: "golden-glove", winnerId: competitionStats.goldenGlove.playerId });
     }
 
+    // The profile reads a finished run's line (finish, W-D-L, goals, XI rating) from these rather
+    // than re-deriving every world's standings.
     const recordRows = [
       { worldId, name: "points-total", holderId: userClub.id, value: userRow.points },
       { worldId, name: "longest-win-streak", holderId: userClub.id, value: managerStats.longestWinStreak },
       ...(managerStats.biggestWin
         ? [{ worldId, name: "biggest-win-margin", holderId: userClub.id, value: managerStats.biggestWin.margin }]
         : []),
+      { worldId, name: "final-position", holderId: userClub.id, value: position },
+      { worldId, name: "league-size", holderId: userClub.id, value: standings.rows.length },
+      { worldId, name: "won", holderId: userClub.id, value: userRow.won },
+      { worldId, name: "drawn", holderId: userClub.id, value: userRow.drawn },
+      { worldId, name: "lost", holderId: userClub.id, value: userRow.lost },
+      { worldId, name: "goals-for", holderId: userClub.id, value: userRow.goalsFor },
+      { worldId, name: "goals-against", holderId: userClub.id, value: userRow.goalsAgainst },
+      ...(squad.overall !== null ? [{ worldId, name: "squad-overall", holderId: userClub.id, value: squad.overall }] : []),
     ];
 
     await Promise.all([
@@ -693,6 +732,91 @@ export class SeasonsService {
       this.prisma.worldRecord.createMany({ data: recordRows, skipDuplicates: true }),
     ]);
 
-    return { trophies, awards: awardRows, records: recordRows };
+    // Career trophies need this run's records and title in place first, so they come last.
+    const careerTrophies = await this.awardCareerTrophies(worldId, userId);
+
+    return { trophies: [...trophies, ...careerTrophies], awards: awardRows, records: recordRows };
+  }
+
+  /** Career trophies the user's finished runs have now reached, persisted against this world —
+      each is earned once per player, so one already stamped on another world is skipped. Returns
+      the ones that belong to this world (including from an earlier finalizeRun call). */
+  private async awardCareerTrophies(worldId: string, userId: string): Promise<TrophyKey[]> {
+    const owned = await this.prisma.world.findMany({ where: { ownerId: userId }, select: { id: true } });
+    const finished = await this.prisma.worldRecord.findMany({
+      where: { name: "points-total", worldId: { in: owned.map((w) => w.id) } },
+      select: { worldId: true },
+    });
+    const finishedIds = finished.map((r) => r.worldId);
+    const [worlds, achievements] = await Promise.all([
+      this.prisma.world.findMany({
+        where: { id: { in: finishedIds } },
+        select: { id: true, createdAt: true, settings: true, clubs: { where: { managedByUserId: userId }, select: { formation: true } } },
+      }),
+      this.prisma.achievement.findMany({
+        where: { userId, OR: [{ key: "champions" }, { key: { in: CAREER_TROPHIES } }] },
+        select: { worldId: true, key: true },
+      }),
+    ]);
+    const titleWorlds = new Set(achievements.filter((a) => a.key === "champions").map((a) => a.worldId));
+    const reached = evaluateCareerTrophies(
+      worlds.map((w) => ({
+        createdAt: w.createdAt,
+        leagueId: (w.settings as { leagueId?: string } | null)?.leagueId ?? null,
+        formation: w.clubs[0]?.formation ?? null,
+        champion: titleWorlds.has(w.id),
+      })),
+    );
+    const earnedElsewhere = new Set(
+      achievements.filter((a) => a.key !== "champions" && a.worldId !== worldId).map((a) => a.key),
+    );
+    const mine = reached.filter((key) => !earnedElsewhere.has(key));
+    if (mine.length > 0) {
+      await this.prisma.achievement.createMany({
+        data: mine.map((key) => ({ worldId, userId, key })),
+        skipDuplicates: true,
+      });
+    }
+    return mine;
+  }
+
+  /** The league a world's AI clubs come from, for worlds drafted before settings carried it. */
+  private async inferLeagueId(clubs: { refClubSeasonId: string | null; managedByUserId: string | null }[]) {
+    const ids = clubs.filter((c) => !c.managedByUserId && c.refClubSeasonId).map((c) => c.refClubSeasonId!);
+    if (ids.length === 0) return null;
+    const rows = await this.prisma.refClubSeason.findMany({ where: { id: { in: ids } }, select: { leagueId: true } });
+    const counts = new Map<string, number>();
+    for (const r of rows) counts.set(r.leagueId, (counts.get(r.leagueId) ?? 0) + 1);
+    return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  }
+
+  /** The user's starting XI with each player's drafted nationality/season/club, for the
+      composition trophies, plus its average overall for the profile. */
+  private async loadRunSquad(lineupJson: unknown): Promise<{ players: RunSquadPlayer[]; overall: number | null }> {
+    const ids = ((lineupJson as { playerId?: string }[] | null) ?? [])
+      .map((s) => s?.playerId)
+      .filter((id): id is string => Boolean(id));
+    if (ids.length === 0) return { players: [], overall: null };
+    const rows = await this.prisma.worldPlayer.findMany({
+      where: { id: { in: ids } },
+      select: {
+        name: true,
+        age: true,
+        overall: true,
+        refPlayerSeason: {
+          select: { seasonYear: true, clubSeason: { select: { clubId: true } }, player: { select: { nationality: true } } },
+        },
+      },
+    });
+    return {
+      players: rows.map((r) => ({
+        name: r.name,
+        age: r.age,
+        nationality: r.refPlayerSeason.player.nationality,
+        seasonYear: r.refPlayerSeason.seasonYear,
+        refClubId: r.refPlayerSeason.clubSeason.clubId,
+      })),
+      overall: Math.round(rows.reduce((sum, r) => sum + r.overall, 0) / rows.length),
+    };
   }
 }

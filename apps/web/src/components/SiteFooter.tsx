@@ -8,7 +8,7 @@ const NAV_LINKS: Array<{ label: string; to: string }> = [
   { label: "Nations", to: "/nations" },
   { label: "Multiplayer", to: "/multiplayer" },
   { label: "Leaderboard", to: "/leaderboard" },
-  { label: "History", to: "/history" },
+  { label: "Profile", to: "/profile" },
   { label: "How It Works", to: "/how-it-works" },
   { label: "How to Play", to: "/how-to-play" },
   { label: "Best XI", to: "/best-xi" },
