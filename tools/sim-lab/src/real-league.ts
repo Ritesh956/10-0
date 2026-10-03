@@ -19,7 +19,7 @@ import { generateAttributes, overallToEngineQuality } from "@futbol/engine/testi
 
 const DATA_PATH = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
-  "../../../packages/db/prisma/data/real-top5-2012-2024.json.gz",
+  "../../../packages/db/prisma/data/real-top5-2012-2025.json.gz",
 );
 
 export interface CatalogLeague {

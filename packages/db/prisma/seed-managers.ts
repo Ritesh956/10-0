@@ -2,7 +2,7 @@ import { PrismaClient, type Prisma } from "@prisma/client";
 
 /**
  * Seeds ~100 real, widely-recognized football managers active in the top-5
- * European leagues across the 2012-2024 window (matching the real player
+ * European leagues across the 2012-2025 window (matching the real player
  * dataset's era). Names/nationalities are real facts. The tactical profile
  * per manager (mentality/tempo/width/pressing/passingStyle/managerPhilosophy)
  * is OUR OWN classification, hand-curated from well-documented, widely

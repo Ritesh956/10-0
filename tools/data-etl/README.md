@@ -1,6 +1,6 @@
 # Real reference-catalog ETL
 
-Builds `packages/db/prisma/data/real-top5-2012-2024.json.gz`, the compact
+Builds `packages/db/prisma/data/real-top5-2012-2025.json.gz`, the compact
 dataset that `packages/db/prisma/seed-real.ts` loads into the `Ref*` tables
 (alongside, not replacing, the fictional dataset from `prisma/seed.ts`).
 
@@ -38,7 +38,7 @@ app's pre-season projection table matches.
 
 ### Recalibrating an existing dataset without the raw CSVs
 
-The shipped `real-top5-2012-2024.json.gz` already carries the final (stage 2)
+The shipped `real-top5-2012-2025.json.gz` already carries the final (stage 2)
 ratings. History, for when the raw Transfermarkt CSVs aren't present:
 
 - `rescale_existing_overall.py` — applied stage 1 (July 2026). Anchors to the
@@ -54,7 +54,7 @@ needed.
 ## Scope
 
 Top-5 European leagues (Premier League, LaLiga, Serie A, Bundesliga, Ligue 1),
-seasons 2012-2024 (the earliest season this data source covers in full is
+seasons 2012-2025, i.e. 2012/13 to 2025/26 (the earliest season this data source covers in full is
 2012/13). Player-seasons under 300 minutes played are dropped as noise.
 
 ## Regenerating
@@ -62,7 +62,7 @@ seasons 2012-2024 (the earliest season this data source covers in full is
 ```bash
 ./download_source_data.sh          # fetches raw CSVs into ./raw (gitignored)
 python3 -m pip install pandas numpy
-python3 build_real_catalog.py      # writes ../../packages/db/prisma/data/real-top5-2012-2024.json.gz
+python3 build_real_catalog.py      # writes ../../packages/db/prisma/data/real-top5-2012-2025.json.gz
 ```
 
 Then from `packages/db`: `pnpm seed:real` to load it into Postgres.

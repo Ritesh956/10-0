@@ -1,5 +1,5 @@
 """
-Builds packages/db/prisma/data/real-top5-2012-2024.json.gz — the real
+Builds packages/db/prisma/data/real-top5-2012-2025.json.gz — the real
 reference-catalog dataset consumed by packages/db/prisma/seed-real.ts.
 
 Source: dcaribou/transfermarkt-datasets (https://github.com/dcaribou/transfermarkt-datasets),
@@ -14,7 +14,7 @@ contribution, and involvement (minutes played), specifically so we're never
 copying a third party's proprietary rating.
 
 Usage:
-    python build_real_catalog.py [--data-dir raw] [--out ../../packages/db/prisma/data/real-top5-2012-2024.json.gz]
+    python build_real_catalog.py [--data-dir raw] [--out ../../packages/db/prisma/data/real-top5-2012-2025.json.gz]
 """
 
 import argparse
@@ -41,7 +41,7 @@ OVR_MEAN, OVR_SD, OVR_FLOOR, OVR_CAP = 81.5, 5.0, 70, 99
 
 TOP5 = {"GB1": "England", "ES1": "Spain", "IT1": "Italy", "L1": "Germany", "FR1": "France"}
 TOP5_NAMES = {"GB1": "Premier League", "ES1": "LaLiga", "IT1": "Serie A", "L1": "Bundesliga", "FR1": "Ligue 1"}
-SEASON_MIN, SEASON_MAX = 2012, 2024
+SEASON_MIN, SEASON_MAX = 2012, 2025
 MIN_MINUTES = 300
 
 POSITION_MAP = {
@@ -72,7 +72,7 @@ def slugify(s: str) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser()
     default_data_dir = Path(__file__).parent / "raw"
-    default_out = Path(__file__).parent.parent.parent / "packages" / "db" / "prisma" / "data" / "real-top5-2012-2024.json.gz"
+    default_out = Path(__file__).parent.parent.parent / "packages" / "db" / "prisma" / "data" / "real-top5-2012-2025.json.gz"
     parser.add_argument("--data-dir", type=Path, default=default_data_dir)
     parser.add_argument("--out", type=Path, default=default_out)
     args = parser.parse_args()

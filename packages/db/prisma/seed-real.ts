@@ -8,7 +8,7 @@ import { generateAttributes, overallToEngineQuality } from "@futbol/engine/testi
 
 /**
  * Seeds the real reference-catalog dataset: top-5 European leagues (Premier
- * League, LaLiga, Serie A, Bundesliga, Ligue 1), seasons 2012-2024, built
+ * League, LaLiga, Serie A, Bundesliga, Ligue 1), seasons 2012-2025 (2012/13 to 2025/26), built
  * from real player/club/appearance facts (names, positions, minutes, goals,
  * assists, market value) published by the dcaribou/transfermarkt-datasets
  * project (https://github.com/dcaribou/transfermarkt-datasets, CC-licensed,
@@ -20,7 +20,7 @@ import { generateAttributes, overallToEngineQuality } from "@futbol/engine/testi
  * `quality` seed for the engine's own `generateAttributes()` so the full
  * FM-style attribute vector stays consistent with how @futbol/sim-lab
  * calibrates the match engine. See tools/data-etl/ for the ETL that produced
- * prisma/data/real-top5-2012-2024.json.gz from the raw CSVs.
+ * prisma/data/real-top5-2012-2025.json.gz from the raw CSVs.
  *
  * Additive: inserted into the same "era-all-time" era as the fictional seed
  * (packages/db/prisma/seed.ts) rather than replacing it, so both are
@@ -30,7 +30,7 @@ import { generateAttributes, overallToEngineQuality } from "@futbol/engine/testi
 const prisma = new PrismaClient();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_PATH = path.join(__dirname, "data", "real-top5-2012-2024.json.gz");
+const DATA_PATH = path.join(__dirname, "data", "real-top5-2012-2025.json.gz");
 
 const ERA = { id: "era-all-time", name: "All-Time", startYear: 1992, endYear: 2025 };
 
@@ -94,7 +94,7 @@ function chunk<T>(items: T[], size: number): T[][] {
 }
 
 async function main(): Promise<void> {
-  console.log("Seeding real reference data (top-5 leagues, 2012-2024)...");
+  console.log("Seeding real reference data (top-5 leagues, 2012/13-2025/26)...");
   const catalog = loadCatalog();
 
   await prisma.era.upsert({

@@ -1,6 +1,6 @@
 """
 One-shot migration: rescale `overall`/`potential` in the already-shipped
-real dataset (packages/db/prisma/data/real-top5-2012-2024.json.gz) onto the
+real dataset (packages/db/prisma/data/real-top5-2012-2025.json.gz) onto the
 same football-shaped curve that build_real_catalog.py now targets, WITHOUT
 needing the raw Transfermarkt CSVs (which are gitignored / not present).
 
@@ -63,7 +63,7 @@ def build_lut(overalls: list[int]) -> dict[int, int]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    default_file = Path(__file__).parent.parent.parent / "packages" / "db" / "prisma" / "data" / "real-top5-2012-2024.json.gz"
+    default_file = Path(__file__).parent.parent.parent / "packages" / "db" / "prisma" / "data" / "real-top5-2012-2025.json.gz"
     parser.add_argument("--file", type=Path, default=default_file)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()

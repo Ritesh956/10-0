@@ -58,7 +58,7 @@ export class CatalogService {
 
   /** Each league carries the season span it actually has data for, so the web era slider and the
       landing page's archive stats reflect the real catalog instead of the era's nominal range (the
-      all-time era is 1992–2025 nominally, but the real top-5 data only covers 2012–2024). */
+      all-time era is 1992–2025 nominally, but the real top-5 data only covers 2012/13–2025/26). */
   async listLeagues(eraId?: string) {
     const [leagues, spans] = await Promise.all([
       this.prisma.refLeague.findMany({

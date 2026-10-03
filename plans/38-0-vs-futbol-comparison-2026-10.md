@@ -323,6 +323,8 @@ Legend for the **Do** column: **P0** fix now · **P1** next sprint (UX parity) �
 ### 5.4 Goal attribution
 - After fixing B1, re-check that strikers/wingers take the bulk of goals (sim-lab metric: share of team goals by position group; ST ≈ 30–45%). One more oddity: a "Galácticos" XI lost 0-7 at home to Man United. Check the tails of the variance.
 
+- **Checked 2026-10-04** over ~12,000 simulated matches in the dev DB (goals by the scorer's primary position): ST 42.9% (in target), all forwards ~61%, CM 17.5%, CDM 8.2%, CAM 5.5%, full-backs 6.9%, CB 1.1%, GK 0.1%. Two realism nits for a future engine pass (needs a sim-lab recalibration, so not changed yet): centre-backs score far less than full-backs (real football: the reverse, via set pieces), and CDMs out-score CMs per 90 (0.194 vs 0.146). Margins: 7+ goals in ~0.2% of matches, one 14-goal game — rare but a slightly long tail.
+
 ### 5.5 Data window
 - 38-0: 35 English seasons including the current 2026/27; Spain since 1997/98. Futbol: 13 seasons (2012–2024), no 2025/26 or 2026/27.
 - **Do (P2):** add current seasons first (draft "this season's" stars, and AI clubs that match reality). Then extend backwards (the standing pre-2012 backlog item). Update the era slider bounds and the landing copy to match.

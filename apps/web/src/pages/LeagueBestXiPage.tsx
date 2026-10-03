@@ -124,7 +124,7 @@ export function LeagueBestXiPage() {
           </h1>
           <p className="max-w-2xl text-sm leading-relaxed text-smoke-400">{INTROS[leagueId]}</p>
           <p className="text-xs text-smoke-600">
-            Picked by our own ratings, 2012/13–2024/25: each player at their best {name} season, in a 4-3-3. Ties go to
+            Picked by our own ratings, 2012/13–2025/26: each player at their best {name} season, in a 4-3-3. Ties go to
             the more recent season. Every one of them is in the draft pool.
           </p>
           <Button onClick={draftFromLeague}>Draft from {leagueInSentence(leagueId)} &rarr;</Button>

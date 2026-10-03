@@ -62,7 +62,7 @@ const HOW_IT_WORKS: Array<[string, string]> = [
 const FAQ: Array<[string, string]> = [
   [
     "Is this affiliated with any real league or club?",
-    "No. Futbol is an independent fan project. Club, player, and manager names reflect real people and real historical rosters (top-5 European leagues, 2012–2024), included for factual reference — but all ratings, tactics, and match outcomes are our own calculation, not sourced from or endorsed by any official body.",
+    "No. Futbol is an independent fan project. Club, player, and manager names reflect real people and real historical rosters (top-5 European leagues, 2012/13–2025/26), included for factual reference — but all ratings, tactics, and match outcomes are our own calculation, not sourced from or endorsed by any official body.",
   ],
   [
     "Do I need an account to play?",
@@ -91,7 +91,7 @@ interface ArchiveStats {
 
 /** Live numbers from the real (top-5) catalog. These used to be hard-coded ("12 leagues · 9
     countries · 1992–2025"), which counted the fictional placeholder leagues and contradicted the
-    footer's own "top-5, 2012–2024" disclaimer. */
+    footer's own top-5 disclaimer. */
 async function loadArchiveStats(): Promise<ArchiveStats> {
   const eras = await api.listEras();
   const [leagueLists, clubs, nations] = await Promise.all([

@@ -1,6 +1,6 @@
 """
 One-shot migration: applies ovr_spread.py's stage-2 curve to the already-shipped dataset
-(packages/db/prisma/data/real-top5-2012-2024.json.gz) without the raw Transfermarkt CSVs.
+(packages/db/prisma/data/real-top5-2012-2025.json.gz) without the raw Transfermarkt CSVs.
 
 The shipped file's integer `overall` is the stage-1 value (70-99), so this is an exact per-integer
 remap — no re-ranking needed. It refuses to run on a file that already looks remapped (anything
@@ -27,7 +27,7 @@ REP_FLOOR, REP_CAP = 35, 95
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    default_file = Path(__file__).parent.parent.parent / "packages" / "db" / "prisma" / "data" / "real-top5-2012-2024.json.gz"
+    default_file = Path(__file__).parent.parent.parent / "packages" / "db" / "prisma" / "data" / "real-top5-2012-2025.json.gz"
     parser.add_argument("--file", type=Path, default=default_file)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
