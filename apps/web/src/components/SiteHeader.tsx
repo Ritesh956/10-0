@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../lib/auth-context";
+import { useInstallPrompt } from "../lib/install";
 
 interface Props {
   onRequestSaveProgress?: (() => void) | undefined;
@@ -20,6 +21,7 @@ const linkClass = ({ isActive }: { isActive: boolean }) => `transition hover:tex
     button, next to a "Play" shortcut that's always visible. */
 export function SiteHeader({ onRequestSaveProgress }: Props) {
   const { isAuthenticated, user, logout } = useAuth();
+  const { canInstall, install, iosHint } = useInstallPrompt();
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
 
@@ -53,6 +55,11 @@ export function SiteHeader({ onRequestSaveProgress }: Props) {
 
         <div className="ml-auto flex items-center gap-2 md:ml-0">
           <div className="hidden items-center gap-3 text-sm text-smoke-400 md:flex">
+            {canInstall && (
+              <button onClick={() => void install()} className="transition hover:text-paper">
+                Install app
+              </button>
+            )}
             {isAuthenticated ? (
               <>
                 {user?.isGuest && onRequestSaveProgress && (
@@ -117,6 +124,18 @@ export function SiteHeader({ onRequestSaveProgress }: Props) {
                 <NavLink to="/profile" className="block py-2">
                   Profile
                 </NavLink>
+              </li>
+            )}
+            {canInstall && (
+              <li>
+                <button onClick={() => void install()} className="block w-full py-2 text-left font-semibold text-mint-400">
+                  Install the app
+                </button>
+              </li>
+            )}
+            {iosHint && (
+              <li className="py-2 text-xs text-smoke-500">
+                Install on iPhone: tap Share, then &ldquo;Add to Home Screen&rdquo;.
               </li>
             )}
           </ul>

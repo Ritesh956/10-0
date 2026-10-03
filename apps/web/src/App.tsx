@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from "./lib/auth-context";
 import { DraftProvider } from "./state/DraftContext";
 import { fadeSlide } from "./lib/motion";
 import { routeTitle } from "./lib/routeTitles";
+import { useOnline } from "./lib/install";
 import { AuthPage } from "./pages/AuthPage";
 import { LandingPage } from "./pages/LandingPage";
 import { SetupPage } from "./pages/SetupPage";
@@ -34,6 +35,7 @@ function Shell() {
   const { isAuthenticated } = useAuth();
   const [showSaveModal, setShowSaveModal] = useState(false);
   const location = useLocation();
+  const online = useOnline();
 
   // A new page always starts at the top — without this, Setup -> Draft landed mid-page at Setup's
   // old scroll offset.
@@ -52,6 +54,11 @@ function Shell() {
         className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(ellipse_70%_45%_at_50%_-8%,rgba(31,191,117,0.10),transparent),radial-gradient(ellipse_55%_40%_at_105%_15%,rgba(61,143,130,0.08),transparent),radial-gradient(ellipse_60%_45%_at_-5%_100%,rgba(22,101,52,0.10),transparent)]"
       />
       <SiteHeader onRequestSaveProgress={isAuthenticated ? () => setShowSaveModal(true) : undefined} />
+      {!online && (
+        <p role="status" className="bg-amber-500/15 px-4 py-2 text-center text-xs font-semibold text-amber-300">
+          You&apos;re offline — drafts and seasons need a connection, they&apos;ll pick up when you&apos;re back.
+        </p>
+      )}
       <main>
         <AnimatePresence mode="wait">
           <motion.div key={location.pathname} variants={fadeSlide} initial="initial" animate="animate" exit="exit">
