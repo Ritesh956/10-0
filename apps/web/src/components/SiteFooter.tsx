@@ -3,12 +3,20 @@ import { Link } from "react-router-dom";
 const NAV_LINKS: Array<{ label: string; to: string }> = [
   { label: "Home", to: "/" },
   { label: "Play", to: "/setup" },
+  { label: "Daily", to: "/daily" },
+  { label: "One-Club XI", to: "/clubs" },
+  { label: "Nations", to: "/nations" },
   { label: "Multiplayer", to: "/multiplayer" },
+  { label: "Leaderboard", to: "/leaderboard" },
+  { label: "History", to: "/history" },
   { label: "How It Works", to: "/how-it-works" },
   { label: "How to Play", to: "/how-to-play" },
   { label: "Best XI", to: "/best-xi" },
   { label: "Our Story", to: "/story" },
 ];
+
+/** Where "Feedback & bugs" points. Override with VITE_FEEDBACK_URL (e.g. a mailto: or a form). */
+const FEEDBACK_URL = import.meta.env.VITE_FEEDBACK_URL || "https://github.com/Ritesh956/10-0/issues/new";
 
 export function SiteFooter() {
   return (
@@ -28,7 +36,12 @@ export function SiteFooter() {
           );
         })}
       </nav>
-      <p className="mt-6 text-xs text-ink-600">&copy; {new Date().getFullYear()} Futbol. All rights reserved.</p>
+      <p className="mt-5">
+        <a href={FEEDBACK_URL} target="_blank" rel="noreferrer" className="text-smoke-400 underline-offset-2 hover:text-paper hover:underline">
+          Feedback &amp; bugs
+        </a>
+      </p>
+      <p className="mt-4 text-xs text-ink-600">&copy; {new Date().getFullYear()} Futbol. All rights reserved.</p>
       <p className="mx-auto mt-4 max-w-2xl text-xs leading-relaxed text-ink-600">
         Futbol is an independent fan-made football draft and season simulator. It is not affiliated with,
         endorsed by, sponsored by, or licensed by any club, competition, league, player, manager, or governing body.

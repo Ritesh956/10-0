@@ -82,6 +82,11 @@ export interface WorldSettingsDto {
       undefined for a normal world. Set once at world creation; read-only from the frontend's
       perspective, same convention as oneClubClubId. */
   multiplayerLeagueId?: string;
+  nationsNationality?: string;
+  /** RefLeague id of the league this world's season is played in, when the draft picked one. */
+  leagueId?: string;
+  /** The pre-season projection as the draft room displayed it — the verdict compares against this. */
+  projection?: { finish: number; points: number; overall: number };
 }
 
 export interface WorldDto {
@@ -301,8 +306,31 @@ export interface JanuaryInPlayerDto extends JanuaryPlayerDto {
   seasonYear: number;
 }
 
+/** The named January events — mirrors apps/api/src/january/january.logic.ts JanuaryEventKind. */
+export type JanuaryEventKind = "bargain-buy" | "wheeler-dealer" | "deadline-day" | "loan-swap" | "star-wants-out";
+
+export interface JanuaryOptionDto {
+  id: string;
+  name: string;
+  clubName: string;
+  seasonYear: number;
+  position: string;
+}
+
+/** GET .../january/:seasonId/offer — this season's event; `options` only for a choice event. */
+export interface JanuaryOfferDto {
+  kind: JanuaryEventKind;
+  label: string;
+  premise: string;
+  outPlayer: JanuaryPlayerDto;
+  options: JanuaryOptionDto[] | null;
+}
+
 export interface JanuaryResultDto {
   eventType: JanuaryEventType;
+  /** Absent on results cached before the event layer existed. */
+  kind?: JanuaryEventKind;
+  label?: string;
   outPlayer: JanuaryPlayerDto;
   inPlayer: JanuaryInPlayerDto;
   delta: number;
@@ -425,6 +453,28 @@ export interface DailyPoolStatsDto {
   totalPlayers: number;
   /** Aligned with the challenge's `constraints` array. */
   eligiblePerConstraint: number[];
+  /** Aligned with `constraints` — club-season ids whose squad has someone satisfying each one; the
+      reel leans draws toward these and the completion odds are computed from them. */
+  clubSeasonIdsPerConstraint?: string[][];
+}
+
+/** GET /daily/yesterday — the previous day's community result. */
+export interface DailyRecapDto {
+  date: string;
+  themeLabel: string;
+  players: number;
+  topScore: number;
+  maxScore: number;
+  maxedCount: number;
+  fewestAttemptsToMax: number | null;
+}
+
+/** GET /daily/:id/me — the signed-in player's own standing today. */
+export interface DailyMyEntryDto {
+  attemptsUsed: number;
+  attemptsRemaining: number;
+  bestScore: number | null;
+  maxScore: number | null;
 }
 
 export interface DailyChallengeDto {

@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./lib/auth-context";
 import { DraftProvider } from "./state/DraftContext";
 import { fadeSlide } from "./lib/motion";
+import { routeTitle } from "./lib/routeTitles";
 import { AuthPage } from "./pages/AuthPage";
 import { LandingPage } from "./pages/LandingPage";
 import { SetupPage } from "./pages/SetupPage";
@@ -36,6 +37,7 @@ function Shell() {
   // old scroll offset.
   useEffect(() => {
     window.scrollTo(0, 0);
+    document.title = routeTitle(location.pathname);
   }, [location.pathname]);
 
   return (

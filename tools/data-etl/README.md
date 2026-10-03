@@ -20,26 +20,36 @@ API key or login required.
   vector. These are **not** copied from any FIFA/EA/SoFIFA-style rating —
   `overall` starts as a blend of market-value percentile, position-relative
   per-90 goal contribution, and involvement (minutes played) within the
-  filtered dataset, and that blend is then **quantile-mapped onto a realistic
-  rating curve** (a normal distribution, mean 81.5 / sd 5, clamped to
-  `[70, 99]` — see the `OVR_*` constants) so the final distribution looks like
-  real football — floor at 70, the bulk clustered in the low-80s, a thin elite
-  tail only the very best season reaches 99 — instead of the near-flat 40-99
-  spread a raw linear map produced (see `build_real_catalog.py`). `potential`/individual
-  attributes are then generated from that `overall` via `@futbol/engine`'s own
-  `generateAttributes()` so they stay consistent with how `tools/sim-lab`
-  calibrates the match engine.
+  filtered dataset, and that blend is then mapped onto a realistic rating
+  curve in two stages: (1) quantile-mapped onto a normal distribution (mean
+  81.5 / sd 5, clamped to `[70, 99]` — the `OVR_*` constants), then (2)
+  stretched by `ovr_spread.py`'s piecewise-linear curve to a final **58–97**
+  range, so 90+ is genuinely rare (top ~1.5% of player-seasons) and a league's
+  best and worst XIs sit far enough apart for a realistic simulated table.
+  `potential`/individual attributes are then generated from that `overall` via
+  `@futbol/engine`'s own `generateAttributes()` (quality from
+  `overallToEngineQuality` in `@futbol/engine/testing`) so they stay
+  consistent with how `tools/sim-lab` calibrates the match engine.
+
+The curve, the engine's rating→quality map and its `GK_SAVE_PIVOT` were tuned
+together against `tools/sim-lab`'s real-league harness — after changing any of
+them, re-run `pnpm --filter @futbol/sim-lab calibrate -- --write` so the web
+app's pre-season projection table matches.
 
 ### Recalibrating an existing dataset without the raw CSVs
 
-`rescale_existing_overall.py` applies the same `[70, 99]` curve to the already
-shipped `real-top5-2012-2024.json.gz` in place (overall, potential, and
-club-season reputation), for when the raw Transfermarkt CSVs aren't present to
-run a full `build_real_catalog.py` regen. It anchors to the file's *current*
-distribution, so run it only against a pristine ETL-produced file, never twice
-against its own output. After running it, reseed with `pnpm seed:real` — the
-seed script now syncs overall/potential/attributes onto existing rows, so no DB
-wipe is needed.
+The shipped `real-top5-2012-2024.json.gz` already carries the final (stage 2)
+ratings. History, for when the raw Transfermarkt CSVs aren't present:
+
+- `rescale_existing_overall.py` — applied stage 1 (July 2026). Anchors to the
+  file's current distribution, so never run it against its own output.
+- `apply_ovr_spread.py` — applied stage 2 (October 2026) as an exact
+  per-integer remap of overall/potential plus club-season reputation. Refuses
+  to run on a file that already has overalls below 70.
+
+After changing the file, reseed with `pnpm seed:real` — the seed syncs
+overall/potential/attributes/reputation onto existing rows, so no DB wipe is
+needed.
 
 ## Scope
 

@@ -128,7 +128,7 @@ function OddsBar({ label, pct, colorClass }: { label: string; pct: number; color
 
 export function DraftPage() {
   const navigate = useNavigate();
-  const { isAuthenticated, user, logout } = useAuth();
+  const { isAuthenticated, user, logout, playAsGuest } = useAuth();
   const {
     config,
     picks,
@@ -382,16 +382,31 @@ export function DraftPage() {
     return true;
   }
 
+  /** Open slots `player` can go in, one per distinct position (two open CB slots offer one "CB"). */
+  function placeableSlots(player: PlayerSeasonDto): number[] {
+    const seen = new Set<string>();
+    return slots.flatMap((slot, i) => {
+      if (picks[i] || seen.has(slot.position) || !canPlayPosition(player.positions, slot.position)) return [];
+      seen.add(slot.position);
+      return [i];
+    });
+  }
+
   function handlePlayerClick(player: PlayerSeasonDto) {
     if (Object.values(picks).some((p) => p.id === player.id)) return; // already in the XI
     if (config.draftMode === "position-first" && effectiveTargetIndex !== null) {
       tryAssignPlayer(effectiveTargetIndex, player);
-    } else if (config.draftMode === "squad-first" && recommendedSlotIndex !== null) {
-      // Only one slot left — skip the extra "choose a position" tap when the player fits it.
-      if (!tryAssignPlayer(recommendedSlotIndex, player)) setPendingPlayer(player);
-    } else {
-      setPendingPlayer(player);
+      return;
     }
+    // Only one place this player can go: put them straight there instead of asking.
+    const options = placeableSlots(player);
+    if (config.draftMode === "squad-first" && options.length === 1) {
+      tryAssignPlayer(options[0]!, player);
+      return;
+    }
+    // Otherwise the row opens inline "Place in" pills (the pitch slots are highlighted too); a second
+    // tap on the same player closes them again.
+    setPendingPlayer((current) => (current?.id === player.id ? null : player));
   }
 
   function handlePitchSlotClick(index: number) {
@@ -431,6 +446,8 @@ export function DraftPage() {
         ...(config.lockedClubId ? { oneClubClubId: config.lockedClubId } : {}),
         ...(config.lockedNationality ? { nationsNationality: config.lockedNationality } : {}),
         ...(config.multiplayerLeagueId ? { multiplayerLeagueId: config.multiplayerLeagueId } : {}),
+        ...(config.leagueIds[0] ? { leagueId: config.leagueIds[0] } : {}),
+        projection: { finish: odds.projectedFinish, points: odds.expectedPoints, overall: overallRating },
       });
       setWorldId(world.id);
       const refPlayerSeasonIds = slots.map((_, i) => picks[i]?.id).filter((id): id is string => Boolean(id));
@@ -448,7 +465,8 @@ export function DraftPage() {
         managerPick?.id,
         lineup,
       );
-      navigate("/season");
+      // The season starts straight away on arrival — one "Simulate" press, not two.
+      navigate("/season", { state: { autoStart: true } });
     } catch (err) {
       // A 24h-old token can still be present locally (isAuthenticated only checks that) while the
       // server no longer honors it — this is the only place that actually finds out, since it's
@@ -467,11 +485,22 @@ export function DraftPage() {
     }
   }
 
-  function handleConfirmClick() {
+  /** No username gate before simulating (it used to block the climax of the draft): a first-time
+      player gets a guest session silently, named after their XI. A handle is only asked for when it
+      matters — submitting to a leaderboard, or saving progress. */
+  async function handleConfirmClick() {
     if (!isAuthenticated) {
-      setGuestGateReason("not-signed-in");
-      setShowGuestGate(true);
-      return;
+      setConfirming(true);
+      try {
+        const name = squadName.trim().length >= 2 ? squadName.trim().slice(0, 40) : `Guest ${Math.floor(1000 + Math.random() * 9000)}`;
+        await playAsGuest(name);
+      } catch {
+        // Couldn't create a guest silently (offline, rate-limited…) — fall back to asking.
+        setConfirming(false);
+        setGuestGateReason("not-signed-in");
+        setShowGuestGate(true);
+        return;
+      }
     }
     void doConfirm();
   }
@@ -488,6 +517,11 @@ export function DraftPage() {
             ? !canPlayPosition(pendingPlayer.positions, slot.position)
             : movingPlayer
               ? !canPlayPosition(movingPlayer.positions, slot.position)
+              : false,
+          eligible: pendingPlayer
+            ? canPlayPosition(pendingPlayer.positions, slot.position)
+            : movingPlayer
+              ? canPlayPosition(movingPlayer.positions, slot.position)
               : false,
         };
   });
@@ -538,7 +572,7 @@ export function DraftPage() {
 
   const overallRating = useMemo(() => average(Object.values(picks).map((p) => p.overall)), [picks]);
 
-  const odds = useMemo(() => computePreseasonOdds(overallRating), [overallRating]);
+  const odds = useMemo(() => computePreseasonOdds(overallRating, config.leagueIds[0]), [overallRating, config.leagueIds]);
 
   const pitchClickable = moveMode
     ? handlePitchSlotClick
@@ -549,8 +583,8 @@ export function DraftPage() {
         : (!currentClub && !spinning ? handlePitchSlotClick : undefined);
 
   return (
-    <div className="mx-auto max-w-5xl px-6 py-10">
-      <div className="mb-8 border-b border-ink-800 pb-6">
+    <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-10">
+      <div className="mb-6 border-b border-ink-800 pb-5 sm:mb-8 sm:pb-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -568,7 +602,7 @@ export function DraftPage() {
                 </span>
               )}
             </div>
-            <h1 className="mt-4 font-display text-3xl font-bold uppercase leading-tight tracking-tight text-paper sm:text-4xl">
+            <h1 className="mt-3 font-display text-2xl font-bold uppercase leading-tight tracking-tight text-paper sm:mt-4 sm:text-4xl">
               Draft Room
             </h1>
           </div>
@@ -590,7 +624,7 @@ export function DraftPage() {
           </Button>
         </div>
 
-        <dl className="mt-5 grid grid-cols-3 gap-3 sm:max-w-md">
+        <dl className="mt-4 grid grid-cols-3 gap-2 sm:mt-5 sm:max-w-md sm:gap-3">
           <div className="notch-sm border-2 border-teal-500/25 bg-ink-900/40 px-3 py-2">
             <dt className="text-[10px] uppercase tracking-wide text-smoke-600">Formation</dt>
             <dd className="font-display text-lg font-bold text-teal-400">{config.formation}</dd>
@@ -628,8 +662,8 @@ export function DraftPage() {
         </div>
       )}
 
-      <div className="grid gap-8 md:grid-cols-2">
-        <div>
+      <div className="grid gap-6 md:grid-cols-2 md:gap-8">
+        <div className="order-2 mx-auto w-full max-w-sm md:order-none md:max-w-none">
           <PitchView
             formation={config.formation}
             slotState={slotState}
@@ -693,7 +727,7 @@ export function DraftPage() {
           )}
         </div>
 
-        <div className="flex flex-col">
+        <div className="order-1 flex flex-col md:order-none">
           {moveMode ? (
             <div className="notch border-2 border-dashed border-ink-700 p-8 text-center text-sm text-smoke-500">
               {moveSourceIndex === null
@@ -710,7 +744,7 @@ export function DraftPage() {
                     {config.formation} &middot; Overall {overallRating}
                   </p>
                 </div>
-                <div className="max-h-96 space-y-2 overflow-y-auto scrollbar-thin pr-1">
+                <div className="space-y-2">
                   {slots.map((slot, i) => {
                     const player = picks[i];
                     if (!player) return null;
@@ -838,7 +872,7 @@ export function DraftPage() {
                   placeholder="Name your XI"
                 />
 
-                <Button size="lg" fullWidth disabled={confirming} onClick={handleConfirmClick}>
+                <Button size="lg" fullWidth disabled={confirming} onClick={() => void handleConfirmClick()}>
                   {confirming ? "Setting up..." : "Simulate Season →"}
                 </Button>
               </div>
@@ -921,11 +955,11 @@ export function DraftPage() {
                     <p className="text-xs text-smoke-500">
                       {pendingPlayer ? (
                         <>
-                          Choose a position for{" "}
-                          <span className="font-semibold text-paper">{pendingPlayer.player.name}</span>
+                          Place <span className="font-semibold text-paper">{pendingPlayer.player.name}</span> below, or tap a
+                          ringed slot on the pitch
                         </>
                       ) : (
-                        "Pick any player, then choose their position."
+                        "Tap a player to see where they can play."
                       )}
                     </p>
                     <div className="notch-sm flex shrink-0 items-center gap-0.5 border border-ink-700 bg-ink-900/40 p-0.5 text-[11px] uppercase tracking-wide">
@@ -946,16 +980,17 @@ export function DraftPage() {
                     </div>
                   </div>
 
-                  <div className="max-h-80 space-y-2 overflow-y-auto scrollbar-thin pr-1">
+                  <div className="space-y-2">
                     {loadingPlayers && <p className="text-center text-sm text-smoke-500">Loading squad...</p>}
                     {sortedPlayerPool.map((player) => {
                       const alreadyDrafted = draftedIds.has(player.id);
                       const eligible = effectiveSlot
                         ? canPlayPosition(player.positions, effectiveSlot.position)
                         : isUsableAnywhere(player);
+                      const placing = config.draftMode === "squad-first" && pendingPlayer?.id === player.id;
                       return (
+                        <div key={player.id}>
                         <PlayerPickCard
-                          key={player.id}
                           player={player}
                           showRatings={config.showRatings}
                           selected={pendingPlayer?.id === player.id}
@@ -974,6 +1009,29 @@ export function DraftPage() {
                           muted={!eligible}
                           onClick={() => handlePlayerClick(player)}
                         />
+                        {placing && (
+                          <div className="notch-sm mt-1 border border-mint-500/30 bg-mint-500/5 p-2.5">
+                            <p className="mb-2 text-[11px] uppercase tracking-wide text-smoke-500">
+                              Place in ({placeableSlots(player).length})
+                            </p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {placeableSlots(player).map((slotIndex) => {
+                                const slot = slots[slotIndex]!;
+                                return (
+                                  <button
+                                    key={slotIndex}
+                                    type="button"
+                                    onClick={() => tryAssignPlayer(slotIndex, player)}
+                                    className="notch-sm border border-mint-500/50 bg-ink-900 px-2.5 py-1.5 text-xs font-semibold text-mint-300 transition hover:bg-mint-500/15"
+                                  >
+                                    {slot.position} · {positionLabel(slot.position)}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        </div>
                       );
                     })}
                   </div>

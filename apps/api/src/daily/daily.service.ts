@@ -14,8 +14,10 @@ import {
   computePoolStats,
   computeScore,
   generateChallenge,
+  summarizeRecap,
   type DailyCandidate,
   type DailyConstraint,
+  type PoolStats,
 } from "./daily.logic.js";
 import type { SubmitDailyAttemptDto } from "./daily.schemas.js";
 
@@ -85,7 +87,7 @@ export class DailyService implements OnModuleInit, OnModuleDestroy {
     const dateKey = todayDateKey();
     const dateValue = new Date(`${dateKey}T00:00:00.000Z`);
     const existing = await this.prisma.dailyChallenge.findUnique({ where: { date: dateValue } });
-    if (existing) return this.toChallengeDto(existing);
+    if (existing) return this.toChallengeDto(await this.withBoostPools(existing));
 
     let inflight = this.generating.get(dateKey);
     if (!inflight) {
@@ -98,7 +100,10 @@ export class DailyService implements OnModuleInit, OnModuleDestroy {
   private async generateFor(dateKey: string, dateValue: Date) {
     const pool = await this.loadPool();
     const generated = generateChallenge(dateKey, pool);
-    const poolStats = computePoolStats(pool, generated.anchor, generated.constraints);
+    const poolStats: PoolStats = {
+      ...computePoolStats(pool, generated.anchor, generated.constraints),
+      clubSeasonIdsPerConstraint: await this.clubSeasonPools(generated.constraints),
+    };
     const refreshesAt = new Date(dateValue.getTime() + 24 * 60 * 60 * 1000);
 
     const created = await this.prisma.dailyChallenge.upsert({
@@ -117,6 +122,69 @@ export class DailyService implements OnModuleInit, OnModuleDestroy {
     });
 
     return this.toChallengeDto(created, generated.anchor);
+  }
+
+  /** For each constraint, the real club-seasons with at least one player who satisfies it — see
+      PoolStats.clubSeasonIdsPerConstraint. */
+  private async clubSeasonPools(constraints: DailyConstraint[]): Promise<string[][]> {
+    const realLeague = { league: { country: { in: REAL_LEAGUE_COUNTRIES } } };
+    return Promise.all(
+      constraints.map(async (c) => {
+        const rows = await this.prisma.refClubSeason.findMany({
+          where:
+            c.type === "club"
+              ? { ...realLeague, clubId: c.value }
+              : { ...realLeague, playerSeasons: { some: { player: { nationality: c.value } } } },
+          select: { id: true },
+        });
+        return rows.map((r) => r.id);
+      }),
+    );
+  }
+
+  /** Challenges generated before the boost pools existed get them computed and stored on first read. */
+  private async withBoostPools<T extends { id: string; constraints: unknown; poolStats: unknown }>(challenge: T): Promise<T> {
+    const stats = challenge.poolStats as PoolStats;
+    if (stats.clubSeasonIdsPerConstraint) return challenge;
+    const poolStats: PoolStats = {
+      ...stats,
+      clubSeasonIdsPerConstraint: await this.clubSeasonPools(challenge.constraints as DailyConstraint[]),
+    };
+    await this.prisma.dailyChallenge.update({ where: { id: challenge.id }, data: { poolStats: poolStats as unknown as object } });
+    return { ...challenge, poolStats };
+  }
+
+  /** Yesterday's (UTC) puzzle with its community result, or null if there wasn't one. */
+  async getYesterdayRecap() {
+    const today = new Date(`${todayDateKey()}T00:00:00.000Z`);
+    const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+    const challenge = await this.prisma.dailyChallenge.findUnique({
+      where: { date: yesterday },
+      include: { entries: { select: { score: true, maxScore: true, attemptsUsed: true } } },
+    });
+    if (!challenge) return null;
+    const constraints = challenge.constraints as unknown as DailyConstraint[];
+    return summarizeRecap(
+      {
+        date: challenge.date.toISOString().slice(0, 10),
+        themeLabel: challenge.themeLabel,
+        maxScore: constraints.reduce((sum, c) => sum + c.required * 10, 0),
+      },
+      challenge.entries,
+    );
+  }
+
+  /** The signed-in player's own standing on a challenge — attempts used and best score so far. */
+  async getMyEntry(challengeId: string, userId: string) {
+    const entry = await this.prisma.dailyChallengeEntry.findUnique({
+      where: { dailyChallengeId_userId: { dailyChallengeId: challengeId, userId } },
+    });
+    return {
+      attemptsUsed: entry?.attemptsUsed ?? 0,
+      attemptsRemaining: Math.max(MAX_DAILY_ATTEMPTS - (entry?.attemptsUsed ?? 0), 0),
+      bestScore: entry?.score ?? null,
+      maxScore: entry?.maxScore ?? null,
+    };
   }
 
   /** Loads the whole draftable top-5 catalog, deduped to one canonical (highest-overall) row per
@@ -205,7 +273,7 @@ export class DailyService implements OnModuleInit, OnModuleDestroy {
         clubId: anchor.clubId,
       },
       constraints: challenge.constraints as DailyConstraint[],
-      poolStats: challenge.poolStats as { totalPlayers: number; eligiblePerConstraint: number[] },
+      poolStats: challenge.poolStats as PoolStats,
     };
   }
 

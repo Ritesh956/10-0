@@ -8,6 +8,7 @@ import {
   ONTARGET_QUALITY_WEIGHT,
   XG_QUALITY_WEIGHT,
   FATIGUE_MAX,
+  GK_SAVE_PIVOT,
   INJURY_PRONE_MULTIPLIER,
   MOMENTUM_BOOST_WEIGHT,
   MOMENTUM_DECAY,
@@ -113,7 +114,7 @@ function processAttack(
   const gkQuality = gkPlayer
     ? computePlayerQuality(gkPlayer).goalkeeping * dynamicMultiplier(gkPlayer)
     : 0.5;
-  const saveProb = clamp(0.75 - xg * 0.55 + (gkQuality - 0.5) * 0.35, 0.05, 0.95);
+  const saveProb = clamp(0.75 - xg * 0.55 + (gkQuality - GK_SAVE_PIVOT) * 0.35, 0.05, 0.95);
   const saved = rng() < saveProb;
 
   if (saved) {

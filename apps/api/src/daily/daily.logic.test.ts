@@ -5,6 +5,7 @@ import {
   describeConstraint,
   generateChallenge,
   pickFormation,
+  summarizeRecap,
   type DailyCandidate,
 } from "./daily.logic.js";
 
@@ -181,5 +182,23 @@ describe("describeConstraint", () => {
 
   it("falls back to 'from <country>' for an unmapped nationality", () => {
     expect(describeConstraint("nationality", "Atlantis", 2)).toBe("2 other players from Atlantis");
+  });
+});
+
+describe("summarizeRecap", () => {
+  const challenge = { date: "2026-10-02", themeLabel: "Nation Spotlight: Senegal", maxScore: 30 };
+
+  it("reports the top score, how many maxed it, and the fewest attempts among those who did", () => {
+    const recap = summarizeRecap(challenge, [
+      { score: 34, maxScore: 30, attemptsUsed: 3 },
+      { score: 30, maxScore: 30, attemptsUsed: 1 },
+      { score: 20, maxScore: 30, attemptsUsed: 5 },
+    ]);
+    expect(recap).toMatchObject({ players: 3, topScore: 34, maxScore: 30, maxedCount: 2, fewestAttemptsToMax: 1 });
+  });
+
+  it("handles a day nobody played or nobody maxed", () => {
+    expect(summarizeRecap(challenge, [])).toMatchObject({ players: 0, topScore: 0, maxScore: 30, fewestAttemptsToMax: null });
+    expect(summarizeRecap(challenge, [{ score: 10, maxScore: 30, attemptsUsed: 2 }]).fewestAttemptsToMax).toBeNull();
   });
 });

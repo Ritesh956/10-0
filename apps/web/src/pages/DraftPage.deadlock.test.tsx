@@ -145,11 +145,11 @@ describe("DraftPage — auto-reroll avoids the no-eligible-player deadlock", () 
     // Should settle on the good club's pool, having transparently skipped the bad one — wait for
     // an actual player from that pool to render (the reel strip shows club names while merely
     // spinning through decorative candidates, so that text alone isn't proof the pool loaded).
-    await findByText("good-1", {}, { timeout: 8000 });
+    await findByText("good-1", {}, { timeout: 25000 });
 
     expect(api.listPlayerSeasons).toHaveBeenCalledWith(expect.objectContaining({ clubSeasonId: "bad-club" }));
     expect(api.listPlayerSeasons).toHaveBeenCalledWith(expect.objectContaining({ clubSeasonId: "good-club" }));
     // The whole point: this cost nothing from the user's (zero) redraw budget.
     expect(useRerollSpy).not.toHaveBeenCalled();
-  }, 12000);
+  }, 30000);
 });

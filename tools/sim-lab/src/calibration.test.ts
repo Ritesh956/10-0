@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { favoriteWinRateByGap, runBatch, simulateLeagueSeasons } from "./stats.js";
+import { buildAiLeague, loadRealCatalog, rateCatalog, tableShape } from "./real-league.js";
 
 /**
  * This is the calibration harness from the architecture doc (§6): it asserts
@@ -55,8 +56,9 @@ describe("sim-lab calibration", () => {
   });
 
   it("a full league season produces a realistic table, not a compressed one", () => {
-    // A realistic top-league spread of team-average overalls (elite ~89 down to relegation ~73).
-    const overalls = [89, 87, 86, 85, 84, 83, 82, 81, 81, 80, 80, 79, 79, 78, 78, 77, 76, 75, 74, 73];
+    // A realistic top-league spread of XI overalls on the 2026-10 rating curve (elite ~86 down to
+    // relegation ~70 — the span the real LaLiga/Serie A fields actually have in the dataset).
+    const overalls = [86, 85, 84, 83, 82, 81, 80, 79, 79, 78, 77, 77, 76, 75, 74, 74, 73, 72, 71, 70];
     const stats = simulateLeagueSeasons(overalls, 12);
 
     // The champion must pull clear of the pack — a compressed table (everyone bunched ~60-75 pts)
@@ -76,4 +78,23 @@ describe("sim-lab calibration", () => {
     expect(stats.avgGoalsPerGame).toBeGreaterThan(2.3);
     expect(stats.avgGoalsPerGame).toBeLessThan(3.2);
   }, 30000);
+
+  it("the real leagues, as the game actually builds them, produce real-looking tables", () => {
+    // AI clubs exactly as the live season fills them (latest real season, best XI) with the seeded
+    // attributes and the worker's fitness rules — the table the player actually plays in. This is the
+    // check that caught the flat tables (champion ~68, ρ ~0.6) before the 2026-10 re-fit.
+    const catalog = loadRealCatalog();
+    const rated = rateCatalog(catalog);
+    for (const leagueId of ["league-es1", "league-it1"]) {
+      const shape = tableShape(buildAiLeague(catalog, rated, leagueId), 4);
+      expect(shape.avgChampionPoints).toBeGreaterThan(76);
+      expect(shape.avgChampionPoints).toBeLessThan(100);
+      expect(shape.avgSafetyPoints).toBeGreaterThan(26);
+      expect(shape.avgSafetyPoints).toBeLessThan(46);
+      // Finishing position should strongly track squad strength (1 = perfectly by overall).
+      expect(shape.avgStrengthRankCorrelation).toBeGreaterThan(0.7);
+      expect(shape.goalsPerGame).toBeGreaterThan(2.2);
+      expect(shape.goalsPerGame).toBeLessThan(3.4);
+    }
+  }, 60000);
 });

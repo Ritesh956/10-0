@@ -1,5 +1,5 @@
 import type { PlayerSeasonDto } from "../api/types";
-import { POSITION_GROUP, type Position } from "../lib/formations";
+import { POSITION_GROUP, playablePositions, type Position } from "../lib/formations";
 import { GROUP_FILL, GROUP_TEXT, GROUP_TINT } from "../lib/positionColors";
 
 interface Props {
@@ -74,18 +74,21 @@ export function PlayerPickCard({ player, showRatings, selected, disabled, muted,
         </span>
       )}
 
-      <span className="flex shrink-0 gap-1">
-        {player.positions.map((pos) => {
-          const group = POSITION_GROUP[pos as Position] ?? "MID";
-          return (
-            <span
-              key={pos}
-              className={`notch-sm px-1.5 py-0.5 text-[10px] font-bold ${GROUP_TINT[group]} ${GROUP_TEXT[group]}`}
-            >
-              {pos}
-            </span>
-          );
-        })}
+      <span className="flex shrink-0 gap-1" aria-label={`Can play ${playablePositions(player.positions).join(", ")}`}>
+        {playablePositions(player.positions)
+          .slice(0, 3)
+          .map((pos) => {
+            const group = POSITION_GROUP[pos] ?? "MID";
+            const listed = player.positions.includes(pos);
+            return (
+              <span
+                key={pos}
+                className={`notch-sm px-1.5 py-0.5 text-[10px] font-bold ${GROUP_TINT[group]} ${GROUP_TEXT[group]} ${listed ? "" : "opacity-55"}`}
+              >
+                {pos}
+              </span>
+            );
+          })}
       </span>
     </button>
   );

@@ -224,7 +224,7 @@ describe("SeasonPage — one required Continue press carries the whole knockout 
     expect(queryByRole("button", { name: /^continue/i })).toBeNull();
 
     // europe-champion — auto-advances straight into fetching the stats hub, no click needed
-    await findByText(/champions league winners/i, {}, { timeout: 15000 });
+    await findByText(/european champions/i, {}, { timeout: 15000 });
     expect(queryByRole("button", { name: /^continue/i })).toBeNull();
 
     // stats-hub
@@ -349,7 +349,7 @@ describe("SeasonPage — Phase 4 stats-hub additions render from real data", () 
       userRow: standings.rows[0],
       position: 1,
       unbeaten: false,
-      squadOverall: 82,
+      squadOverall: 86,
       squad: [
         { position: "GK", overall: 80 },
         { position: "CB", overall: 78 },

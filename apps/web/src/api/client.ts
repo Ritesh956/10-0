@@ -7,12 +7,15 @@ import type {
   CreateLiveDraftRoomDto,
   DailyChallengeDto,
   DailyChallengeEntryDto,
+  DailyMyEntryDto,
+  DailyRecapDto,
   EraDto,
   EuropeAdvanceResultDto,
   EuropeLeaguePhaseDto,
   EuropeRoundDto,
   EuropeStatusDto,
   FinalizeRunResultDto,
+  JanuaryOfferDto,
   JanuaryResultDto,
   JoinLeagueResultDto,
   JoinLiveDraftResultDto,
@@ -179,6 +182,8 @@ export const api = {
       oneClubClubId?: string;
       multiplayerLeagueId?: string;
       nationsNationality?: string;
+      leagueId?: string;
+      projection?: { finish: number; points: number; overall: number };
     },
   ) => request<WorldDto>("/worlds", { method: "POST", body: JSON.stringify({ eraId, type: "SINGLE", settings }) }),
 
@@ -267,8 +272,13 @@ export const api = {
   getLeaguePhaseStandings: (worldId: string, seasonId: string) =>
     request<StandingsDto>(`/worlds/${worldId}/europe/league-phase-standings?seasonId=${seasonId}`),
 
-  resolveJanuaryGamble: (worldId: string, seasonId: string) =>
-    request<JanuaryResultDto>(`/worlds/${worldId}/january/${seasonId}/resolve`, { method: "POST" }),
+  getJanuaryOffer: (worldId: string, seasonId: string) => request<JanuaryOfferDto>(`/worlds/${worldId}/january/${seasonId}/offer`),
+
+  resolveJanuaryGamble: (worldId: string, seasonId: string, choiceId?: string) =>
+    request<JanuaryResultDto>(`/worlds/${worldId}/january/${seasonId}/resolve`, {
+      method: "POST",
+      body: JSON.stringify(choiceId ? { choiceId } : {}),
+    }),
 
   finalizeRun: (worldId: string, seasonId: string) =>
     request<FinalizeRunResultDto>(`/worlds/${worldId}/seasons/${seasonId}/finalize`, { method: "POST" }),
@@ -299,6 +309,10 @@ export const api = {
     request<LeaderboardEntryDto>(`/leaderboard/${entryId}/report`, { method: "POST" }),
 
   getDailyChallenge: () => request<DailyChallengeDto>("/daily/today"),
+
+  getDailyRecap: () => request<{ recap: DailyRecapDto | null }>("/daily/yesterday").then((r) => r.recap),
+
+  getMyDailyEntry: (challengeId: string) => request<DailyMyEntryDto>(`/daily/${challengeId}/me`),
 
   getDailyLeaderboard: (challengeId: string, limit = 50) =>
     request<DailyChallengeEntryDto[]>(`/daily/${challengeId}/leaderboard?limit=${limit}`),

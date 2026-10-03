@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { type Formation, POSITION_GROUP, positionLabel, slotsForFormation } from "../lib/formations";
-import { GROUP_FILL, GROUP_HALO, GROUP_TINT, initials } from "../lib/positionColors";
+import { GROUP_FILL, GROUP_HALO, GROUP_TINT, initials, surname } from "../lib/positionColors";
 
 export interface PitchSlotState {
   filled?: { name: string; overall?: number; photoUrl?: string | null };
   ineligible?: boolean;
+  /** An open slot the selected player can go in — ringed so valid targets stand out. */
+  eligible?: boolean;
 }
 
 /** Shows the player's photo when it loads, falling back to initials only if there's no photo or it fails to load. */
@@ -81,6 +83,8 @@ export function PitchView({ formation, slotState = {}, activeSlotIndex, showRati
               <span
                 style={MARKER_SHAPE}
                 className={`relative flex items-center justify-center overflow-hidden font-display font-bold transition ${markerSize} ${
+                  state?.eligible && !state.filled ? "ring-2 ring-mint-300 ring-offset-1 ring-offset-grass-800" : ""
+                } ${
                   state?.ineligible
                     ? "bg-ink-700 text-smoke-500"
                     : state?.filled
@@ -96,10 +100,12 @@ export function PitchView({ formation, slotState = {}, activeSlotIndex, showRati
               </span>
             </span>
             {!compact && (
-              <span className="notch-sm bg-ink-950/70 px-1.5 py-0.5 text-[10px] leading-tight text-smoke-400">
+              <span className="notch-sm whitespace-nowrap bg-ink-950/70 px-1.5 py-0.5 text-[10px] leading-tight text-smoke-400">
                 {state?.filled ? (
                   <>
-                    <span className="block max-w-[72px] truncate font-medium text-paper">{state.filled.name}</span>
+                    <span className="block max-w-[72px] truncate font-medium text-paper" title={state.filled.name}>
+                      {surname(state.filled.name)}
+                    </span>
                     {showRatings && state.filled.overall !== undefined && (
                       <span className="block text-center text-mint-400">{state.filled.overall}</span>
                     )}

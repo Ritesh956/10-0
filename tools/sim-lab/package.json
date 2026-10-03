@@ -8,6 +8,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "report": "tsx src/report.ts",
+    "calibrate": "tsx src/calibrate.ts",
     "clean": "rimraf dist"
   },
   "dependencies": {

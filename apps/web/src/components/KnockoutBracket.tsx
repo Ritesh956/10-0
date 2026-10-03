@@ -1,3 +1,4 @@
+import { worldClubLabel } from "../lib/clubNames";
 import { motion } from "framer-motion";
 import type { KnockoutRound, KnockoutTieDto, WorldClubDto } from "../api/types";
 import { staggerContainer, staggerItem } from "../lib/motion";
@@ -12,7 +13,7 @@ const ROUND_ORDER: KnockoutRound[] = ["QF", "SF", "FINAL"];
 const ROUND_LABEL: Record<KnockoutRound, string> = { QF: "Quarter-Finals", SF: "Semi-Finals", FINAL: "Final" };
 
 export function KnockoutBracket({ ties, clubs, highlightClubId }: Props) {
-  const nameFor = (clubId: string) => clubs.find((c) => c.id === clubId)?.name ?? clubId;
+  const nameFor = (clubId: string) => worldClubLabel(clubs.find((c) => c.id === clubId), clubId);
   const rounds = ROUND_ORDER.map((round) => ({ round, ties: ties.filter((t) => t.round === round) })).filter(
     (group) => group.ties.length > 0,
   );

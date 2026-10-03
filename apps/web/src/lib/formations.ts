@@ -42,22 +42,23 @@ export const POSITION_GROUP: Record<Position, PositionGroup> = {
   CF: "ATT",
 };
 
+/** Full names — the old one-word labels were ambiguous ("Left" meant LB, LWB, LM and LW alike). */
 const POSITION_LABEL: Record<Position, string> = {
   GK: "Goalkeeper",
-  CB: "Centre",
-  LB: "Left",
-  RB: "Right",
-  LWB: "Left",
-  RWB: "Right",
-  CDM: "Defensive",
-  CM: "Central",
-  CAM: "Attacking",
-  LM: "Left",
-  RM: "Right",
-  LW: "Left",
-  RW: "Right",
+  CB: "Centre-Back",
+  LB: "Left Back",
+  RB: "Right Back",
+  LWB: "Left Wing-Back",
+  RWB: "Right Wing-Back",
+  CDM: "Defensive Mid",
+  CM: "Central Mid",
+  CAM: "Attacking Mid",
+  LM: "Left Mid",
+  RM: "Right Mid",
+  LW: "Left Wing",
+  RW: "Right Wing",
   ST: "Striker",
-  CF: "Forward",
+  CF: "Centre-Forward",
 };
 
 export function positionLabel(position: Position): string {
@@ -95,6 +96,21 @@ export const POSITION_COMPATIBILITY: Record<Position, Position[]> = {
 /** Whether a player who can play any of `playerPositions` is eligible for `slot`. */
 export function canPlayPosition(playerPositions: string[], slot: Position): boolean {
   return playerPositions.some((p) => POSITION_COMPATIBILITY[p as Position]?.includes(slot));
+}
+
+/** Every position a player can be placed in, their listed positions first, then the ones the
+    compatibility graph adds — versatility is a real draft decision, so the pool shows it. */
+export function playablePositions(playerPositions: string[]): Position[] {
+  const out: Position[] = [];
+  for (const p of playerPositions) if (isPosition(p) && !out.includes(p)) out.push(p);
+  for (const p of playerPositions) {
+    for (const extra of POSITION_COMPATIBILITY[p as Position] ?? []) if (!out.includes(extra)) out.push(extra);
+  }
+  return out;
+}
+
+function isPosition(value: string): value is Position {
+  return value in POSITION_COMPATIBILITY;
 }
 
 export interface FormationSlot {

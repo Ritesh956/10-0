@@ -17,6 +17,20 @@ export class DailyController {
     return this.daily.getTodayChallenge();
   }
 
+  // Registered before the ":challengeId/..." routes for readability; the literal segment can't
+  // collide with them anyway since those all have a second path segment.
+  @Get("yesterday")
+  async yesterday() {
+    // Wrapped so "no puzzle yesterday" is a JSON body rather than an empty 200 response.
+    return { recap: await this.daily.getYesterdayRecap() };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get(":challengeId/me")
+  me(@CurrentUser() user: AuthTokenPayload, @Param("challengeId") challengeId: string) {
+    return this.daily.getMyEntry(challengeId, user.sub);
+  }
+
   @Get(":challengeId/leaderboard")
   leaderboard(
     @Param("challengeId") challengeId: string,

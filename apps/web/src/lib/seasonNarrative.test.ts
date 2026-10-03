@@ -16,37 +16,48 @@ import {
 
 describe("computeVerdict", () => {
   it("labels a finish well ahead of projection OVERACHIEVED, in mint", () => {
-    // overall 75 -> projectedFinish ~10-11 (mid-table); finishing #2 is way better than projected.
-    const verdict = computeVerdict(2, 20, 75);
+    // overall 82 -> projectedFinish ~10 (mid-table); finishing #2 is way better than projected.
+    const verdict = computeVerdict(2, 20, 82);
     expect(verdict.label).toBe("OVERACHIEVED");
     expect(verdict.colorClass).toContain("mint");
   });
 
   it("labels a finish well behind projection FLATTERED TO DECEIVE, in crimson", () => {
-    // overall 92 -> projectedFinish ~1-2 (title-winning pace); finishing #14 is way worse than projected.
+    // overall 92 -> projectedFinish 1 (title-winning pace); finishing #14 is way worse than projected.
     const verdict = computeVerdict(14, 20, 92);
     expect(verdict.label).toBe("FLATTERED TO DECEIVE");
     expect(verdict.colorClass).toContain("crimson");
   });
 
   it("labels a finish close to projection AS EXPECTED", () => {
-    const verdict = computeVerdict(10, 20, 75); // projectedFinish is ~10-11 for overall 75
+    const verdict = computeVerdict(10, 20, 82); // projectedFinish is ~10 for overall 82
     expect(verdict.label).toBe("AS EXPECTED");
   });
 
   it("calls a title won from below a 1st-place projection OVERACHIEVED", () => {
-    // Regression: projected 4th (overall 90) -> champions used to read "AS EXPECTED" because the
-    // gap was under a flat 4-place threshold.
-    const projected = computePreseasonOdds(90).projectedFinish;
+    // Regression: projected 4th -> champions used to read "AS EXPECTED" because the gap was under a
+    // flat 4-place threshold.
+    const projected = computePreseasonOdds(86).projectedFinish;
     expect(projected).toBeGreaterThan(1);
-    expect(computeVerdict(1, 20, 90).label).toBe("OVERACHIEVED");
+    expect(computeVerdict(1, 20, 86).label).toBe("OVERACHIEVED");
   });
 
   it("scales the over/under-achievement gap to the league size", () => {
-    // overall 75 projects ~10th: 3 places better is now meaningful (was 4) in a 20-club league.
-    const projected = computePreseasonOdds(75).projectedFinish;
-    expect(computeVerdict(projected - 3, 20, 75).label).toBe("OVERACHIEVED");
-    expect(computeVerdict(projected - 2, 20, 75).label).toBe("AS EXPECTED");
+    // overall 82 projects ~10th: 3 places better is now meaningful (was 4) in a 20-club league.
+    const projected = computePreseasonOdds(82).projectedFinish;
+    expect(computeVerdict(projected - 3, 20, 82).label).toBe("OVERACHIEVED");
+    expect(computeVerdict(projected - 2, 20, 82).label).toBe("AS EXPECTED");
+  });
+
+  it("judges against the projection the player was shown when the world stored one", () => {
+    // The squad's overall now says ~10th, but the draft room showed 3rd (e.g. before a January
+    // signing changed the overall), so finishing 9th is a let-down against what the player saw.
+    expect(computeVerdict(9, 20, 82, 3).label).toBe("FLATTERED TO DECEIVE");
+    expect(computeVerdict(9, 20, undefined, 9).label).toBe("AS EXPECTED");
+  });
+
+  it("reads each league's own projection (the same XI is a contender in one league, mid-table in another)", () => {
+    expect(computePreseasonOdds(82, "league-es1").projectedFinish).toBeLessThan(computePreseasonOdds(82, "league-gb1").projectedFinish);
   });
 
   it("falls back to a position-only heuristic when squadOverall is unavailable", () => {
@@ -58,16 +69,16 @@ describe("computeVerdict", () => {
 
 describe("unitTierLabel", () => {
   it("maps the exact band boundaries", () => {
-    expect(unitTierLabel(85)).toBe("Elite");
-    expect(unitTierLabel(84)).toBe("Excellent");
-    expect(unitTierLabel(78)).toBe("Excellent");
-    expect(unitTierLabel(77)).toBe("Strong");
-    expect(unitTierLabel(70)).toBe("Strong");
-    expect(unitTierLabel(69)).toBe("Very good");
-    expect(unitTierLabel(62)).toBe("Very good");
-    expect(unitTierLabel(61)).toBe("Solid");
-    expect(unitTierLabel(52)).toBe("Solid");
-    expect(unitTierLabel(51)).toBe("Shaky");
+    expect(unitTierLabel(89)).toBe("Elite");
+    expect(unitTierLabel(88)).toBe("Excellent");
+    expect(unitTierLabel(85)).toBe("Excellent");
+    expect(unitTierLabel(84)).toBe("Strong");
+    expect(unitTierLabel(81)).toBe("Strong");
+    expect(unitTierLabel(80)).toBe("Very good");
+    expect(unitTierLabel(77)).toBe("Very good");
+    expect(unitTierLabel(76)).toBe("Solid");
+    expect(unitTierLabel(73)).toBe("Solid");
+    expect(unitTierLabel(72)).toBe("Shaky");
     expect(unitTierLabel(0)).toBe("Shaky");
   });
 });
@@ -103,14 +114,14 @@ describe("compositionSentence", () => {
 
   it("never calls a unit shaky when every unit shares a tier", () => {
     // Regression: an all-Elite XI read "Built on a elite defence, undermined at times by a shakier attack."
-    const text = compositionSentence({ attack: 91, midfield: 88, defence: 92, goalkeeping: 89 });
+    const text = compositionSentence({ attack: 91, midfield: 89, defence: 92, goalkeeping: 90 });
     expect(text).not.toMatch(/shak|weak link/i);
     expect(text).toContain("defence");
     expect(text).toMatch(/^An elite side/);
   });
 
   it("uses the right article and names the weak link with its tier", () => {
-    const text = compositionSentence({ attack: 90, midfield: 70, defence: 60, goalkeeping: 65 });
+    const text = compositionSentence({ attack: 90, midfield: 80, defence: 74, goalkeeping: 78 });
     expect(text).toBe("Built on an elite attack; the defence (solid) was the weak link.");
   });
 

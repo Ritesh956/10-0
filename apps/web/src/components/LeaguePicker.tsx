@@ -1,4 +1,6 @@
 import type { LeagueDto } from "../api/types";
+import { CountryFlag } from "./CountryFlag";
+import { formatSeason } from "../lib/season";
 
 interface Props {
   leagues: LeagueDto[];
@@ -32,7 +34,7 @@ export function LeaguePicker({ leagues, selectedIds, onChange, singleSelect = fa
         <button
           type="button"
           onClick={() => onChange([])}
-          className={`notch-sm flex min-h-16 flex-col items-center justify-center gap-0.5 border-2 px-3 py-2.5 text-center text-sm font-semibold uppercase tracking-wide transition ${
+          className={`notch-sm flex min-h-14 flex-col items-center justify-center gap-0.5 border px-2 py-2 text-center text-sm font-semibold uppercase tracking-wide transition ${
             selectedIds.length === 0
               ? "border-mint-500 bg-mint-500/10 text-mint-300"
               : "border-ink-700 bg-ink-900/40 text-paper hover:border-ink-600"
@@ -49,13 +51,21 @@ export function LeaguePicker({ leagues, selectedIds, onChange, singleSelect = fa
             key={league.id}
             type="button"
             onClick={() => toggle(league.id)}
-            className={`notch-sm flex min-h-16 flex-col items-center justify-center gap-0.5 border-2 px-3 py-2.5 text-center text-sm transition ${
+            className={`notch-sm flex min-h-14 flex-col items-center justify-center gap-0.5 border px-2 py-2 text-center text-sm transition ${
               active
                 ? "border-mint-500 bg-mint-500/10 text-mint-300"
                 : "border-ink-700 bg-ink-900/40 text-paper hover:border-ink-600"
             }`}
           >
-            <span className="font-medium leading-tight">{league.name}</span>
+            <span className="flex items-center gap-1.5 font-medium leading-tight">
+              <CountryFlag country={league.country} />
+              {league.name}
+            </span>
+            {league.minSeasonYear != null && league.maxSeasonYear != null && (
+              <span className="text-[11px] text-smoke-500">
+                {formatSeason(league.minSeasonYear)}–{formatSeason(league.maxSeasonYear)}
+              </span>
+            )}
             {league.tier > 1 && (
               <span className="notch-sm bg-ink-800 px-1.5 py-0.5 text-[10px] text-smoke-500">Tier {league.tier}</span>
             )}

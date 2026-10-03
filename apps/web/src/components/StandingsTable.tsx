@@ -1,3 +1,4 @@
+import { worldClubLabel } from "../lib/clubNames";
 import { motion } from "framer-motion";
 import type { StandingsDto, WorldClubDto } from "../api/types";
 import { staggerContainer, staggerItem } from "../lib/motion";
@@ -9,7 +10,7 @@ interface Props {
 }
 
 export function StandingsTable({ standings, clubs, highlightClubId }: Props) {
-  const nameFor = (clubId: string) => clubs.find((c) => c.id === clubId)?.name ?? clubId;
+  const nameFor = (clubId: string) => worldClubLabel(clubs.find((c) => c.id === clubId), clubId);
 
   return (
     <div className="notch overflow-x-auto border border-ink-800">

@@ -3,6 +3,13 @@ import {
   EVENT_WEIGHTS,
   biasPoolForEvent,
   findWeakestSlot,
+  JANUARY_KINDS,
+  biasPoolForKind,
+  drawDistinct,
+  eventTypeForDelta,
+  pickKind,
+  pickTargetSlot,
+  seededRandom,
   pickEventType,
   totalEventWeight,
   type LineupSlotJson,
@@ -87,5 +94,52 @@ describe("biasPoolForEvent", () => {
     // the draw with zero candidates.
     expect(biasPoolForEvent(pool, "POSITIVE", 999)).toEqual(pool);
     expect(biasPoolForEvent(pool, "NEGATIVE", -1)).toEqual(pool);
+  });
+});
+
+describe("January event kinds", () => {
+  const lineup: LineupSlotJson[] = [
+    { position: "GK", playerId: "a" },
+    { position: "CB", playerId: "b" },
+    { position: "ST", playerId: "c" },
+  ];
+  const byId = new Map([
+    ["a", { overall: 70 }],
+    ["b", { overall: 64 }],
+    ["c", { overall: 88 }],
+  ]);
+
+  it("the offer is a pure function of its seed, so it can't be re-rolled by asking again", () => {
+    const a = seededRandom("season-1:club-1");
+    const b = seededRandom("season-1:club-1");
+    expect([a(), a(), a()]).toEqual([b(), b(), b()]);
+    expect(pickKind(seededRandom("x")).kind).toBe(pickKind(seededRandom("x")).kind);
+  });
+
+  it("every kind is reachable and weights cover the whole roll", () => {
+    const seen = new Set<string>();
+    for (let i = 0; i < 400; i++) seen.add(pickKind(seededRandom(`s${i}`)).kind);
+    expect(seen.size).toBe(JANUARY_KINDS.length);
+  });
+
+  it("targets the weakest, strongest or a random slot as the event says", () => {
+    const r = seededRandom("t");
+    expect(pickTargetSlot(lineup, byId, "weakest", r)?.slot.playerId).toBe("b");
+    expect(pickTargetSlot(lineup, byId, "strongest", r)?.slot.playerId).toBe("c");
+    expect(["a", "b", "c"]).toContain(pickTargetSlot(lineup, byId, "random", r)?.slot.playerId);
+  });
+
+  it("a star sale is a downgrade, but within 8 points when possible", () => {
+    const spec = JANUARY_KINDS.find((k) => k.kind === "star-wants-out")!;
+    const pool = [{ overall: 60 }, { overall: 82 }, { overall: 85 }, { overall: 90 }];
+    expect(biasPoolForKind(pool, spec, 88).map((p) => p.overall)).toEqual([82, 85]);
+  });
+
+  it("draws distinct options and labels the outcome by the actual delta", () => {
+    const picks = drawDistinct([1, 2, 3, 4, 5], 3, seededRandom("d"));
+    expect(new Set(picks).size).toBe(3);
+    expect(eventTypeForDelta(3)).toBe("POSITIVE");
+    expect(eventTypeForDelta(1)).toBe("NEUTRAL");
+    expect(eventTypeForDelta(-2)).toBe("NEGATIVE");
   });
 });

@@ -1,3 +1,4 @@
+import { worldClubLabel } from "../lib/clubNames";
 import { motion } from "framer-motion";
 import type { MatchSummaryDto, WorldClubDto } from "../api/types";
 import { staggerContainer, staggerItem } from "../lib/motion";
@@ -17,13 +18,13 @@ interface Props {
 const LEAGUE_ORDER = 0;
 
 export const RESULT_BADGE: Record<MatchResult, string> = {
-  W: "border-teal-500/50 bg-teal-500/15 text-teal-300",
+  W: "border-mint-500/50 bg-mint-500/15 text-mint-300",
   D: "border-ink-600 bg-ink-800 text-smoke-400",
   L: "border-crimson-500/50 bg-crimson-500/15 text-crimson-300",
 };
 
 export const RESULT_ROW: Record<MatchResult, string> = {
-  W: "border-teal-500/20 bg-teal-500/5",
+  W: "border-mint-500/20 bg-mint-500/5",
   D: "border-ink-700 bg-ink-900/40",
   L: "border-crimson-500/20 bg-crimson-500/5",
 };
@@ -32,7 +33,7 @@ export const RESULT_ROW: Record<MatchResult, string> = {
     and goalscorers per match, so a finished run's story stays browsable from the stats hub instead
     of only ever being visible once during the one-shot animated season reveal. */
 export function MatchLog({ matches, clubs, userClubId, stageFor }: Props) {
-  const nameFor = (clubId: string) => clubs.find((c) => c.id === clubId)?.name ?? clubId;
+  const nameFor = (clubId: string) => worldClubLabel(clubs.find((c) => c.id === clubId), clubId);
 
   if (!userClubId || matches.length === 0) return null;
 

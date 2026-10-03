@@ -56,6 +56,43 @@ export interface PoolStats {
   totalPlayers: number;
   /** Aligned with `constraints` — how many *other* pool players (excluding the anchor) satisfy each. */
   eligiblePerConstraint: number[];
+  /** Aligned with `constraints` — every real club-season whose squad has at least one player who'd
+      satisfy it. The daily reel leans its draws toward these (a club constraint like "2 other
+      Salernitana players" is otherwise a 2-in-1,300 draw — the puzzle read 0% before a single spin)
+      and the completion odds are computed from the same pools. Absent on challenges generated
+      before 2026-10; DailyService backfills it on first read. */
+  clubSeasonIdsPerConstraint?: string[][];
+}
+
+export interface DailyRecap {
+  date: string;
+  themeLabel: string;
+  players: number;
+  topScore: number;
+  maxScore: number;
+  /** How many players hit maxScore or better. */
+  maxedCount: number;
+  /** Fewest attempts any player who maxed it used in total, or null if nobody maxed it. */
+  fewestAttemptsToMax: number | null;
+}
+
+/** Yesterday's community result, from its leaderboard rows — the "Top score 11/11 · maxed in 1"
+    strip 38-0 shows above today's puzzle. */
+export function summarizeRecap(
+  challenge: { date: string; themeLabel: string; maxScore: number },
+  entries: { score: number; maxScore: number; attemptsUsed: number }[],
+): DailyRecap {
+  const maxScore = entries[0]?.maxScore ?? challenge.maxScore;
+  const maxed = entries.filter((e) => e.score >= e.maxScore);
+  return {
+    date: challenge.date,
+    themeLabel: challenge.themeLabel,
+    players: entries.length,
+    topScore: entries.reduce((best, e) => Math.max(best, e.score), 0),
+    maxScore,
+    maxedCount: maxed.length,
+    fewestAttemptsToMax: maxed.length ? Math.min(...maxed.map((e) => e.attemptsUsed)) : null,
+  };
 }
 
 /** Small deterministic string hash (FNV-ish) — same date + same salt always yields the same seed,

@@ -16,7 +16,7 @@ import { checkFormationFillable } from "../lib/oneClubValidation";
 import { useDraft, type Difficulty, type DraftMode, type PlayerRatingsMode } from "../state/DraftContext";
 import { formatSeason } from "../lib/season";
 
-type SectionAccent = "mint" | "teal" | "plum" | "crimson";
+type SectionAccent = "mint" | "teal" | "plum" | "crimson" | "amber";
 
 interface SectionProps {
   title: string;
@@ -33,6 +33,7 @@ const SECTION_ACCENT_DOT: Record<SectionAccent, string> = {
   teal: "bg-teal-400",
   plum: "bg-plum-400",
   crimson: "bg-crimson-400",
+  amber: "bg-amber-400",
 };
 
 const SECTION_ACCENT_BORDER: Record<SectionAccent, string> = {
@@ -40,12 +41,13 @@ const SECTION_ACCENT_BORDER: Record<SectionAccent, string> = {
   teal: "border-teal-500/30",
   plum: "border-plum-500/30",
   crimson: "border-crimson-500/30",
+  amber: "border-amber-500/30",
 };
 
 function Section({ title, children, right, accent = "mint" }: SectionProps) {
   return (
-    <section className="space-y-3">
-      <div className={`flex items-center justify-between border-b pb-2 ${SECTION_ACCENT_BORDER[accent]}`}>
+    <section className="space-y-2.5">
+      <div className={`flex items-center justify-between border-b pb-1.5 ${SECTION_ACCENT_BORDER[accent]}`}>
         <h2 className="flex items-center gap-2 font-display text-xs font-semibold uppercase tracking-widest text-smoke-500">
           <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${SECTION_ACCENT_DOT[accent]}`} />
           {title}
@@ -72,7 +74,8 @@ export function SetupPage() {
   const [leagues, setLeagues] = useState<LeagueDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [advancedOpen, setAdvancedOpen] = useState(true);
+  // Collapsed by default with a one-line summary: these three are on for almost everyone.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -177,10 +180,10 @@ export function SetupPage() {
 
   return (
     <>
-    <div className="mx-auto max-w-2xl space-y-10 px-6 py-12">
+    <div className="mx-auto max-w-2xl space-y-7 px-4 pb-4 pt-8 sm:px-6 sm:pt-10">
       <div className="text-center">
-        <h1 className="font-display text-3xl font-bold uppercase tracking-wide text-paper">Set the Rules</h1>
-        <p className="mt-2 text-sm text-smoke-500">Configure the draft before you pull a single name.</p>
+        <h1 className="font-display text-2xl font-bold uppercase tracking-wide text-paper sm:text-3xl">Set the Rules</h1>
+        <p className="mt-1 text-sm text-smoke-500">Your last settings are remembered. Tweak anything, then enter the draft room.</p>
       </div>
 
       {error && <p className="text-center text-sm text-crimson-400">{error}</p>}
@@ -281,14 +284,14 @@ export function SetupPage() {
         {checkingFit && <p className="text-center text-xs text-smoke-600">Checking this club&apos;s history fits this formation...</p>}
       </Section>
 
-      <Section title="Difficulty" accent="crimson">
+      <Section title="Difficulty" accent="amber">
         {config.multiplayerLeagueId ? (
           <p className="notch-sm border border-ink-800 bg-ink-900/40 px-3 py-2 text-center text-xs text-smoke-500">
             Locked to <span className="font-semibold capitalize text-paper">{config.difficulty}</span> by this league&apos;s rules.
           </p>
         ) : (
           <SegmentedControl<Difficulty>
-            accent="crimson"
+            accent="amber"
             columns={3}
             value={config.difficulty}
             onChange={(difficulty) =>
@@ -303,6 +306,7 @@ export function SetupPage() {
         )}
       </Section>
 
+      <div className="grid gap-7 sm:grid-cols-2 sm:gap-5">
       <Section title="Show Ratings" accent="plum">
         <SegmentedControl<"on" | "off">
           accent="plum"
@@ -325,12 +329,12 @@ export function SetupPage() {
           options={[
             {
               value: "squad-first",
-              label: "Squad First",
-              description: "Draw a club, pick any player, choose their position",
+              label: "Squad first",
+              description: "Draw a club, pick any player, then choose their slot",
             },
             {
               value: "position-first",
-              label: "Position First",
+              label: "Position first",
               description: "Pick a slot, then draw a club to fill it",
             },
           ]}
@@ -358,6 +362,8 @@ export function SetupPage() {
           />
         </Section>
       )}
+
+      </div>
 
       <Section title="Era" accent="plum">
         <div className="flex flex-wrap gap-2">
@@ -391,17 +397,24 @@ export function SetupPage() {
 
       <Section
         title="Advanced"
-        accent="crimson"
+        accent="teal"
         right={
           <button
             type="button"
+            aria-expanded={advancedOpen}
             onClick={() => setAdvancedOpen((v) => !v)}
-            className="text-xs text-smoke-600 hover:text-smoke-400"
+            className="text-xs text-smoke-500 hover:text-paper"
           >
-            {advancedOpen ? "Hide" : "Show"}
+            {advancedOpen ? "Hide" : "Change"}
           </button>
         }
       >
+        {!advancedOpen && (
+          <p className="text-xs text-smoke-500">
+            Managers {config.managers ? "on" : "off"} · European Nights {config.europeanNights ? "on" : "off"} · January window{" "}
+            {config.januaryWindow ? "on" : "off"}
+          </p>
+        )}
         {advancedOpen && (
           <div className="space-y-3">
             <Toggle
@@ -419,7 +432,7 @@ export function SetupPage() {
               onChange={(europeanNights) => setConfig({ europeanNights })}
             />
             <Toggle
-              accent="crimson"
+              accent="amber"
               label="January Transfer Window"
               description="At halfway, gamble on one January event. It can help or hurt. No undo."
               checked={config.januaryWindow}
@@ -429,17 +442,20 @@ export function SetupPage() {
         )}
       </Section>
 
-      <Button
-        size="lg"
-        fullWidth
-        disabled={checkingFit || (fillability !== null && !fillability.fillable)}
-        onClick={() => {
-          resetDraft();
-          navigate("/draft");
-        }}
-      >
-        Enter the Draft Room &rarr;
-      </Button>
+      {/* Sticky on phones so the primary action is always one tap away, wherever you are. */}
+      <div className="sticky bottom-0 z-20 -mx-4 border-t border-ink-800 bg-ink-950/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0">
+        <Button
+          size="lg"
+          fullWidth
+          disabled={checkingFit || (fillability !== null && !fillability.fillable)}
+          onClick={() => {
+            resetDraft();
+            navigate("/draft");
+          }}
+        >
+          Enter the Draft Room &rarr;
+        </Button>
+      </div>
     </div>
     <SiteFooter />
     </>

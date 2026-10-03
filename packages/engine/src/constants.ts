@@ -12,6 +12,14 @@ export const CHANCE_QUALITY_EXPONENT = 2.4;
 export const XG_QUALITY_WEIGHT = 0.32;
 /** Weight of the quality delta on getting a shot on target. */
 export const ONTARGET_QUALITY_WEIGHT = 0.38;
+/**
+ * GK quality (after the fitness multiplier) at which a keeper neither helps nor hurts the base save
+ * rate. The save formula is the one place the engine uses an absolute quality level rather than a
+ * delta/ratio, so this pivot has to sit near a typical real keeper's quality: it was 0.5 when catalog
+ * ratings mapped to quality ~0.7-1.0, and moved to 0.36 when the OVR curve and quality slope were
+ * re-fitted (2026-10, see packages/engine/src/testing/rating-scale.ts) so goals/game stay ~2.6-3.0.
+ */
+export const GK_SAVE_PIVOT = 0.36;
 export const FATIGUE_MAX = 0.18;
 export const MOMENTUM_DECAY = 0.92;
 export const MOMENTUM_BOOST_WEIGHT = 0.12;
