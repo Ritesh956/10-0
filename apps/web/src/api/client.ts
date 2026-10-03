@@ -13,6 +13,7 @@ import type {
   DailyRecapDto,
   EraDto,
   EuropeAdvanceResultDto,
+  EuropeDrawDto,
   EuropeLeaguePhaseDto,
   EuropeRoundDto,
   EuropeStatusDto,
@@ -288,6 +289,9 @@ export const api = {
     request<EuropeAdvanceResultDto>(`/worlds/${worldId}/europe/${competitionId}/advance?round=${round}`, {
       method: "POST",
     }),
+
+  getEuropeDraw: (worldId: string, competitionId: string) =>
+    request<EuropeDrawDto>(`/worlds/${worldId}/europe/${competitionId}/draw`),
 
   getEuropeBracket: (worldId: string, competitionId: string) =>
     request<KnockoutTieDto[]>(`/worlds/${worldId}/europe/${competitionId}/bracket`),

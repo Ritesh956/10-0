@@ -427,7 +427,7 @@ export function SetupPage() {
             <Toggle
               accent="teal"
               label="European Nights"
-              description="Finish in the top eight and your XI plays on in Europe. Off = just the league."
+              description="Finish in the top eight and your XI plays on against clubs from all five leagues. Off = just the league."
               checked={config.europeanNights}
               onChange={(europeanNights) => setConfig({ europeanNights })}
             />

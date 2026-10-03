@@ -174,7 +174,16 @@ describe("SeasonPage — one required Continue press carries the whole knockout 
   it("requires a Continue click through domestic standings, team stats, and Europe transition, one more into the knockouts, then auto-advances through every round result and the champion screen with no further clicks", async () => {
     setup();
     api.getEuropeStatus.mockResolvedValue({ qualified: true, position: 1, qualifierCount: 8, ties: [] });
-    api.startEuropeLeaguePhase.mockResolvedValue({ competitionId: "euro-c1", seasonId: "s-league" });
+    api.startEuropeLeaguePhase.mockResolvedValue({
+      competitionId: "euro-c1",
+      seasonId: "s-league",
+      draw: {
+        clubs: [
+          { clubId: "user-club", name: "Our XI", country: "England", seed: 1, pot: 1, strength: 90 },
+          { clubId: "ai-club", name: "AI FC", country: "Spain", seed: 2, pot: 1, strength: 85 },
+        ],
+      },
+    });
     api.getLeaguePhaseStandings.mockResolvedValue(standings);
     api.startEuropeKnockouts.mockResolvedValue({
       round: "QF",
@@ -209,6 +218,10 @@ describe("SeasonPage — one required Continue press carries the whole knockout 
     // europe-transition
     await findByRole("button", { name: /^continue/i }, { timeout: 5000 });
     getByRole("button", { name: /^continue/i }).click();
+
+    // europe-draw — the pots and the user's eight opponents; one press starts the league phase.
+    await findByRole("button", { name: /play the league phase/i }, { timeout: 5000 });
+    getByRole("button", { name: /play the league phase/i }).click();
 
     // europe-league-standings — "Continue to Knockouts" is the last press needed; everything
     // from here on (QF -> SF -> Final -> champion) auto-advances with no button of its own.

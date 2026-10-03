@@ -1,4 +1,5 @@
 import type { KnockoutRound, KnockoutTieDto } from "../api/types";
+import { EUROPE_STAGES, ROUND_NAME } from "../lib/europe";
 import { SHARE_COLORS, type ShareCardModel } from "../lib/shareImage";
 import { ShareActions } from "./ShareActions";
 
@@ -10,21 +11,19 @@ interface Props {
   ties: KnockoutTieDto[];
 }
 
-const ROUND_ORDER: KnockoutRound[] = ["QF", "SF", "FINAL"];
-const ROUND_NAME: Record<KnockoutRound, string> = { QF: "quarter-final", SF: "semi-final", FINAL: "final" };
-
-/** How far the user's club went: the furthest knockout round it played, and whether it won it. */
+/** How far the user's club went: the furthest knockout round it played, and whether it won it.
+    Null when it never reached one — in a 36-club field that means it went out in the league phase. */
 export function europeRun(ties: KnockoutTieDto[], userClubId: string): { round: KnockoutRound; won: boolean } | null {
   const mine = ties.filter((t) => t.homeClubId === userClubId || t.awayClubId === userClubId);
   if (mine.length === 0) return null;
-  const furthest = mine.reduce((a, b) => (ROUND_ORDER.indexOf(b.round) > ROUND_ORDER.indexOf(a.round) ? b : a));
+  const furthest = mine.reduce((a, b) => (EUROPE_STAGES.indexOf(b.round) > EUROPE_STAGES.indexOf(a.round) ? b : a));
   return { round: furthest.round, won: furthest.winnerClubId === userClubId };
 }
 
 /** The third share moment (38-0 has one per competition): the European Nights campaign. */
 export function EuropeShareCard({ clubName, userClubId, champion, championName, ties }: Props) {
   const run = europeRun(ties, userClubId);
-  const headline = champion ? "European champions" : run ? `Out in the ${ROUND_NAME[run.round]}` : "European Nights";
+  const headline = champion ? "European champions" : run ? `Out in the ${ROUND_NAME[run.round]}` : "Out at the league phase";
   const card: ShareCardModel = {
     kicker: "European Nights",
     title: clubName,

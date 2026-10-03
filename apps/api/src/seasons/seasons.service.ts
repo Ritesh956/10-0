@@ -18,7 +18,7 @@ import {
 } from "./trophy-evaluation.js";
 import type { CreateSeasonDto } from "./seasons.schemas.js";
 
-const AI_CLUB_FORMATION = "4-4-2";
+export const AI_CLUB_FORMATION = "4-4-2";
 
 /**
  * Mirrors apps/web/src/lib/leagues.ts's REAL_LEAGUE_COUNTRIES — the draft flow already restricts
@@ -28,7 +28,7 @@ const AI_CLUB_FORMATION = "4-4-2";
  * Champions League qualification spots right alongside the user's real club. Keep this list in
  * sync with the frontend one if the real dataset's country coverage ever changes.
  */
-const REAL_LEAGUE_COUNTRIES = ["England", "Spain", "Italy", "Germany", "France"];
+export const REAL_LEAGUE_COUNTRIES = ["England", "Spain", "Italy", "Germany", "France"];
 
 @Injectable()
 export class SeasonsService {
@@ -250,13 +250,14 @@ export class SeasonsService {
     const season = await this.prisma.season.findFirst({ where: { id: seasonId, worldId } });
     if (!season) throw new NotFoundException("Season not found");
 
-    const [clubs, fixtures] = await Promise.all([
-      this.prisma.worldClub.findMany({ where: { worldId } }),
-      this.prisma.fixture.findMany({
-        where: { worldId, seasonId, status: "COMPLETED" },
-        include: { match: { select: { homeScore: true, awayScore: true } } },
-      }),
-    ]);
+    // The table's clubs are the season's own participants (every fixture's two sides, played or
+    // not) — not every club in the world, which also holds the foreign clubs European Nights adds.
+    const allFixtures = await this.prisma.fixture.findMany({
+      where: { worldId, seasonId },
+      include: { match: { select: { homeScore: true, awayScore: true } } },
+    });
+    const clubIds = [...new Set(allFixtures.flatMap((f) => [f.homeClubId, f.awayClubId]))];
+    const fixtures = allFixtures.filter((f) => f.status === "COMPLETED");
 
     const results: CompletedResult[] = fixtures
       .filter((f): f is typeof f & { match: NonNullable<(typeof f)["match"]> } => f.match !== null)
@@ -269,7 +270,7 @@ export class SeasonsService {
 
     return buildStandings(
       seasonId,
-      clubs.map((c) => c.id),
+      clubIds,
       results,
     );
   }

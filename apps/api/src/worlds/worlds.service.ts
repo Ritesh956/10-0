@@ -44,6 +44,31 @@ export class WorldsService {
     return world;
   }
 
+  /**
+   * The world as the web app reads it: each club also carries the country of the league it plays in,
+   * so tables can show a flag — which matters once European Nights puts clubs from all five leagues
+   * in one world. The user's own club plays in the chosen league whatever its drafted squad's origin.
+   */
+  async getWorldView(worldId: string, userId: string) {
+    const world = await this.getWorld(worldId, userId);
+    const seasonIds = world.clubs.map((c) => c.refClubSeasonId).filter((id): id is string => id !== null);
+    const leagueId = (world.settings as { leagueId?: string } | null)?.leagueId;
+    const [rows, home] = await Promise.all([
+      seasonIds.length
+        ? this.prisma.refClubSeason.findMany({ where: { id: { in: seasonIds } }, select: { id: true, league: { select: { country: true } } } })
+        : Promise.resolve([]),
+      leagueId ? this.prisma.refLeague.findUnique({ where: { id: leagueId }, select: { country: true } }) : Promise.resolve(null),
+    ]);
+    const countryBySeason = new Map(rows.map((r) => [r.id, r.league.country]));
+    return {
+      ...world,
+      clubs: world.clubs.map((c) => ({
+        ...c,
+        country: (c.managedByUserId ? home?.country : undefined) ?? (c.refClubSeasonId ? countryBySeason.get(c.refClubSeasonId) : undefined) ?? home?.country ?? null,
+      })),
+    };
+  }
+
   /** Throws if the world doesn't exist or isn't owned by userId; used by other modules that operate within a world. */
   async assertOwnership(worldId: string, userId: string): Promise<void> {
     await this.getWorld(worldId, userId);

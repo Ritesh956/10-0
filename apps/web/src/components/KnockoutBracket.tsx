@@ -1,6 +1,7 @@
 import { worldClubLabel } from "../lib/clubNames";
 import { motion } from "framer-motion";
-import type { KnockoutRound, KnockoutTieDto, WorldClubDto } from "../api/types";
+import type { KnockoutTieDto, WorldClubDto } from "../api/types";
+import { EUROPE_STAGES, ROUND_HEADING } from "../lib/europe";
 import { staggerContainer, staggerItem } from "../lib/motion";
 
 interface Props {
@@ -9,12 +10,10 @@ interface Props {
   highlightClubId?: string | undefined;
 }
 
-const ROUND_ORDER: KnockoutRound[] = ["QF", "SF", "FINAL"];
-const ROUND_LABEL: Record<KnockoutRound, string> = { QF: "Quarter-Finals", SF: "Semi-Finals", FINAL: "Final" };
 
 export function KnockoutBracket({ ties, clubs, highlightClubId }: Props) {
   const nameFor = (clubId: string) => worldClubLabel(clubs.find((c) => c.id === clubId), clubId);
-  const rounds = ROUND_ORDER.map((round) => ({ round, ties: ties.filter((t) => t.round === round) })).filter(
+  const rounds = EUROPE_STAGES.map((round) => ({ round, ties: ties.filter((t) => t.round === round) })).filter(
     (group) => group.ties.length > 0,
   );
 
@@ -22,7 +21,7 @@ export function KnockoutBracket({ ties, clubs, highlightClubId }: Props) {
     <div className="space-y-5">
       {rounds.map(({ round, ties: roundTies }) => (
         <div key={round}>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-smoke-600">{ROUND_LABEL[round]}</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-smoke-600">{ROUND_HEADING[round]}</p>
           <motion.div variants={staggerContainer} initial="initial" animate="animate" className="space-y-2">
             {roundTies.map((tie) => {
               const homeWon = tie.winnerClubId === tie.homeClubId;

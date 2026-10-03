@@ -42,9 +42,18 @@ export class EuropeController {
     @CurrentUser() user: AuthTokenPayload,
     @Param("worldId") worldId: string,
     @Param("competitionId") competitionId: string,
-    @Query("round") round: "QF" | "SF" | "FINAL",
+    @Query("round") round: string,
   ) {
     return this.europe.advanceKnockouts(worldId, competitionId, round, user.sub);
+  }
+
+  @Get(":competitionId/draw")
+  draw(
+    @CurrentUser() user: AuthTokenPayload,
+    @Param("worldId") worldId: string,
+    @Param("competitionId") competitionId: string,
+  ) {
+    return this.europe.getDraw(worldId, competitionId, user.sub);
   }
 
   @Get(":competitionId/bracket")

@@ -45,7 +45,7 @@ const TOPICS: Topic[] = [
   {
     title: "European Nights",
     points: [
-      "Finish in the top 8 of your domestic league and your XI qualifies for European Nights, a scaled-down continental cup: an 8-team league phase, then quarter-final, semi-final, and a single-match neutral-venue final.",
+      "Finish in the top 8 of your domestic league and your XI qualifies for European Nights, a cross-league cup: 36 clubs from the Premier League, LaLiga, Serie A, Bundesliga and Ligue 1 are drawn into four pots. Each club plays eight league-phase games against opponents from other leagues; the top 8 go straight to the Round of 16, 9th–24th play off for the other places, and it's quarter-finals, semi-finals and a single-match final from there.",
       "Turn it off in Setup and your world stays a pure single-league campaign.",
     ],
   },

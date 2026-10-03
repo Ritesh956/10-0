@@ -23,6 +23,6 @@ export class WorldsController {
 
   @Get(":worldId")
   get(@CurrentUser() user: AuthTokenPayload, @Param("worldId") worldId: string) {
-    return this.worlds.getWorld(worldId, user.sub);
+    return this.worlds.getWorldView(worldId, user.sub);
   }
 }

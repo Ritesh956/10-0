@@ -4,8 +4,10 @@ import { motion } from "framer-motion";
 import { api } from "../api/client";
 import type {
   CompetitionStatsDto,
+  EuropeDrawDto,
   EuropeRoundDto,
   EuropeStatusDto,
+  FixtureDto,
   JanuaryResultDto,
   KnockoutRound,
   KnockoutTieDto,
@@ -19,6 +21,7 @@ import type {
   WorldDto,
 } from "../api/types";
 import { CompetitionStatsPanel } from "../components/CompetitionStatsPanel";
+import { EuropeDraw } from "../components/EuropeDraw";
 import { GuestPersistPrompt } from "../components/GuestPersistPrompt";
 import { JanuaryShareCard } from "../components/JanuaryShareCard";
 import { JanuaryWindow } from "../components/JanuaryWindow";
@@ -37,6 +40,7 @@ import { fireChampionShower, fireQualificationBurst } from "../lib/confetti";
 import { staggerContainer, staggerItem, staggerItemBounce } from "../lib/motion";
 import { buildSeasonNarrative } from "../lib/seasonNarrative";
 import { worldClubLabel } from "../lib/clubNames";
+import { leaguePhaseVerdict, ROUND_LABEL, zoneForPosition, ZONE_LEGEND } from "../lib/europe";
 import { leagueLabel } from "../lib/leagues";
 import { loadStatsHubCache, rebuildStatsHub, saveStatsHubCache } from "../lib/statsHubCache";
 import { EuropeShareCard } from "../components/EuropeShareCard";
@@ -51,6 +55,7 @@ type Phase =
   | "domestic-standings"
   | "team-stats"
   | "europe-transition"
+  | "europe-draw"
   | "europe-league-replay"
   | "europe-league-standings"
   | "europe-knockout-replay"
@@ -59,8 +64,6 @@ type Phase =
   | "stats-hub";
 
 type StatsTab = "league" | "europe";
-
-const ROUND_LABEL: Record<KnockoutRound, string> = { QF: "Quarter-Final", SF: "Semi-Final", FINAL: "Final" };
 
 async function pollUntilCompleted(worldId: string, seasonId: string): Promise<void> {
   for (;;) {
@@ -73,9 +76,11 @@ async function pollUntilCompleted(worldId: string, seasonId: string): Promise<vo
 }
 
 const KNOCKOUT_STAGE: Record<KnockoutTieDto["round"], { label: string; order: number }> = {
-  QF: { label: "QF", order: 1 },
-  SF: { label: "SF", order: 2 },
-  FINAL: { label: "Final", order: 3 },
+  PO: { label: "Play-off", order: 1 },
+  R16: { label: "R16", order: 2 },
+  QF: { label: "QF", order: 3 },
+  SF: { label: "SF", order: 4 },
+  FINAL: { label: "Final", order: 5 },
 };
 
 /** Fixture id -> knockout stage label ("QF · Leg 1", "Final") for the Europe campaign log, whose
@@ -143,6 +148,8 @@ export function SeasonPage() {
 
   const [qualified, setQualified] = useState(false);
   const [europeCompetitionId, setEuropeCompetitionId] = useState<string | null>(null);
+  const [europeDraw, setEuropeDraw] = useState<EuropeDrawDto | null>(null);
+  const [europeFixtures, setEuropeFixtures] = useState<FixtureDto[]>([]);
   const [europeLeagueMatches, setEuropeLeagueMatches] = useState<MatchSummaryDto[]>([]);
   const [europeLeagueStandings, setEuropeLeagueStandings] = useState<StandingsDto | null>(null);
   const [knockoutRound, setKnockoutRound] = useState<KnockoutRound | null>(null);
@@ -155,7 +162,7 @@ export function SeasonPage() {
   // the replay), this accumulates across the whole campaign.
   const [europeAllMatches, setEuropeAllMatches] = useState<MatchSummaryDto[]>([]);
 
-  // Final stats hub: league and (if qualified) Champions League stats live side by side behind a
+  // Final stats hub: league and (if qualified) European Nights stats live side by side behind a
   // tab toggle instead of a one-shot "summary" screen, so the user can freely flip between them
   // afterward rather than only ever seeing whichever one the linear pipeline ended on.
   const [statsTab, setStatsTab] = useState<StatsTab>("league");
@@ -493,9 +500,22 @@ export function SeasonPage() {
     // screen just sits on the same stale content with the same "Continue" button still showing,
     // which reads as "Continue did nothing" even though the pipeline is actually progressing.
     setPhase("simulating");
-    setSimulatingLabel("Kicking off European Nights…");
-    const { competitionId, seasonId: leaguePhaseSeasonId } = await api.startEuropeLeaguePhase(wId, domesticSeasonId);
+    setSimulatingLabel("Drawing European Nights…");
+    const { competitionId, seasonId: leaguePhaseSeasonId, draw } = await api.startEuropeLeaguePhase(wId, domesticSeasonId);
     setEuropeCompetitionId(competitionId);
+    setEuropeDraw(draw);
+
+    // The draw brought clubs from the other four leagues into the world — reload it so every table
+    // and result below can name them. The league phase is already simulating in the background while
+    // the draw is on screen.
+    const [withEurope, leaguePhaseSeason] = await Promise.all([api.getWorld(wId), api.getSeason(wId, leaguePhaseSeasonId)]);
+    setWorld(withEurope);
+    setEuropeFixtures(leaguePhaseSeason.fixtures);
+    setPhase("europe-draw");
+    await pause(15000);
+
+    setPhase("simulating");
+    setSimulatingLabel("Playing the league phase…");
     await pollUntilCompleted(wId, leaguePhaseSeasonId);
 
     const [leagueMatches, leagueStandings] = await Promise.all([
@@ -511,16 +531,16 @@ export function SeasonPage() {
     await pause(4000);
 
     // This is the one deliberate, required checkpoint in the whole knockout stage — everything
-    // from here (QF -> SF -> Final -> champion) plays straight through with no further "Continue"
-    // clicks needed, only brief auto-advancing pauses (see runKnockoutRound).
+    // from here (play-off -> R16 -> QF -> SF -> Final -> champion) plays straight through with no
+    // further "Continue" clicks needed, only brief auto-advancing pauses (see runKnockoutRound).
     setPhase("simulating");
     setSimulatingLabel("Setting up the knockouts…");
-    const qf = await api.startEuropeKnockouts(wId, competitionId, leaguePhaseSeasonId);
+    const playOff = await api.startEuropeKnockouts(wId, competitionId, leaguePhaseSeasonId);
     const {
       champion: finalChampion,
       ties: finalTies,
       matches: knockoutHistory,
-    } = await runKnockoutRound(wId, competitionId, qf);
+    } = await runKnockoutRound(wId, competitionId, playOff, [], [], userClub?.id);
     const europeMatches = [...leagueMatches, ...knockoutHistory];
     setEuropeAllMatches(europeMatches);
 
@@ -570,6 +590,7 @@ export function SeasonPage() {
     round: EuropeRoundDto,
     tiesSoFar: KnockoutTieDto[] = [],
     matchesSoFar: MatchSummaryDto[] = [],
+    userClubId?: string,
   ): Promise<{ champion: string; ties: KnockoutTieDto[]; matches: MatchSummaryDto[] }> {
     setKnockoutRound(round.round);
     // Same reasoning as the league-phase transition above — this covers both the first entry
@@ -584,8 +605,13 @@ export function SeasonPage() {
     const roundMatches = await api.getMatchesWithEvents(wId, round.seasonId);
     const matches = [...matchesSoFar, ...roundMatches];
     setKnockoutMatches(roundMatches);
-    setPhase("europe-knockout-replay");
-    await waitForReplay();
+    // A club that's out (or sat the round out on a bye) has nothing to replay — an empty reel with a
+    // 0-0-0 strip is just noise, so go straight to the round's results.
+    const userPlayed = !userClubId || roundMatches.some((m) => m.homeClubId === userClubId || m.awayClubId === userClubId);
+    if (userPlayed) {
+      setPhase("europe-knockout-replay");
+      await waitForReplay();
+    }
 
     const result = await api.advanceEuropeKnockouts(wId, competitionId, round.round);
     setResolvedTies(result.resolvedTies);
@@ -605,7 +631,7 @@ export function SeasonPage() {
     }
 
     if (result.next) {
-      return runKnockoutRound(wId, competitionId, result.next, resolvedTies, matches);
+      return runKnockoutRound(wId, competitionId, result.next, resolvedTies, matches, userClubId);
     }
 
     throw new Error("Knockout stage ended without a champion");
@@ -616,6 +642,8 @@ export function SeasonPage() {
   }
 
   const userClub = world.clubs.find((c) => c.managedByUserId);
+  const userPhasePosition =
+    userClub && europeLeagueStandings ? europeLeagueStandings.rows.findIndex((r) => r.clubId === userClub.id) + 1 : 0;
   const nameFor = (clubId: string) => worldClubLabel(world.clubs.find((c) => c.id === clubId), clubId);
   // Replays only ever show the user's own fixtures — nobody wants to sit through all 380 league
   // matches (or every other tie in a knockout round) just to see their own team's results roll in.
@@ -655,7 +683,10 @@ export function SeasonPage() {
       <div className="text-center">
         <h1 className="font-display text-3xl font-bold uppercase tracking-wide text-paper">{userClub?.name ?? "Your XI"}</h1>
         <p className="mt-1 text-sm text-smoke-500">
-          {world.clubs.length > 1 ? `${world.clubs.length}-club league` : "Your XI is ready — kick off when you are."}
+          {world.clubs.length > 1
+            ? // European Nights adds other leagues' clubs to the world; the league is its own table.
+              `${standings?.rows.length ?? world.clubs.length}-club league`
+            : "Your XI is ready — kick off when you are."}
         </p>
       </div>
 
@@ -745,7 +776,8 @@ export function SeasonPage() {
             Congratulations! {userClub?.name} qualified for European Nights
           </motion.h2>
           <motion.p variants={staggerItem} className="text-sm text-smoke-400">
-            Europe comes calling: a league phase against the continent&apos;s best, then the knockouts.
+            Europe comes calling: 36 clubs from the five big leagues, eight league-phase games against rivals from
+            abroad, then the knockouts — play-offs, Round of 16, all the way to the Final.
           </motion.p>
           <motion.div variants={staggerItem} className="flex flex-col items-center justify-center gap-2 sm:flex-row">
             <Button onClick={() => europeChoiceRef.current?.(true)}>Continue to European Nights &rarr;</Button>
@@ -754,6 +786,16 @@ export function SeasonPage() {
             </Button>
           </motion.div>
         </motion.div>
+      )}
+
+      {phase === "europe-draw" && europeDraw && (
+        <EuropeDraw
+          draw={europeDraw}
+          clubs={world.clubs}
+          userClubId={userClub?.id}
+          fixtures={europeFixtures}
+          onContinue={skipPause}
+        />
       )}
 
       {phase === "europe-league-replay" && (
@@ -775,7 +817,17 @@ export function SeasonPage() {
           <h2 className="text-center font-display text-lg font-semibold uppercase tracking-wide text-paper">
             European Nights &middot; League Phase Standings
           </h2>
-          <StandingsTable standings={europeLeagueStandings} clubs={world.clubs} highlightClubId={userClub?.id} />
+          {userPhasePosition > 0 && (
+            <p className="text-center text-sm text-smoke-300">{leaguePhaseVerdict(userPhasePosition)}</p>
+          )}
+          <StandingsTable
+            standings={europeLeagueStandings}
+            clubs={world.clubs}
+            highlightClubId={userClub?.id}
+            zoneFor={zoneForPosition}
+            legend={ZONE_LEGEND}
+            showFlags
+          />
           <div className="text-center">
             <Button variant="ghost" size="sm" onClick={skipPause}>
               Continue to Knockouts &rarr;
@@ -803,6 +855,9 @@ export function SeasonPage() {
           <h2 className="font-display text-lg font-semibold uppercase tracking-wide text-paper">
             {ROUND_LABEL[knockoutRound]} results
           </h2>
+          {knockoutRound === "PO" && (
+            <p className="text-sm text-smoke-400">The top eight from the league phase wait in the Round of 16.</p>
+          )}
           <KnockoutBracket ties={resolvedTies} clubs={world.clubs} highlightClubId={userClub?.id} />
         </div>
       )}
@@ -945,7 +1000,21 @@ export function SeasonPage() {
               </h2>
               {allTies.length > 0 && <KnockoutBracket ties={allTies} clubs={world.clubs} highlightClubId={userClub?.id} />}
               {europeLeagueStandings && (
-                <StandingsTable standings={europeLeagueStandings} clubs={world.clubs} highlightClubId={userClub?.id} />
+                <details className="notch border border-ink-800 bg-ink-900/40 p-3">
+                  <summary className="cursor-pointer select-none text-center font-display text-sm font-semibold uppercase tracking-wide text-paper">
+                    League phase table
+                  </summary>
+                  <div className="mt-3">
+                    <StandingsTable
+                      standings={europeLeagueStandings}
+                      clubs={world.clubs}
+                      highlightClubId={userClub?.id}
+                      zoneFor={zoneForPosition}
+                      legend={ZONE_LEGEND}
+                      showFlags
+                    />
+                  </div>
+                </details>
               )}
               {europeCompetitionStats && (
                 <CompetitionStatsPanel stats={europeCompetitionStats} highlightClubId={userClub?.id} />

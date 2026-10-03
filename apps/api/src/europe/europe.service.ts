@@ -1,26 +1,58 @@
 import { randomInt } from "node:crypto";
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import type { PrismaClient } from "@futbol/db";
-import { buildStandings, type CompletedResult } from "@futbol/domain";
+import { buildStandings, type CompletedResult, type Position } from "@futbol/domain";
 import { PRISMA } from "../prisma/prisma.module.js";
 import { WorldsService } from "../worlds/worlds.service.js";
-import { SeasonsService } from "../seasons/seasons.service.js";
-import { generateSingleRoundRobin } from "../seasons/round-robin.js";
+import { AI_CLUB_FORMATION, REAL_LEAGUE_COUNTRIES, SeasonsService } from "../seasons/seasons.service.js";
+import { buildLineup, type DraftCandidate } from "../common/lineup.js";
+import { instantiateWorldClub } from "../common/instantiate-world-club.js";
 import { aggregateTieScore, type PlayedLeg } from "./europe.logic.js";
+import {
+  bracketOrder,
+  DIRECT_QUALIFIERS,
+  generateLeaguePhase,
+  KNOCKOUT_STAGES,
+  nextRoundPairings,
+  playoffPairings,
+  r16Pairings,
+  seedEntrants,
+  type Entrant,
+  type KnockoutStage,
+  type Pairing,
+  type RankedClub,
+} from "./european-format.js";
 
 /**
- * The world is a single 20-club league (not several real leagues feeding a 36-team UCL), so this
- * is a deliberately scaled-down adaptation: top 8 league finishers qualify, a single round-robin
- * "league phase" seeds an 8-team knockout bracket (QF -> SF -> Final), two legs per tie except the
- * single-match Final. No Round of 16 — with only 8 qualifiers there's nothing to round down from.
+ * European Nights: 36 clubs from the five real leagues. The user's own league sends its top
+ * `DOMESTIC_QUALIFIERS` finishers (real results — they just played the season); each of the other
+ * four sends the `FOREIGN_QUALIFIERS` strongest current squads by our own ratings (those leagues
+ * aren't simulated, so "strongest squad" stands in for "finished high"). The foreign clubs are
+ * instantiated into the world as ordinary AI clubs so the existing worker simulates every fixture —
+ * which is also why the whole competition, including ties the user isn't in, has a real result.
+ *
+ * Format: an 8-game league phase (see european-format.ts), then top 8 → Round of 16, 9–24 →
+ * two-legged play-off, then R16 → QF → SF → a single-match neutral-venue Final.
  */
-const QUALIFIER_COUNT = 8;
-const ROUND_ORDER = ["QF", "SF", "FINAL"] as const;
-type KnockoutRoundName = (typeof ROUND_ORDER)[number];
+const DOMESTIC_QUALIFIERS = 8;
+const FOREIGN_QUALIFIERS = 7;
+const COMPETITION_NAME = "European Nights";
 
-interface Seed {
-  clubId: string;
-  rank: number;
+const NEXT_STAGE: Record<Exclude<KnockoutStage, "FINAL">, KnockoutStage> = {
+  PO: "R16",
+  R16: "QF",
+  QF: "SF",
+  SF: "FINAL",
+};
+
+/** Average overall of a club's best eleven — the seeding strength. */
+function squadStrength(overalls: number[]): number {
+  const best = [...overalls].sort((a, b) => b - a).slice(0, 11);
+  return best.length === 0 ? 0 : best.reduce((sum, o) => sum + o, 0) / best.length;
+}
+
+function isStage(value: string): value is KnockoutStage {
+  return (KNOCKOUT_STAGES as readonly string[]).includes(value);
 }
 
 @Injectable()
@@ -36,7 +68,7 @@ export class EuropeService {
     const standings = await this.seasons.getStandings(worldId, domesticSeasonId, userId);
     const userClub = world.clubs.find((c) => c.managedByUserId === userId);
     const position = userClub ? standings.rows.findIndex((r) => r.clubId === userClub.id) + 1 : 0;
-    const qualified = position > 0 && position <= QUALIFIER_COUNT;
+    const qualified = position > 0 && position <= DOMESTIC_QUALIFIERS;
 
     const competition = await this.prisma.competition.findFirst({
       where: { worldId, type: "CONTINENTAL" },
@@ -48,29 +80,54 @@ export class EuropeService {
     return {
       qualified,
       position,
-      qualifierCount: QUALIFIER_COUNT,
+      qualifierCount: DOMESTIC_QUALIFIERS,
+      clubCount: DOMESTIC_QUALIFIERS + 4 * FOREIGN_QUALIFIERS,
       competitionId: competition?.id,
       ties,
     };
   }
 
-  /** Creates the Champions League competition and its league-phase season/fixtures among the top 8. */
+  /**
+   * Builds the 36-club field, draws the league phase and queues its simulation. Calling it again for
+   * a world that already has the competition returns that competition rather than drawing a second.
+   */
   async startLeaguePhase(worldId: string, domesticSeasonId: string, userId: string) {
-    await this.worlds.assertOwnership(worldId, userId);
+    const world = await this.worlds.getWorld(worldId, userId);
+
+    const existing = await this.prisma.competition.findFirst({ where: { worldId, type: "CONTINENTAL" } });
+    if (existing) {
+      const first = await this.prisma.season.findFirst({ where: { worldId, competitionId: existing.id }, orderBy: { createdAt: "asc" } });
+      if (first) return { competitionId: existing.id, seasonId: first.id, draw: await this.buildDraw(worldId, first.id, userId) };
+    }
+
     const standings = await this.seasons.getStandings(worldId, domesticSeasonId, userId);
-    const qualifiedClubIds = standings.rows.slice(0, QUALIFIER_COUNT).map((r) => r.clubId);
-    if (qualifiedClubIds.length < 2) {
+    const domesticClubIds = standings.rows.slice(0, DOMESTIC_QUALIFIERS).map((r) => r.clubId);
+    if (domesticClubIds.length < DOMESTIC_QUALIFIERS) {
       throw new BadRequestException("Not enough qualified clubs to run a European competition");
     }
 
+    const domesticLeague = await this.resolveDomesticLeague(world);
+    const foreignClubIds = await this.addForeignClubs(world, domesticLeague?.id ?? null);
+    const entrants = await this.entrantsFor(worldId, [...domesticClubIds, ...foreignClubIds], domesticLeague?.country ?? "Home");
+    // A thin data set can leave the field short of a multiple of four (the pots must be equal);
+    // the weakest foreign clubs are the ones left out.
+    const domestic = new Set(domesticClubIds);
+    const leftOut = new Set(
+      entrants
+        .filter((e) => !domestic.has(e.clubId))
+        .sort((a, b) => a.strength - b.strength)
+        .slice(0, entrants.length % 4)
+        .map((e) => e.clubId),
+    );
+    const seeded = seedEntrants(entrants.filter((e) => !leftOut.has(e.clubId)));
+    const fixtures = generateLeaguePhase(seeded, randomInt(2 ** 31));
+
     const competition = await this.prisma.competition.create({
-      data: { worldId, name: "Champions League", type: "CONTINENTAL" },
+      data: { worldId, name: COMPETITION_NAME, type: "CONTINENTAL" },
     });
     const season = await this.prisma.season.create({
       data: { worldId, competitionId: competition.id, year: new Date().getFullYear(), status: "SCHEDULED" },
     });
-
-    const fixtures = generateSingleRoundRobin(qualifiedClubIds);
     await this.prisma.fixture.createMany({
       data: fixtures.map((f) => ({
         worldId,
@@ -83,24 +140,24 @@ export class EuropeService {
     });
 
     await this.seasons.requestSimulation(worldId, season.id, userId);
-    return { competitionId: competition.id, seasonId: season.id };
+    return { competitionId: competition.id, seasonId: season.id, draw: await this.buildDraw(worldId, season.id, userId) };
   }
 
-  /** Starts the QF round from the completed league-phase season's standings (1v8, 2v7, 3v6, 4v5). */
+  /** The pots and who was drawn — recomputed from the league-phase clubs, so it also serves a reload. */
+  async getDraw(worldId: string, competitionId: string, userId: string) {
+    const season = await this.prisma.season.findFirst({ where: { worldId, competitionId }, orderBy: { createdAt: "asc" } });
+    if (!season) throw new NotFoundException("No league phase for this competition");
+    return this.buildDraw(worldId, season.id, userId);
+  }
+
+  /** Starts the play-off round from the completed league-phase table (9v24 … 16v17). */
   async startKnockouts(worldId: string, competitionId: string, leaguePhaseSeasonId: string, userId: string) {
     await this.worlds.assertOwnership(worldId, userId);
-    const seeds = await this.seedsForSeason(worldId, leaguePhaseSeasonId);
-    if (seeds.length < QUALIFIER_COUNT) {
+    const table = await this.rankedTable(worldId, leaguePhaseSeasonId);
+    if (table.length < DIRECT_QUALIFIERS * 3) {
       throw new BadRequestException("League phase hasn't produced enough clubs for a knockout bracket");
     }
-
-    const pairs: [Seed, Seed][] = [
-      [seeds[0]!, seeds[7]!],
-      [seeds[1]!, seeds[6]!],
-      [seeds[2]!, seeds[5]!],
-      [seeds[3]!, seeds[4]!],
-    ];
-    return this.createRound(worldId, competitionId, "QF", pairs, userId);
+    return this.createRound(worldId, competitionId, "PO", playoffPairings(table), userId);
   }
 
   /**
@@ -109,38 +166,52 @@ export class EuropeService {
    * winner announcement) and the next round to simulate/reveal — kept separate rather than merged
    * into one ambiguous "ties" array.
    */
-  async advanceKnockouts(worldId: string, competitionId: string, round: KnockoutRoundName, userId: string) {
+  async advanceKnockouts(worldId: string, competitionId: string, round: string, userId: string) {
     await this.worlds.assertOwnership(worldId, userId);
+    if (!isStage(round)) throw new BadRequestException(`Unknown knockout round "${round}"`);
     const ties = await this.prisma.knockoutTie.findMany({ where: { worldId, competitionId, round } });
     if (ties.length === 0) throw new NotFoundException(`No ${round} ties found for this competition`);
 
-    const resolvedTies = await this.withScores(await Promise.all(ties.map((tie) => this.resolveTie(tie))));
+    const resolved = await Promise.all(ties.map((tie) => this.resolveTie(tie)));
+    const resolvedTies = await this.withScores(resolved);
 
     if (round === "FINAL") {
       return { resolvedRound: round, resolvedTies, champion: resolvedTies[0]?.winnerClubId };
     }
 
-    const nextRound = ROUND_ORDER[ROUND_ORDER.indexOf(round) + 1]!;
-    const winners = resolvedTies.map((tie) => tie.winnerClubId!);
-    // Bracket order: tie0-winner vs tie3-winner, tie1-winner vs tie2-winner — keeps the top seeds
-    // apart for as long as possible, same convention as a standard single-elimination draw.
-    const pairIndexes: [number, number][] = winners.length === 4 ? [[0, 3], [1, 2]] : [[0, 1]];
-    const seedByClub = new Map((await this.seedsForCompetition(worldId, competitionId)).map((s) => [s.clubId, s.rank]));
-    const pairs: [Seed, Seed][] = pairIndexes.map(([i, j]) => {
-      const a = { clubId: winners[i]!, rank: seedByClub.get(winners[i]!) ?? 99 };
-      const b = { clubId: winners[j]!, rank: seedByClub.get(winners[j]!) ?? 99 };
-      return a.rank <= b.rank ? [a, b] : [b, a];
-    });
+    const leagueTable = await this.leaguePhaseTable(worldId, competitionId);
+    const rankByClub = new Map(leagueTable.map((c) => [c.clubId, c.rank]));
+    const ranked = (clubId: string): RankedClub => ({ clubId, rank: rankByClub.get(clubId) ?? 99 });
 
-    const next = await this.createRound(worldId, competitionId, nextRound, pairs, userId);
+    let pairs: Pairing[];
+    if (round === "PO") {
+      pairs = r16Pairings(
+        leagueTable,
+        resolved.map((tie) => ({
+          strongerRank: ranked(tie.homeClubId).rank,
+          winner: ranked(tie.winnerClubId!),
+        })),
+      );
+    } else {
+      // Bracket order is recovered from who played whom, not from the order rows come back in.
+      const every = await this.prisma.knockoutTie.findMany({ where: { worldId, competitionId } });
+      const byRound: Partial<Record<KnockoutStage, { id: string; homeClubId: string; awayClubId: string }[]>> = {};
+      for (const t of every) (byRound[t.round] ??= []).push(t);
+      const slot = bracketOrder(byRound, (clubId) => ranked(clubId).rank);
+      const winners = [...resolved]
+        .sort((a, b) => (slot.get(a.id) ?? 0) - (slot.get(b.id) ?? 0))
+        .map((tie) => ranked(tie.winnerClubId!));
+      pairs = nextRoundPairings(winners);
+    }
+
+    const next = await this.createRound(worldId, competitionId, NEXT_STAGE[round], pairs, userId);
     return { resolvedRound: round, resolvedTies, next };
   }
 
   async getBracket(worldId: string, competitionId: string, userId: string) {
     await this.worlds.assertOwnership(worldId, userId);
-    return this.withScores(
-      await this.prisma.knockoutTie.findMany({ where: { worldId, competitionId }, orderBy: { round: "asc" } }),
-    );
+    const ties = await this.withScores(await this.prisma.knockoutTie.findMany({ where: { worldId, competitionId } }));
+    return ties.sort((a, b) => KNOCKOUT_STAGES.indexOf(a.round) - KNOCKOUT_STAGES.indexOf(b.round));
   }
 
   /** Attaches each tie's aggregate score (from the tie's own home/away perspective) so the bracket
@@ -165,17 +236,166 @@ export class EuropeService {
     });
   }
 
-  /** Mini-standings for the league-phase season — same shape as the domestic table, scoped to just the 8 qualifiers. */
+  /** League-phase table — same shape as the domestic one, scoped to the clubs in this season. */
   async getLeaguePhaseStandings(worldId: string, seasonId: string, userId: string) {
     await this.worlds.assertOwnership(worldId, userId);
     return this.computeStandings(worldId, seasonId);
   }
 
+  // ---- Building the field ---------------------------------------------------------------------
+
+  /** The league this world is played in: the stored one, else the one most AI clubs come from. */
+  private async resolveDomesticLeague(world: {
+    settings: unknown;
+    clubs: { refClubSeasonId: string | null; managedByUserId: string | null }[];
+  }): Promise<{ id: string; country: string } | null> {
+    let leagueId = (world.settings as { leagueId?: string } | null)?.leagueId ?? null;
+    if (!leagueId) {
+      const ids = world.clubs.filter((c) => !c.managedByUserId && c.refClubSeasonId).map((c) => c.refClubSeasonId!);
+      const rows = ids.length
+        ? await this.prisma.refClubSeason.findMany({ where: { id: { in: ids } }, select: { leagueId: true } })
+        : [];
+      const counts = new Map<string, number>();
+      for (const r of rows) counts.set(r.leagueId, (counts.get(r.leagueId) ?? 0) + 1);
+      leagueId = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+    }
+    if (!leagueId) return null;
+    const league = await this.prisma.refLeague.findUnique({ where: { id: leagueId }, select: { id: true, country: true } });
+    return league;
+  }
+
+  /**
+   * Instantiates the strongest current clubs of every other real league into the world and returns
+   * their world-club ids. "Current" is each league's most recent season in the dataset; a club the
+   * user already fields (a squad-first draft of a real club-season) is never added a second time.
+   */
+  private async addForeignClubs(
+    world: { id: string; eraId: string; clubs: { refClubSeasonId: string | null }[] },
+    domesticLeagueId: string | null,
+  ): Promise<string[]> {
+    const leagues = await this.prisma.refLeague.findMany({
+      where: { eraId: world.eraId, country: { in: REAL_LEAGUE_COUNTRIES }, ...(domesticLeagueId ? { id: { not: domesticLeagueId } } : {}) },
+      select: { id: true },
+    });
+    if (leagues.length === 0) return [];
+
+    const usedSeasonIds = world.clubs.map((c) => c.refClubSeasonId).filter((id): id is string => id !== null);
+    const usedClubs = usedSeasonIds.length
+      ? await this.prisma.refClubSeason.findMany({ where: { id: { in: usedSeasonIds } }, select: { clubId: true } })
+      : [];
+    const usedClubIds = new Set(usedClubs.map((c) => c.clubId));
+
+    const picks = await Promise.all(
+      leagues.map(async ({ id: leagueId }) => {
+        const latest = await this.prisma.refClubSeason.aggregate({ where: { leagueId }, _max: { seasonYear: true } });
+        if (latest._max.seasonYear == null) return [];
+        const clubSeasons = await this.prisma.refClubSeason.findMany({
+          where: { leagueId, seasonYear: latest._max.seasonYear },
+          select: {
+            id: true,
+            clubId: true,
+            club: { select: { name: true } },
+            playerSeasons: { select: { id: true, positions: true, overall: true } },
+          },
+        });
+        const seen = new Set<string>();
+        return clubSeasons
+          .filter((c) => {
+            if (usedClubIds.has(c.clubId) || seen.has(c.clubId)) return false;
+            seen.add(c.clubId);
+            return true;
+          })
+          .map((c) => ({ ...c, strength: squadStrength(c.playerSeasons.map((p) => p.overall)) }))
+          .sort((a, b) => b.strength - a.strength || a.clubId.localeCompare(b.clubId))
+          .slice(0, FOREIGN_QUALIFIERS);
+      }),
+    );
+
+    const managerIds = (await this.prisma.refManager.findMany({ select: { id: true } })).map((m) => m.id);
+    const chosen = picks.flat();
+    const created: string[] = [];
+    // A few at a time: each club is a read plus a small transaction, so running all ~28 at once
+    // would queue behind the connection pool rather than finish sooner.
+    for (let i = 0; i < chosen.length; i += 10) {
+      const batch = await Promise.all(
+        chosen.slice(i, i + 10).map((clubSeason) => {
+          const draftPool: DraftCandidate[] = clubSeason.playerSeasons.map((ps) => ({
+            refPlayerSeasonId: ps.id,
+            positions: ps.positions as Position[],
+            overall: ps.overall,
+          }));
+          return instantiateWorldClub(this.prisma, {
+            worldId: world.id,
+            name: clubSeason.club.name,
+            refClubSeasonId: clubSeason.id,
+            managedByUserId: undefined,
+            formation: AI_CLUB_FORMATION,
+            lineup: buildLineup(AI_CLUB_FORMATION, draftPool),
+            allPlayerSeasonIds: clubSeason.playerSeasons.map((p) => p.id),
+            refManagerId: managerIds.length > 0 ? managerIds[randomInt(managerIds.length)] : undefined,
+          });
+        }),
+      );
+      created.push(...batch.map((c) => c.id));
+    }
+    return created;
+  }
+
+  /** Country and squad strength for each club, read from the world itself so the seeding is the same
+      whether it's computed when the draw is made or rebuilt later. */
+  private async entrantsFor(worldId: string, clubIds: string[], domesticCountry: string): Promise<Entrant[]> {
+    const [clubs, players] = await Promise.all([
+      this.prisma.worldClub.findMany({
+        where: { id: { in: clubIds }, worldId },
+        select: {
+          id: true,
+          managedByUserId: true,
+          refClubSeason: { select: { league: { select: { country: true } } } },
+        },
+      }),
+      this.prisma.worldPlayer.findMany({ where: { clubId: { in: clubIds } }, select: { clubId: true, overall: true } }),
+    ]);
+    const overallsByClub = new Map<string, number[]>();
+    for (const p of players) {
+      const list = overallsByClub.get(p.clubId) ?? [];
+      list.push(p.overall);
+      overallsByClub.set(p.clubId, list);
+    }
+    return clubs.map((c) => ({
+      clubId: c.id,
+      // The user's own club plays in the chosen league even if its drafted squad came from elsewhere.
+      country: c.managedByUserId ? domesticCountry : (c.refClubSeason?.league.country ?? domesticCountry),
+      strength: squadStrength(overallsByClub.get(c.id) ?? []),
+    }));
+  }
+
+  private async buildDraw(worldId: string, leaguePhaseSeasonId: string, userId: string) {
+    const world = await this.worlds.getWorld(worldId, userId);
+    const fixtures = await this.prisma.fixture.findMany({ where: { worldId, seasonId: leaguePhaseSeasonId } });
+    const clubIds = [...new Set(fixtures.flatMap((f) => [f.homeClubId, f.awayClubId]))];
+    const domesticLeague = await this.resolveDomesticLeague(world);
+    const entrants = await this.entrantsFor(worldId, clubIds, domesticLeague?.country ?? "Home");
+    const nameById = new Map(world.clubs.map((c) => [c.id, c.name]));
+    const seeded = seedEntrants(entrants);
+    return {
+      clubs: seeded.map((s) => ({
+        clubId: s.clubId,
+        name: nameById.get(s.clubId) ?? "Unknown",
+        country: s.country,
+        seed: s.seed,
+        pot: s.pot,
+        strength: Math.round(s.strength),
+      })),
+    };
+  }
+
+  // ---- Knockout rounds ------------------------------------------------------------------------
+
   private async createRound(
     worldId: string,
     competitionId: string,
-    round: KnockoutRoundName,
-    pairs: [Seed, Seed][],
+    round: KnockoutStage,
+    pairs: Pairing[],
     userId: string,
   ) {
     const season = await this.prisma.season.create({
@@ -183,44 +403,47 @@ export class EuropeService {
     });
 
     const isFinal = round === "FINAL";
-    const ties = [];
-    for (const [stronger, weaker] of pairs) {
-      const firstLeg = await this.prisma.fixture.create({
-        data: {
-          worldId,
-          seasonId: season.id,
-          matchday: 1,
-          homeClubId: isFinal ? stronger.clubId : weaker.clubId,
-          awayClubId: isFinal ? weaker.clubId : stronger.clubId,
-          status: "SCHEDULED",
-        },
-      });
-      const secondLeg = isFinal
-        ? null
-        : await this.prisma.fixture.create({
+    // Each tie is independent, so they're written side by side; nothing depends on creation order
+    // (the bracket is recovered from the clubs — see bracketOrder).
+    const ties = await Promise.all(
+      pairs.map(async ([stronger, weaker]) => {
+        const [firstLeg, secondLeg] = await Promise.all([
+          this.prisma.fixture.create({
             data: {
               worldId,
               seasonId: season.id,
-              matchday: 2,
-              homeClubId: stronger.clubId,
-              awayClubId: weaker.clubId,
+              matchday: 1,
+              homeClubId: isFinal ? stronger.clubId : weaker.clubId,
+              awayClubId: isFinal ? weaker.clubId : stronger.clubId,
               status: "SCHEDULED",
             },
-          });
-
-      const tie = await this.prisma.knockoutTie.create({
-        data: {
-          worldId,
-          competitionId,
-          round,
-          homeClubId: stronger.clubId,
-          awayClubId: weaker.clubId,
-          firstLegFixtureId: firstLeg.id,
-          secondLegFixtureId: secondLeg?.id ?? null,
-        },
-      });
-      ties.push(tie);
-    }
+          }),
+          isFinal
+            ? Promise.resolve(null)
+            : this.prisma.fixture.create({
+                data: {
+                  worldId,
+                  seasonId: season.id,
+                  matchday: 2,
+                  homeClubId: stronger.clubId,
+                  awayClubId: weaker.clubId,
+                  status: "SCHEDULED",
+                },
+              }),
+        ]);
+        return this.prisma.knockoutTie.create({
+          data: {
+            worldId,
+            competitionId,
+            round,
+            homeClubId: stronger.clubId,
+            awayClubId: weaker.clubId,
+            firstLegFixtureId: firstLeg.id,
+            secondLegFixtureId: secondLeg?.id ?? null,
+          },
+        });
+      }),
+    );
 
     await this.seasons.requestSimulation(worldId, season.id, userId);
     return { round, seasonId: season.id, ties };
@@ -272,6 +495,8 @@ export class EuropeService {
     return result._avg.overall ?? 70;
   }
 
+  // ---- Tables ---------------------------------------------------------------------------------
+
   /** Standings for every club that has a fixture in this season, computed from completed results. */
   private async computeStandings(worldId: string, seasonId: string) {
     const fixtures = await this.prisma.fixture.findMany({
@@ -290,19 +515,19 @@ export class EuropeService {
     return buildStandings(seasonId, clubIds, results);
   }
 
-  /** Seed ranks (0 = best) for the clubs that played in a given season, from that season's results. */
-  private async seedsForSeason(worldId: string, seasonId: string): Promise<Seed[]> {
+  /** The league-phase table as 1-based ranks. */
+  private async rankedTable(worldId: string, seasonId: string): Promise<RankedClub[]> {
     const standings = await this.computeStandings(worldId, seasonId);
-    return standings.rows.map((row, rank) => ({ clubId: row.clubId, rank }));
+    return standings.rows.map((row, i) => ({ clubId: row.clubId, rank: i + 1 }));
   }
 
-  /** Seed ranks carried forward from the league-phase season of this competition (used to reseed SF/Final). */
-  private async seedsForCompetition(worldId: string, competitionId: string): Promise<Seed[]> {
+  /** The competition's own league-phase table — its first season, which seeds every knockout round. */
+  private async leaguePhaseTable(worldId: string, competitionId: string): Promise<RankedClub[]> {
     const leaguePhaseSeason = await this.prisma.season.findFirst({
       where: { worldId, competitionId },
       orderBy: { createdAt: "asc" },
     });
     if (!leaguePhaseSeason) return [];
-    return this.seedsForSeason(worldId, leaguePhaseSeason.id);
+    return this.rankedTable(worldId, leaguePhaseSeason.id);
   }
 }

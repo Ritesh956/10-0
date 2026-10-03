@@ -87,6 +87,8 @@ export interface WorldClubDto {
   name: string;
   managedByUserId: string | null;
   refClubSeasonId: string | null;
+  /** The country of the league the club plays in (for a flag); null when unknown. */
+  country?: string | null;
 }
 
 export interface WorldSettingsDto {
@@ -270,7 +272,7 @@ export interface ManagerStatsDto {
   highestScoringMatch?: { opponentClubId: string; ourScore: number; theirScore: number; total: number };
 }
 
-export type KnockoutRound = "QF" | "SF" | "FINAL";
+export type KnockoutRound = "PO" | "R16" | "QF" | "SF" | "FINAL";
 
 export interface KnockoutTieDto {
   id: string;
@@ -289,13 +291,33 @@ export interface EuropeStatusDto {
   qualified: boolean;
   position: number;
   qualifierCount: number;
+  /** Clubs in the cross-league field (36). Optional: older API builds don't send it. */
+  clubCount?: number;
   competitionId?: string;
   ties: KnockoutTieDto[];
+}
+
+export interface EuropeDrawClubDto {
+  clubId: string;
+  name: string;
+  /** League country — drives the flag. */
+  country: string;
+  /** 1 = strongest by our squad ratings. */
+  seed: number;
+  /** 1–4. */
+  pot: number;
+  /** Average overall of the best eleven. */
+  strength: number;
+}
+
+export interface EuropeDrawDto {
+  clubs: EuropeDrawClubDto[];
 }
 
 export interface EuropeLeaguePhaseDto {
   competitionId: string;
   seasonId: string;
+  draw: EuropeDrawDto;
 }
 
 export interface EuropeRoundDto {
