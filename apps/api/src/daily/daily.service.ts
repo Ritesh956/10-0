@@ -174,6 +174,71 @@ export class DailyService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  /** Past dailies, newest first, with each one's community numbers — the archive list. Old puzzles
+      stay playable (same five attempts) through getChallengeByDate. */
+  async getArchive(limit = 120) {
+    const today = new Date(`${todayDateKey()}T00:00:00.000Z`);
+    const challenges = await this.prisma.dailyChallenge.findMany({
+      where: { date: { lt: today } },
+      orderBy: { date: "desc" },
+      take: limit,
+      select: { id: true, date: true, theme: true, themeLabel: true, fixedFormation: true, anchorPlayerSeasonId: true, constraints: true },
+    });
+    const ids = challenges.map((c) => c.id);
+    const [stats, anchors] = await Promise.all([
+      ids.length
+        ? this.prisma.dailyChallengeEntry.groupBy({
+            by: ["dailyChallengeId"],
+            where: { dailyChallengeId: { in: ids } },
+            _count: { _all: true },
+            _max: { score: true },
+          })
+        : Promise.resolve([]),
+      this.prisma.refPlayerSeason.findMany({
+        where: { id: { in: challenges.map((c) => c.anchorPlayerSeasonId) } },
+        select: { id: true, player: { select: { name: true } } },
+      }),
+    ]);
+    const statsById = new Map(stats.map((s) => [s.dailyChallengeId, s]));
+    const anchorName = new Map(anchors.map((a) => [a.id, a.player.name]));
+    return challenges.map((c) => ({
+      id: c.id,
+      date: c.date.toISOString().slice(0, 10),
+      theme: c.theme,
+      themeLabel: c.themeLabel,
+      fixedFormation: c.fixedFormation,
+      anchorName: anchorName.get(c.anchorPlayerSeasonId) ?? null,
+      maxScore: (c.constraints as unknown as DailyConstraint[]).reduce((sum, k) => sum + k.required * 10, 0),
+      players: statsById.get(c.id)?._count._all ?? 0,
+      topScore: statsById.get(c.id)?._max.score ?? null,
+    }));
+  }
+
+  /** The signed-in player's result on every daily they've played, keyed by challenge id. */
+  async getMyArchive(userId: string) {
+    const entries = await this.prisma.dailyChallengeEntry.findMany({
+      where: { userId },
+      select: { dailyChallengeId: true, score: true, maxScore: true, attemptsUsed: true },
+    });
+    return Object.fromEntries(
+      entries.map((e) => [e.dailyChallengeId, { score: e.score, maxScore: e.maxScore, attemptsUsed: e.attemptsUsed }]),
+    );
+  }
+
+  /** One day's puzzle by date ("YYYY-MM-DD"), for the archive. Today's is generated on demand like
+      /daily/today; a past day only exists if it was generated at the time, and future days don't. */
+  async getChallengeByDate(dateKey: string) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey) || Number.isNaN(Date.parse(`${dateKey}T00:00:00.000Z`))) {
+      throw new BadRequestException("Date must be YYYY-MM-DD");
+    }
+    const today = todayDateKey();
+    if (dateKey > today) throw new NotFoundException("That daily hasn't happened yet");
+    if (dateKey === today) return this.getTodayChallenge();
+    const challenge = await this.prisma.dailyChallenge.findUnique({ where: { date: new Date(`${dateKey}T00:00:00.000Z`) } });
+    if (!challenge) throw new NotFoundException("No daily challenge on that date");
+    return this.toChallengeDto(await this.withBoostPools(challenge));
+  }
+
   /** The signed-in player's own standing on a challenge — attempts used and best score so far. */
   async getMyEntry(challengeId: string, userId: string) {
     const entry = await this.prisma.dailyChallengeEntry.findUnique({

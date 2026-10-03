@@ -619,6 +619,20 @@ export interface DailyMyEntryDto {
   maxScore: number | null;
 }
 
+export interface DailyArchiveRowDto {
+  id: string;
+  date: string;
+  theme: DailyTheme;
+  themeLabel: string;
+  fixedFormation: string;
+  anchorName: string | null;
+  maxScore: number;
+  players: number;
+  topScore: number | null;
+}
+
+export type DailyMyArchiveDto = Record<string, { score: number; maxScore: number; attemptsUsed: number }>;
+
 export interface DailyChallengeDto {
   id: string;
   /** "YYYY-MM-DD", UTC. */

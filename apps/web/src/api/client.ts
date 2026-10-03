@@ -5,7 +5,9 @@ import type {
   CompetitionStatsDto,
   CreateLeagueDto,
   CreateLiveDraftRoomDto,
+  DailyArchiveRowDto,
   DailyChallengeDto,
+  DailyMyArchiveDto,
   DailyChallengeEntryDto,
   DailyMyEntryDto,
   DailyRecapDto,
@@ -318,6 +320,12 @@ export const api = {
     request<LeaderboardEntryDto>(`/leaderboard/${entryId}/report`, { method: "POST" }),
 
   getDailyChallenge: () => request<DailyChallengeDto>("/daily/today"),
+
+  getDailyByDate: (date: string) => request<DailyChallengeDto>(`/daily/date/${encodeURIComponent(date)}`),
+
+  getDailyArchive: () => request<DailyArchiveRowDto[]>("/daily/archive"),
+
+  getMyDailyArchive: () => request<DailyMyArchiveDto>("/daily/archive/mine"),
 
   getDailyRecap: () => request<{ recap: DailyRecapDto | null }>("/daily/yesterday").then((r) => r.recap),
 

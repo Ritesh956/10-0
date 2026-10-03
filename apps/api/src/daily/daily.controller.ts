@@ -25,6 +25,22 @@ export class DailyController {
     return { recap: await this.daily.getYesterdayRecap() };
   }
 
+  @Get("archive")
+  archive() {
+    return this.daily.getArchive();
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get("archive/mine")
+  myArchive(@CurrentUser() user: AuthTokenPayload) {
+    return this.daily.getMyArchive(user.sub);
+  }
+
+  @Get("date/:date")
+  byDate(@Param("date") date: string) {
+    return this.daily.getChallengeByDate(date);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get(":challengeId/me")
   me(@CurrentUser() user: AuthTokenPayload, @Param("challengeId") challengeId: string) {

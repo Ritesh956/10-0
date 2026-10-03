@@ -16,6 +16,7 @@ const TITLES: Record<string, string> = {
   "/clubs": "One-Club XI",
   "/nations": "Nations",
   "/daily": "Daily Challenge",
+  "/daily/archive": "Past dailies",
   "/how-it-works": "How it works",
   "/how-to-play": "How to play",
   "/best-xi": "Best XI of the top five leagues",
@@ -27,6 +28,7 @@ const TITLES: Record<string, string> = {
 export function routeTitle(pathname: string): string {
   const exact = TITLES[pathname];
   if (exact) return exact === DEFAULT_TITLE ? exact : `${exact} · ${SITE}`;
+  if (/^\/daily\/\d{4}-\d{2}-\d{2}$/.test(pathname)) return `Daily Challenge, ${pathname.slice(7)} · ${SITE}`;
   if (pathname.startsWith("/best-xi/")) {
     const league = leagueLabel(leagueIdForSlug(pathname.slice("/best-xi/".length)));
     if (league) return `Greatest ${league} XI · ${SITE}`;

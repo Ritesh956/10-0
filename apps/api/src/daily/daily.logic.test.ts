@@ -202,3 +202,40 @@ describe("summarizeRecap", () => {
     expect(summarizeRecap(challenge, [{ score: 10, maxScore: 30, attemptsUsed: 2 }]).fewestAttemptsToMax).toBeNull();
   });
 });
+
+describe("generateChallenge — real-calendar themes", () => {
+  it("makes a national day that nation's puzzle, anchored on its best player", () => {
+    const challenge = generateChallenge("2026-07-14", buildPool());
+    expect(challenge.theme).toBe("nationality");
+    expect(challenge.themeLabel).toBe("Bastille Day: France");
+    const french = buildPool().filter((c) => c.nationality === "France");
+    expect(challenge.anchor.overall).toBe(Math.max(...french.map((c) => c.overall)));
+  });
+
+  it("skips a national day whose nation has too few players for a puzzle", () => {
+    // Italy (06-02) has no players in the fixture pool.
+    expect(generateChallenge("2026-06-02", buildPool()).themeLabel).not.toContain("Festa");
+  });
+
+  it("puts a star's birthday first and picks the best-known birthday player", () => {
+    const pool = buildPool().map((c, i) =>
+      i === 5 ? { ...c, birthMonthDay: "03-09", overall: 93, name: "Star" } : i === 6 ? { ...c, birthMonthDay: "03-09", overall: 70 } : c,
+    );
+    const challenge = generateChallenge("2026-03-09", pool);
+    expect(challenge.theme).toBe("birthday");
+    expect(challenge.themeLabel).toBe("Happy Birthday, Star");
+  });
+
+  it("only uses club themes for clubs with a genuine star when there are any", () => {
+    const pool = buildPool().map((c) => ({ ...c, overall: c.clubId === "club-b" && c.playerId === "player-17" ? 92 : 70 }));
+    let clubThemes = 0;
+    for (let day = 1; day <= 28; day++) {
+      const challenge = generateChallenge(`2026-02-${String(day).padStart(2, "0")}`, pool);
+      if (challenge.theme === "club-history") {
+        clubThemes++;
+        expect(challenge.anchor.clubId).toBe("club-b");
+      }
+    }
+    expect(clubThemes).toBeGreaterThan(0);
+  });
+});

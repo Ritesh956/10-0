@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import type {
   ClubSeasonDto,
@@ -100,6 +101,8 @@ function formatCountdown(ms: number): string {
 
 export function DailyChallengePage() {
   const { user, isAuthenticated } = useAuth();
+  // "/daily/2026-07-14" plays a past daily from the archive; "/daily" is today's.
+  const { date: archiveDate } = useParams();
   const [challenge, setChallenge] = useState<DailyChallengeDto | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -144,8 +147,9 @@ export function DailyChallengePage() {
     let cancelled = false;
     (async () => {
       try {
-        const c = await api.getDailyChallenge();
+        const c = archiveDate ? await api.getDailyByDate(archiveDate) : await api.getDailyChallenge();
         if (!cancelled) setChallenge(c);
+        if (archiveDate) return;
         // Yesterday's recap is a nice-to-have: never let it break today's puzzle.
         const r = await api.getDailyRecap().catch(() => null);
         if (!cancelled && r) {
@@ -159,7 +163,7 @@ export function DailyChallengePage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [archiveDate]);
 
   // Once the challenge is known: pre-seed the anchor into a compatible pitch slot, and load the
   // real top-5 club pool the reel spins through (same pool the puzzle was generated from).
@@ -403,6 +407,8 @@ export function DailyChallengePage() {
   }
 
   const countdownMs = new Date(challenge.refreshesAt).getTime() - now;
+  // A past day's puzzle (from the archive): still playable, but no countdown and no "today" framing.
+  const isPast = countdownMs <= 0;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6 sm:py-10">
@@ -421,16 +427,34 @@ export function DailyChallengePage() {
       )}
       <div className="notch space-y-1 border border-ink-800 bg-ink-900/60 p-5 text-center">
         <p className="text-xs uppercase tracking-[0.2em] text-smoke-500">
-          Daily Challenge · {formatDailyDate(challenge.date)} · Attempt {currentAttempt}/{MAX_ATTEMPTS}
+          {isPast ? "Daily archive" : "Daily Challenge"} · {formatDailyDate(challenge.date)} · Attempt {currentAttempt}/{MAX_ATTEMPTS}
         </p>
         <h1 className="font-display text-2xl font-bold text-paper">{challenge.themeLabel}</h1>
         <p className="text-sm text-smoke-500">
-          Fixed formation <span className="font-semibold text-paper">{challenge.fixedFormation}</span> · Refreshes in{" "}
-          <span className="font-semibold text-paper">{formatCountdown(countdownMs)}</span>
+          Fixed formation <span className="font-semibold text-paper">{challenge.fixedFormation}</span>
+          {!isPast && (
+            <>
+              {" "}
+              · Refreshes in <span className="font-semibold text-paper">{formatCountdown(countdownMs)}</span>
+            </>
+          )}
         </p>
         <p className="text-xs text-smoke-500">
           Anchor: <span className="font-semibold text-mint-400">{challenge.anchor.name}</span> ({challenge.anchor.nationality},{" "}
           {challenge.anchor.clubName}) is pre-seeded into your XI — build the rest of the squad around them.
+        </p>
+        <p className="pt-1 text-xs">
+          {isPast ? (
+            <>
+              <Link to="/daily" className="font-semibold text-mint-400 hover:text-mint-300">
+                Today's puzzle
+              </Link>
+              <span className="text-smoke-600"> · </span>
+            </>
+          ) : null}
+          <Link to="/daily/archive" className="font-semibold text-mint-400 hover:text-mint-300">
+            Past dailies &rarr;
+          </Link>
         </p>
       </div>
 
