@@ -10,6 +10,7 @@ import {
   groupSquadUnits,
   januaryLines,
   managerClosingLine,
+  surname,
   standoutQuote,
   unitTierLabel,
 } from "./seasonNarrative";
@@ -297,5 +298,18 @@ describe("buildSeasonNarrative", () => {
     expect(narrative.standout).toBeUndefined();
     expect(narrative.managerLine).toBeUndefined();
     expect(narrative.finishParagraph).toContain("#10");
+  });
+});
+
+describe("surname", () => {
+  it.each([
+    ["Kevin De Bruyne", "De Bruyne"],
+    ["Virgil van Dijk", "van Dijk"],
+    ["David de Gea", "de Gea"],
+    ["Mohamed Salah", "Salah"],
+    ["Neymar", "Neymar"],
+    ["Trent Alexander-Arnold", "Alexander-Arnold"],
+  ])("%s → %s", (name, expected) => {
+    expect(surname(name)).toBe(expected);
   });
 });

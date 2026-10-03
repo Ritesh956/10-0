@@ -454,6 +454,18 @@ export interface ProfileDto {
   runs: ProfileRunDto[];
 }
 
+/** GET /worlds/:worldId/seasons/run-index — what a finished run's stats hub is built from. */
+export interface RunIndexDto {
+  domesticSeasonId: string | null;
+  domesticCompetitionId: string | null;
+  finished: boolean;
+  userClubId: string | null;
+  /** Only once the European Final has a winner. */
+  europe: { competitionId: string; leaguePhaseSeasonId: string; knockoutSeasonIds: string[]; champion: string | null } | null;
+  january: JanuaryResultDto | null;
+  trophies: TrophyKey[];
+}
+
 export interface FinalizeRunResultDto {
   trophies: TrophyKey[];
   awards: { worldId: string; seasonId: string; name: string; winnerId: string }[];

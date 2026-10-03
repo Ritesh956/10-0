@@ -8,9 +8,7 @@ import { Chip } from "../components/ui/Chip";
 import { useAuth } from "../lib/auth-context";
 import { leagueCountry, leagueLabel } from "../lib/leagues";
 import { formatRunDate, ordinal, sortCabinet, weeklyTrophy, type CabinetSort } from "../lib/profile";
-import { hasStatsHubCache } from "../lib/statsHubCache";
 import { CATEGORY_LABELS, TIER_META, TROPHY_CATALOG } from "../lib/trophies";
-import { useDraft } from "../state/DraftContext";
 
 const CATEGORY_ORDER: TrophyCategory[] = ["season", "awards", "squad", "career", "europe", "modes", "fun"];
 
@@ -158,7 +156,6 @@ function RunRow({ run, onOpen }: { run: ProfileRunDto; onOpen?: (() => void) | u
     page 38-0 calls /profile. Replaced the old /history list. */
 export function ProfilePage() {
   const { isAuthenticated } = useAuth();
-  const { setWorldId } = useDraft();
   const navigate = useNavigate();
   const [profile, setProfile] = useState<ProfileDto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -203,8 +200,7 @@ export function ProfilePage() {
   const streakSub = (best: number) => `best ${best}`;
 
   function openRun(worldId: string) {
-    setWorldId(worldId);
-    navigate("/season");
+    navigate(`/season?world=${encodeURIComponent(worldId)}`);
   }
 
   return (
@@ -350,7 +346,7 @@ export function ProfilePage() {
               <RunRow
                 key={run.worldId}
                 run={run}
-                onOpen={run.finished && hasStatsHubCache(run.worldId) ? () => openRun(run.worldId) : undefined}
+                onOpen={run.finished ? () => openRun(run.worldId) : undefined}
               />
             ))}
           </div>

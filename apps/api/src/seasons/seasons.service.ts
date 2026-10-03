@@ -9,7 +9,7 @@ import { WorldsService } from "../worlds/worlds.service.js";
 import { buildLineup, type DraftCandidate } from "../common/lineup.js";
 import { instantiateWorldClub } from "../common/instantiate-world-club.js";
 import { generateDoubleRoundRobin } from "./round-robin.js";
-import { computeManagerStats, findGoalkeeperId } from "./season-stats.logic.js";
+import { computeManagerStats } from "./season-stats.logic.js";
 import {
   CAREER_TROPHIES,
   evaluateCareerTrophies,
@@ -254,7 +254,7 @@ export class SeasonsService {
       this.prisma.worldClub.findMany({ where: { worldId } }),
       this.prisma.fixture.findMany({
         where: { worldId, seasonId, status: "COMPLETED" },
-        include: { match: true },
+        include: { match: { select: { homeScore: true, awayScore: true } } },
       }),
     ]);
 
@@ -338,7 +338,17 @@ export class SeasonsService {
         ...(clubId ? { OR: [{ homeClubId: clubId }, { awayClubId: clubId }] } : {}),
       },
       orderBy: { matchday: "asc" },
-      include: { match: { include: { events: { orderBy: { seq: "asc" } } } } },
+      // Scores + goal events only — Match.setup (both full squads as JSON) is by far the biggest
+      // column and isn't needed here; loading it for 380 matches made this take ~10s on Neon.
+      include: {
+        match: {
+          select: {
+            homeScore: true,
+            awayScore: true,
+            events: { where: { type: "goal" }, orderBy: { seq: "asc" }, select: { type: true, minute: true, payload: true } },
+          },
+        },
+      },
     });
 
     const playerIds = new Set<string>();
@@ -402,7 +412,15 @@ export class SeasonsService {
         status: "COMPLETED",
         OR: [{ homeClubId: clubId }, { awayClubId: clubId }],
       },
-      include: { match: { include: { playerStats: true } } },
+      include: {
+        match: {
+          select: {
+            homeScore: true,
+            awayScore: true,
+            playerStats: { select: { playerId: true, minutesPlayed: true, goals: true, assists: true } },
+          },
+        },
+      },
     });
 
     let goalsFor = 0;
@@ -460,8 +478,8 @@ export class SeasonsService {
    * across every completed fixture in every season under this competition — powers the Golden Boot,
    * Playmaker, Golden Glove, MVP, and top-scorers list on the post-season stats page. `mvp` requires
    * a minimum match count (a quarter of whatever the most-used player logged) so a single standout
-   * cameo can't win it. `goldenGlove` is attributed to a named goalkeeper (parsed from each clean
-   * sheet's Match.setup, see findGoalkeeperId) rather than just the club, so all four awards read as
+   * cameo can't win it. `goldenGlove` is attributed to a named goalkeeper (the GK slot of each clean
+   * sheet's Match.setup, extracted in SQL) rather than just the club, so all four awards read as
    * consistently "a player won this" rather than three player awards and one club-level one.
    */
   async getCompetitionStats(worldId: string, competitionId: string, userId: string) {
@@ -473,34 +491,52 @@ export class SeasonsService {
       return { topScorers: [], goldenBoot: undefined, mvp: undefined, playmaker: undefined, goldenGlove: undefined };
     }
 
-    const fixtures = await this.prisma.fixture.findMany({
-      where: { worldId, seasonId: { in: seasonIds }, status: "COMPLETED" },
-      include: { match: { include: { playerStats: true } } },
-    });
+    // Aggregated in the database (one row per player) rather than loading ~11k PlayerMatchStat rows
+    // and every match's full Match.setup JSON — that took ~10s per call on Neon. A player who never
+    // got on the pitch can't score or assist, so filtering to minutesPlayed > 0 loses nothing.
+    const [grouped, fixtures] = await Promise.all([
+      this.prisma.playerMatchStat.groupBy({
+        by: ["playerId"],
+        where: { minutesPlayed: { gt: 0 }, match: { fixture: { worldId, seasonId: { in: seasonIds }, status: "COMPLETED" } } },
+        _sum: { goals: true, assists: true, rating: true },
+        _count: { _all: true },
+      }),
+      this.prisma.fixture.findMany({
+        where: { worldId, seasonId: { in: seasonIds }, status: "COMPLETED" },
+        select: { match: { select: { id: true, homeScore: true, awayScore: true } } },
+      }),
+    ]);
+    const totals = new Map(
+      grouped.map((g) => [
+        g.playerId,
+        {
+          goals: g._sum.goals ?? 0,
+          assists: g._sum.assists ?? 0,
+          matchesPlayed: g._count._all,
+          ratingSum: g._sum.rating ?? 0,
+        },
+      ]),
+    );
 
-    const totals = new Map<string, { goals: number; assists: number; matchesPlayed: number; ratingSum: number }>();
+    // A clean sheet goes to the keeper who started it — the GK slot of that side's squad snapshot in
+    // Match.setup. Postgres extracts just that id, so the (large) setup JSON never leaves the database.
+    const cleanSheetMatchIds = fixtures
+      .map((f) => f.match)
+      .filter((m): m is NonNullable<typeof m> => m !== null && (m.homeScore === 0 || m.awayScore === 0))
+      .map((m) => m.id);
+    const keepers = cleanSheetMatchIds.length
+      ? await this.prisma.$queryRaw<{ homeScore: number; awayScore: number; homeGk: string | null; awayGk: string | null }[]>`
+          SELECT m."homeScore", m."awayScore",
+            (SELECT s->>'playerId' FROM jsonb_array_elements(m.setup->'home'->'squad'->'startingXI') s
+              WHERE s->>'position' = 'GK' LIMIT 1) AS "homeGk",
+            (SELECT s->>'playerId' FROM jsonb_array_elements(m.setup->'away'->'squad'->'startingXI') s
+              WHERE s->>'position' = 'GK' LIMIT 1) AS "awayGk"
+          FROM matches m WHERE m.id = ANY(${cleanSheetMatchIds})`
+      : [];
     const cleanSheetsByKeeper = new Map<string, number>();
-    for (const fixture of fixtures) {
-      if (!fixture.match) continue;
-      for (const stat of fixture.match.playerStats) {
-        const entry = totals.get(stat.playerId) ?? { goals: 0, assists: 0, matchesPlayed: 0, ratingSum: 0 };
-        entry.goals += stat.goals;
-        entry.assists += stat.assists;
-        if (stat.minutesPlayed > 0) {
-          entry.matchesPlayed += 1;
-          entry.ratingSum += stat.rating;
-        }
-        totals.set(stat.playerId, entry);
-      }
-
-      if (fixture.match.awayScore === 0) {
-        const gkId = findGoalkeeperId(fixture.match.setup, fixture.homeClubId);
-        if (gkId) cleanSheetsByKeeper.set(gkId, (cleanSheetsByKeeper.get(gkId) ?? 0) + 1);
-      }
-      if (fixture.match.homeScore === 0) {
-        const gkId = findGoalkeeperId(fixture.match.setup, fixture.awayClubId);
-        if (gkId) cleanSheetsByKeeper.set(gkId, (cleanSheetsByKeeper.get(gkId) ?? 0) + 1);
-      }
+    for (const k of keepers) {
+      if (k.awayScore === 0 && k.homeGk) cleanSheetsByKeeper.set(k.homeGk, (cleanSheetsByKeeper.get(k.homeGk) ?? 0) + 1);
+      if (k.homeScore === 0 && k.awayGk) cleanSheetsByKeeper.set(k.awayGk, (cleanSheetsByKeeper.get(k.awayGk) ?? 0) + 1);
     }
 
     const playerIds = [...totals.keys()];
@@ -578,7 +614,7 @@ export class SeasonsService {
         OR: [{ homeClubId: clubId }, { awayClubId: clubId }],
       },
       orderBy: { matchday: "asc" },
-      include: { match: true },
+      include: { match: { select: { homeScore: true, awayScore: true } } },
     });
 
     const results = fixtures
@@ -736,6 +772,72 @@ export class SeasonsService {
     const careerTrophies = await this.awardCareerTrophies(worldId, userId);
 
     return { trophies: [...trophies, ...careerTrophies], awards: awardRows, records: recordRows };
+  }
+
+  /** Everything the web app needs to rebuild a finished run's stats hub from the server (the
+      results screen otherwise only comes back from this browser's localStorage cache): which
+      seasons are the domestic league and each European stage, the January deal, and the trophies.
+      Europe is reported only once its Final has a winner — a half-played campaign shows the league. */
+  async getRunIndex(worldId: string, userId: string) {
+    const world = await this.worlds.getWorld(worldId, userId);
+    const userClub = world.clubs.find((c) => c.managedByUserId === userId) ?? null;
+    const [seasons, finalTie, achievements] = await Promise.all([
+      this.prisma.season.findMany({ where: { worldId }, include: { competition: true }, orderBy: { createdAt: "asc" } }),
+      this.prisma.knockoutTie.findFirst({ where: { worldId, round: "FINAL", winnerClubId: { not: null } } }),
+      this.prisma.achievement.findMany({ where: { worldId, userId }, select: { key: true } }),
+    ]);
+
+    const domestic = seasons.find((s) => s.competition.type === "LEAGUE") ?? null;
+    const continental = seasons.filter((s) => s.competition.type === "CONTINENTAL");
+    const europe =
+      finalTie && continental.length > 0
+        ? {
+            competitionId: continental[0]!.competitionId,
+            leaguePhaseSeasonId: continental[0]!.id,
+            knockoutSeasonIds: continental.slice(1).map((s) => s.id),
+            champion: finalTie.winnerClubId,
+          }
+        : null;
+
+    let january = null;
+    if (domestic && userClub) {
+      const event = await this.prisma.januaryEvent.findUnique({
+        where: { seasonId_clubId: { seasonId: domestic.id, clubId: userClub.id } },
+      });
+      if (event) {
+        const inPlayer = await this.prisma.worldPlayer.findUnique({
+          where: { id: event.inPlayerId },
+          include: { refPlayerSeason: { include: { clubSeason: { include: { club: true } } } } },
+        });
+        const slot = ((userClub.lineup as { position: string; playerId: string }[] | null) ?? []).find(
+          (s) => s.playerId === event.inPlayerId,
+        );
+        const position = slot?.position ?? inPlayer?.positions[0] ?? "";
+        january = {
+          eventType: event.eventType,
+          outPlayer: { id: event.outPlayerId, name: event.outPlayerName, overall: event.outOverall, position },
+          inPlayer: {
+            id: event.inPlayerId,
+            name: event.inPlayerName,
+            overall: event.inOverall,
+            position,
+            clubName: inPlayer?.refPlayerSeason.clubSeason.club.name ?? "",
+            seasonYear: inPlayer?.refPlayerSeason.seasonYear ?? 0,
+          },
+          delta: event.delta,
+        };
+      }
+    }
+
+    return {
+      domesticSeasonId: domestic?.id ?? null,
+      domesticCompetitionId: domestic?.competitionId ?? null,
+      finished: domestic?.status === "COMPLETED",
+      userClubId: userClub?.id ?? null,
+      europe,
+      january,
+      trophies: achievements.map((a) => a.key),
+    };
   }
 
   /** Career trophies the user's finished runs have now reached, persisted against this world —

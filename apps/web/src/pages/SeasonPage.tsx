@@ -38,7 +38,7 @@ import { staggerContainer, staggerItem, staggerItemBounce } from "../lib/motion"
 import { buildSeasonNarrative } from "../lib/seasonNarrative";
 import { worldClubLabel } from "../lib/clubNames";
 import { leagueLabel } from "../lib/leagues";
-import { statsHubCacheKey } from "../lib/statsHubCache";
+import { loadStatsHubCache, rebuildStatsHub, saveStatsHubCache } from "../lib/statsHubCache";
 import { EuropeShareCard } from "../components/EuropeShareCard";
 import { squadTierName, TIER_TEXT } from "../lib/squadRatings";
 import { useDraft } from "../state/DraftContext";
@@ -69,58 +69,6 @@ async function pollUntilCompleted(worldId: string, seasonId: string): Promise<vo
     const season = await api.getSeason(worldId, seasonId);
     if (season.status === "COMPLETED") return;
     await new Promise((resolve) => setTimeout(resolve, 1200));
-  }
-}
-
-interface CachedStatsHub {
-  standings: StandingsDto;
-  teamStats: TeamStatsDto | null;
-  leagueCompetitionStats: CompetitionStatsDto | null;
-  qualified: boolean;
-  europeLeagueStandings: StandingsDto | null;
-  europeCompetitionStats: CompetitionStatsDto | null;
-  europeTeamStats: TeamStatsDto | null;
-  allTies: KnockoutTieDto[];
-  champion: string | null;
-  summary: SummaryDto;
-  /** Optional for backward compat with cache entries saved before the persistent match log existed. */
-  domesticMatches?: MatchSummaryDto[];
-  europeMatches?: MatchSummaryDto[];
-  /** null = January was off, or the user declined the gamble. Optional for backward compat with
-      cache entries saved before the January Transfer Window existed. Feeds the season narrative's
-      January recap lines and the two-way "Share your January" card. */
-  januaryOutcome?: JanuaryResultDto | null;
-  /** Domestic-only (38-0's own manager stat card has no per-competition split) — null for a
-      manager-less club or a world with no userClub. Optional for backward compat. */
-  leagueManagerStats?: ManagerStatsDto | null;
-  /** Trophies unlocked this run (SeasonsService.finalizeRun's persisted Achievement rows echoed
-      straight back). Optional for backward compat with cache entries saved before Phase 5. */
-  trophies?: TrophyKey[];
-  /** The domestic Season's id — needed to submit this run to the leaderboard (Phase 6), which is
-      scoped to a season the same way finalizeRun is. Optional for backward compat; a cache entry
-      saved before Phase 6 just won't offer the submit block until the next fresh run. */
-  domesticSeasonId?: string;
-}
-
-// A finished run's standings/stats are cached per-world so leaving /season and coming back (or
-// just reloading) lands straight back on the stats hub instead of re-running the whole animated
-// pipeline for data that hasn't changed — "easy to navigate anytime unless you start a new run"
-// falls out naturally, since a new draft always gets a new worldId and finds no cache entry.
-function saveStatsHubCache(worldId: string, data: CachedStatsHub): void {
-  try {
-    localStorage.setItem(statsHubCacheKey(worldId), JSON.stringify(data));
-  } catch {
-    // Storage full or unavailable — not worth failing the season over, the user just won't get
-    // the fast-path back to this screen next time.
-  }
-}
-function loadStatsHubCache(worldId: string): CachedStatsHub | null {
-  const raw = localStorage.getItem(statsHubCacheKey(worldId));
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as CachedStatsHub;
-  } catch {
-    return null;
   }
 }
 
@@ -160,7 +108,9 @@ export function SeasonPage() {
   // Set by DraftPage's "Simulate Season" — that press starts the season; no second click here.
   const autoStart = Boolean((location.state as { autoStart?: boolean } | null)?.autoStart);
   const autoStartedRef = useRef(false);
-  const { worldId, config } = useDraft();
+  const { worldId: draftWorldId, config } = useDraft();
+  // "/season?world=<id>" opens a past run (from the profile) without replacing the current draft's world.
+  const worldId = new URLSearchParams(location.search).get("world") ?? draftWorldId;
 
   const [world, setWorld] = useState<WorldDto | null>(null);
   const [season, setSeason] = useState<SeasonDto | null>(null);
@@ -309,9 +259,17 @@ export function SeasonPage() {
     }
     void api
       .getWorld(worldId)
-      .then((w) => {
+      .then(async (w) => {
+        let cached = loadStatsHubCache(worldId);
+        // Not cached in this browser (another device, cleared storage, opened from the profile):
+        // a world that already has a season may be a finished run — rebuild its hub from the server.
+        // The world is set only afterwards, so the page stays on "Loading…" rather than flashing
+        // the pre-season screen.
+        if (!cached && w.clubs.length > 1) {
+          cached = await rebuildStatsHub(worldId).catch(() => null);
+          if (cached) saveStatsHubCache(worldId, cached);
+        }
         setWorld(w);
-        const cached = loadStatsHubCache(worldId);
         if (!cached) return;
         setStandings(cached.standings);
         setTeamStats(cached.teamStats);

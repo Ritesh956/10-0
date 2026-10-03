@@ -150,7 +150,7 @@ export class EuropeService {
   ): Promise<(T & { score: ReturnType<typeof aggregateTieScore> })[]> {
     const legIds = ties.flatMap((t) => [t.firstLegFixtureId, t.secondLegFixtureId]).filter((id): id is string => id !== null);
     const fixtures = legIds.length
-      ? await this.prisma.fixture.findMany({ where: { id: { in: legIds } }, include: { match: true } })
+      ? await this.prisma.fixture.findMany({ where: { id: { in: legIds } }, include: { match: { select: { homeScore: true, awayScore: true } } } })
       : [];
     const legById = new Map<string, PlayedLeg>();
     for (const f of fixtures) {
@@ -229,7 +229,7 @@ export class EuropeService {
   /** Winner-take-all resolution for one tie: aggregate score, falling back to a penalty shootout if level. */
   private async resolveTie(tie: { id: string; homeClubId: string; awayClubId: string; firstLegFixtureId: string | null; secondLegFixtureId: string | null }) {
     const legIds = [tie.firstLegFixtureId, tie.secondLegFixtureId].filter((id): id is string => id !== null);
-    const legs = await this.prisma.fixture.findMany({ where: { id: { in: legIds } }, include: { match: true } });
+    const legs = await this.prisma.fixture.findMany({ where: { id: { in: legIds } }, include: { match: { select: { homeScore: true, awayScore: true } } } });
 
     let homeAgg = 0;
     let awayAgg = 0;
@@ -276,7 +276,7 @@ export class EuropeService {
   private async computeStandings(worldId: string, seasonId: string) {
     const fixtures = await this.prisma.fixture.findMany({
       where: { worldId, seasonId },
-      include: { match: true },
+      include: { match: { select: { homeScore: true, awayScore: true } } },
     });
     const clubIds = [...new Set(fixtures.flatMap((f) => [f.homeClubId, f.awayClubId]))];
     const results: CompletedResult[] = fixtures

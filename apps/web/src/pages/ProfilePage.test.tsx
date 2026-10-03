@@ -7,8 +7,11 @@ const api = vi.hoisted(() => ({ getProfile: vi.fn() }));
 vi.mock("../api/client", () => ({ api }));
 const { useAuthMock } = vi.hoisted(() => ({ useAuthMock: vi.fn() }));
 vi.mock("../lib/auth-context", () => ({ useAuth: useAuthMock }));
-const setWorldId = vi.fn();
-vi.mock("../state/DraftContext", () => ({ useDraft: () => ({ setWorldId }) }));
+const navigateMock = vi.fn();
+vi.mock("react-router-dom", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router-dom")>()),
+  useNavigate: () => navigateMock,
+}));
 
 import { ProfilePage } from "./ProfilePage";
 
@@ -138,8 +141,7 @@ describe("ProfilePage", () => {
     expect(queryByTestId("trophy-champions")).toBeNull();
   });
 
-  it("links a finished run back to its stats hub when this browser has it cached", async () => {
-    localStorage.setItem("futbol_stats_hub_w1", "{}");
+  it("links each finished run (not an in-progress one) to its stats hub", async () => {
     useAuthMock.mockReturnValue({ isAuthenticated: true, user: { displayName: "Tester", isGuest: false } });
     api.getProfile.mockResolvedValue(profile());
     const { findAllByText } = renderPage();
@@ -147,6 +149,6 @@ describe("ProfilePage", () => {
     const links = await findAllByText(/view season/i);
     expect(links).toHaveLength(1);
     fireEvent.click(links[0]!);
-    expect(setWorldId).toHaveBeenCalledWith("w1");
+    expect(navigateMock).toHaveBeenCalledWith("/season?world=w1");
   });
 });
