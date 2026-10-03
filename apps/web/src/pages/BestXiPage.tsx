@@ -1,4 +1,7 @@
+import { Link } from "react-router-dom";
+import { CountryFlag } from "../components/CountryFlag";
 import { SiteFooter } from "../components/SiteFooter";
+import { LEAGUE_SLUGS, leagueCountry, leagueLabel } from "../lib/leagues";
 
 interface Legend {
   name: string;
@@ -40,6 +43,19 @@ export function BestXiPage() {
             own editorial shortlist, not an official ranking — see what you can draw and build around.
           </p>
         </div>
+
+        <nav aria-label="Best XI by league" className="flex flex-wrap justify-center gap-2">
+          {LEAGUE_SLUGS.map((l) => (
+            <Link
+              key={l.slug}
+              to={`/best-xi/${l.slug}`}
+              className="notch-sm flex items-center gap-2 border border-ink-700 px-3 py-1.5 text-sm text-smoke-400 hover:border-mint-500/60 hover:text-paper"
+            >
+              <CountryFlag country={leagueCountry(l.leagueId)} />
+              {leagueLabel(l.leagueId)}
+            </Link>
+          ))}
+        </nav>
 
         <div className="grid gap-3 sm:grid-cols-2">
           {LEGENDS.map((legend, i) => {

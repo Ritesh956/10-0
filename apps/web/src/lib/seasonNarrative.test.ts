@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { JanuaryResultDto, MatchSummaryDto, SquadPositionOverallDto, TeamStatsDto } from "../api/types";
 import { computePreseasonOdds } from "./preseasonOdds";
+import { surname } from "./positionColors";
 import {
   biggestWinText,
   buildSeasonNarrative,
@@ -10,7 +11,6 @@ import {
   groupSquadUnits,
   januaryLines,
   managerClosingLine,
-  surname,
   standoutQuote,
   unitTierLabel,
 } from "./seasonNarrative";

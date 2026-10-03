@@ -50,6 +50,25 @@ export interface PlayerSeasonDto {
   clubSeason: { club: { id: string; name: string } };
 }
 
+/** GET /catalog/best-xi?leagueId= — one team-sheet slot of a league's top-rated XI. */
+export interface BestXiPlayerDto {
+  playerSeasonId: string;
+  playerId: string;
+  name: string;
+  nationality: string;
+  photoUrl: string | null;
+  clubName: string;
+  seasonYear: number;
+  overall: number;
+  position: string;
+}
+
+export interface BestXiSlotDto {
+  slot: string;
+  pick: BestXiPlayerDto | null;
+  alternatives: BestXiPlayerDto[];
+}
+
 export interface ManagerDto {
   id: string;
   name: string;

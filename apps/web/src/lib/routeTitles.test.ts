@@ -7,6 +7,8 @@ describe("routeTitle", () => {
     expect(routeTitle("/daily")).toBe("Daily Challenge · Futbol");
     expect(routeTitle("/multiplayer/live/abc")).toBe("Live draft · Futbol");
     expect(routeTitle("/multiplayer/league/abc")).toBe("League · Futbol");
+    expect(routeTitle("/best-xi/serie-a")).toBe("Greatest Serie A XI · Futbol");
+    expect(routeTitle("/best-xi/nope")).toBe("Page not found · Futbol");
     expect(routeTitle("/nope")).toBe("Page not found · Futbol");
   });
 });

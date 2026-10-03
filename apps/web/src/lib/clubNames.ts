@@ -9,6 +9,7 @@ const OVERRIDES: Record<string, string> = {
   "1. Fußballclub Heidenheim 1846": "Heidenheim",
   "Associazione Sportiva Roma": "Roma",
   "Società Sportiva Lazio": "Lazio",
+  "Società Sportiva Lazio S.p.A.": "Lazio",
   "Real Betis Balompié": "Real Betis",
   "Wolverhampton Wanderers": "Wolves",
   "Brighton & Hove Albion": "Brighton",
@@ -32,7 +33,7 @@ const OVERRIDES: Record<string, string> = {
     on purpose: "AC Milan" is the everyday name. */
 const PREFIX = /^(?:1\.\s?(?:FC|FSV)|FC|AFC|SSC|US|ACF|RCD|RC|CA|UD|CD|SD|SV|SC|VfL|LOSC|OGC|AJ|AS)\s+/;
 /** Trailing legal-form tokens and founding years ("Liverpool FC", "Udinese Calcio", "Mainz 05"). */
-const SUFFIX = /\s+(?:FC|F\.C\.|CF|AFC|CFC|BC|HSC|SCO|AC|Calcio|\d{2,4})$/;
+const SUFFIX = /\s+(?:FC|F\.C\.|CF|AFC|CFC|BC|HSC|SCO|AC|Calcio|S\.p\.A\.|\d{2,4})$/;
 
 export function clubDisplayName(name: string): string {
   const override = OVERRIDES[name];

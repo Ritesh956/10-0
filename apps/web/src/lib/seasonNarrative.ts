@@ -3,6 +3,7 @@ import { computePreseasonOdds } from "./preseasonOdds";
 import { POSITION_GROUP, type Position } from "./formations";
 import { summarizeForClub } from "./matchResult";
 import { formatSeason } from "./season";
+import { surname } from "./positionColors";
 
 /** Auto-generated end-of-season narrative (38-0 §6b) — a template bank keyed by signals, no LLM.
     Every signal is pure and unit-testable in isolation; buildSeasonNarrative() just assembles them
@@ -215,17 +216,6 @@ export function standoutQuote(teamStats: TeamStatsDto | null | undefined): Stand
     line: `${candidate.name} was the standout, with ${contribution} in ${candidate.matchesPlayed} appearances.`,
     aside: `"Every squad needs a player who shows up when it matters — that was ${lastName} this year."`,
   };
-}
-
-const SURNAME_PARTICLES = new Set(["de", "da", "di", "do", "dos", "das", "del", "della", "van", "von", "der", "den", "ter", "ten", "le", "la", "mac", "st.", "bin", "al", "el"]);
-
-/** How a pundit would say the name: "Kevin De Bruyne" → "De Bruyne", "Virgil van Dijk" → "van Dijk",
-    "Neymar" → "Neymar". Particles before the last word stay with it. */
-export function surname(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  let start = parts.length - 1;
-  while (start > 1 && SURNAME_PARTICLES.has(parts[start - 1]!.toLowerCase())) start--;
-  return parts.slice(start).join(" ");
 }
 
 /** Echoes the manager's own philosophy blurb + the season's shape — undefined for a manager-less club. */

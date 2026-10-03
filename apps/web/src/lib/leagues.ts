@@ -38,3 +38,22 @@ export function leagueLabel(leagueId: string | undefined): string {
 export function leagueCountry(leagueId: string | undefined): string | undefined {
   return leagueId ? LEAGUE_COUNTRY[leagueId] : undefined;
 }
+
+/** URL slugs for the per-league pages ("/best-xi/serie-a"), in the order the five leagues are listed. */
+export const LEAGUE_SLUGS: { slug: string; leagueId: string }[] = [
+  { slug: "premier-league", leagueId: "league-gb1" },
+  { slug: "laliga", leagueId: "league-es1" },
+  { slug: "serie-a", leagueId: "league-it1" },
+  { slug: "bundesliga", leagueId: "league-l1" },
+  { slug: "ligue-1", leagueId: "league-fr1" },
+];
+
+export function leagueIdForSlug(slug: string | undefined): string | undefined {
+  return LEAGUE_SLUGS.find((l) => l.slug === slug)?.leagueId;
+}
+
+/** "the Premier League" / "the Bundesliga", but plain "LaLiga", "Serie A", "Ligue 1" — for mid-sentence use. */
+export function leagueInSentence(leagueId: string | undefined): string {
+  const name = leagueLabel(leagueId);
+  return leagueId === "league-gb1" || leagueId === "league-l1" ? `the ${name}` : name;
+}

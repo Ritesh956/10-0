@@ -6,6 +6,8 @@ describe("clubDisplayName", () => {
     const cases: [string, string][] = [
       ["1. Fußballclub Heidenheim 1846", "Heidenheim"],
       ["Associazione Sportiva Roma", "Roma"],
+      ["Società Sportiva Lazio S.p.A.", "Lazio"],
+      ["Hellas Verona S.p.A.", "Hellas Verona"],
       ["Bologna Football Club 1909", "Bologna"],
       ["Liverpool FC", "Liverpool"],
       ["FC Barcelona", "Barcelona"],

@@ -19,6 +19,7 @@ import { DailyChallengePage } from "./pages/DailyChallengePage";
 import { HowItWorksPage } from "./pages/HowItWorksPage";
 import { HowToPlayPage } from "./pages/HowToPlayPage";
 import { BestXiPage } from "./pages/BestXiPage";
+import { LeagueBestXiPage } from "./pages/LeagueBestXiPage";
 import { StoryPage } from "./pages/StoryPage";
 import { LeagueJoinPage } from "./pages/LeagueJoinPage";
 import { LeagueDetailPage } from "./pages/LeagueDetailPage";
@@ -73,6 +74,7 @@ function Shell() {
               <Route path="/how-it-works" element={<HowItWorksPage />} />
               <Route path="/how-to-play" element={<HowToPlayPage />} />
               <Route path="/best-xi" element={<BestXiPage />} />
+              <Route path="/best-xi/:league" element={<LeagueBestXiPage />} />
               <Route path="/story" element={<StoryPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Routes>

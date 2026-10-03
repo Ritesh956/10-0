@@ -1,3 +1,5 @@
+import { leagueIdForSlug, leagueLabel } from "./leagues";
+
 const SITE = "Futbol";
 const DEFAULT_TITLE = "Futbol — Draft. Simulate. Go Unbeaten.";
 
@@ -25,6 +27,10 @@ const TITLES: Record<string, string> = {
 export function routeTitle(pathname: string): string {
   const exact = TITLES[pathname];
   if (exact) return exact === DEFAULT_TITLE ? exact : `${exact} · ${SITE}`;
+  if (pathname.startsWith("/best-xi/")) {
+    const league = leagueLabel(leagueIdForSlug(pathname.slice("/best-xi/".length)));
+    if (league) return `Greatest ${league} XI · ${SITE}`;
+  }
   if (pathname.startsWith("/multiplayer/live")) return `Live draft · ${SITE}`;
   if (pathname.startsWith("/multiplayer/")) return `League · ${SITE}`;
   return `Page not found · ${SITE}`;

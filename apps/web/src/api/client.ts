@@ -44,6 +44,7 @@ import type {
   ProfileDto,
   RunIndexDto,
   SiteStatsDto,
+  BestXiSlotDto,
 } from "./types";
 
 const API_BASE_URL = (import.meta.env["VITE_API_URL"] as string | undefined) ?? "http://localhost:4000";
@@ -164,6 +165,8 @@ export const api = {
 
   listPlayerSeasons: (filter: CatalogFilter) =>
     request<PlayerSeasonDto[]>(`/catalog/player-seasons?${toQuery(filter)}`),
+
+  getBestXi: (leagueId: string) => request<BestXiSlotDto[]>(`/catalog/best-xi?leagueId=${encodeURIComponent(leagueId)}`),
 
   listManagers: () => request<ManagerDto[]>("/catalog/managers"),
 
