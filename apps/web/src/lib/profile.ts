@@ -1,5 +1,6 @@
-import type { CabinetEntryDto } from "../api/types";
-import { TIER_META } from "./trophies";
+import type { CabinetEntryDto, ProfileDto } from "../api/types";
+import { SHARE_COLORS, type ShareCardModel } from "./shareImage";
+import { TIER_META, TROPHY_CATALOG } from "./trophies";
 
 export type CabinetSort = "catalogue" | "rarest" | "earned";
 
@@ -37,6 +38,41 @@ export function weeklyTrophy(cabinet: CabinetEntryDto[], date: Date): CabinetEnt
   );
   if (candidates.length === 0) return null;
   return candidates[weekIndex(date) % candidates.length] ?? null;
+}
+
+/** The "share your cabinet" image + caption: trophy count up top, career numbers in the tiles,
+    and the rarest trophies held (by how few players have them) as the lines. */
+export function cabinetShareCard(profile: ProfileDto): { card: ShareCardModel; caption: string } {
+  const earned = profile.cabinet.filter((c) => c.count > 0);
+  const rarest = sortCabinet(earned, "rarest").slice(0, 5);
+  const { stats } = profile;
+  const lines = rarest.map((c) => {
+    const meta = TROPHY_CATALOG[c.key];
+    const rarity = c.rarityPct === null ? "" : ` · ${c.rarityPct}% of players`;
+    return `${meta.name} — ${TIER_META[c.tier].label}${rarity}${c.count > 1 ? ` · ×${c.count}` : ""}`;
+  });
+  if (earned.length > rarest.length) lines.push(`+ ${earned.length - rarest.length} more`);
+
+  const legendary = earned.some((c) => c.tier === "legendary");
+  const card: ShareCardModel = {
+    kicker: "Trophy cabinet",
+    title: profile.user.displayName,
+    subtitle: `${stats.seasonsFinished} season${stats.seasonsFinished === 1 ? "" : "s"} · ${stats.titles} title${stats.titles === 1 ? "" : "s"}`,
+    headline: `${earned.length} / ${profile.cabinet.length}`,
+    headlineColor: SHARE_COLORS.amber,
+    stats: [
+      { label: "Titles", value: String(stats.titles), color: SHARE_COLORS.amber },
+      { label: "Win rate", value: stats.winRate === null ? "—" : `${Math.round(stats.winRate * 100)}%` },
+      { label: "Best pts", value: stats.bestPoints ? String(stats.bestPoints.value) : "—" },
+      { label: "Unbeaten", value: String(stats.unbeatenSeasons), color: SHARE_COLORS.mint },
+    ],
+    lines,
+    accent: SHARE_COLORS.amber,
+    ...(legendary ? { ribbon: "Legendary" } : {}),
+  };
+  const top = rarest[0] ? ` Rarest: ${TROPHY_CATALOG[rarest[0].key].name}.` : "";
+  const caption = `My Futbol trophy cabinet: ${earned.length} of ${profile.cabinet.length} trophies, ${stats.titles} title${stats.titles === 1 ? "" : "s"}.${top} Can you beat it?`;
+  return { card, caption };
 }
 
 const ORDINAL_SUFFIX = ["th", "st", "nd", "rd"];

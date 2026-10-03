@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
+import type { SiteStatsDto } from "../api/types";
 import { isRealCountry } from "../lib/leagues";
 import { formatSeason } from "../lib/season";
 import { storedDraftProgress } from "../state/DraftContext";
@@ -105,9 +106,60 @@ async function loadArchiveStats(): Promise<ArchiveStats> {
   return { leagues: leagues.length, nationalities: nations.length, clubs: clubs.length, seasons };
 }
 
+const fmt = (n: number) => n.toLocaleString("en-GB");
+
+/** Social proof straight from the database (GET /stats): what players have done so far, and the
+    current top of the leaderboard. Hidden until there's at least one finished season. */
+function LiveStrip({ stats }: { stats: SiteStatsDto }) {
+  const counters = [
+    { label: "seasons simulated", value: stats.seasonsSimulated },
+    { label: "XIs drafted", value: stats.xisDrafted },
+    { label: "matches played", value: stats.matchesPlayed },
+  ];
+  return (
+    <section className="notch mt-12 border border-ink-800 bg-ink-900/50 p-5" aria-label="Live numbers">
+      <div className="flex flex-wrap items-baseline gap-x-8 gap-y-3">
+        <span className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.3em] text-mint-400">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-mint-400" aria-hidden />
+          Live
+        </span>
+        {counters.map((c) => (
+          <p key={c.label} className="text-sm text-smoke-500">
+            <span className="font-display text-2xl font-bold text-paper">{fmt(c.value)}</span> {c.label}
+          </p>
+        ))}
+      </div>
+      {stats.topRuns.length > 0 && (
+        <div className="mt-4 border-t border-ink-800 pt-4">
+          <div className="flex items-baseline justify-between">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-smoke-600">Top of the leaderboard</p>
+            <Link to="/leaderboard" className="text-xs font-semibold uppercase tracking-wide text-mint-400 hover:text-mint-300">
+              See all &rarr;
+            </Link>
+          </div>
+          <ol className="mt-2 space-y-1">
+            {stats.topRuns.map((r, i) => (
+              <li key={`${r.handle}-${i}`} className="flex items-baseline gap-3 text-sm">
+                <span className="w-4 font-display font-bold text-smoke-500">{i + 1}</span>
+                <span className="min-w-0 flex-1 truncate text-paper">{r.handle}</span>
+                <span className="hidden text-xs text-smoke-500 sm:inline">{r.leagueName ?? ""}</span>
+                <span className="text-xs text-smoke-500">
+                  {r.won}-{r.drawn}-{r.lost}
+                </span>
+                <span className="w-14 text-right font-display font-bold text-mint-400">{r.points} pts</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function LandingPage() {
   const navigate = useNavigate();
   const [archive, setArchive] = useState<ArchiveStats | null>(null);
+  const [live, setLive] = useState<SiteStatsDto | null>(null);
   // An unfinished draft from an earlier visit (persisted by DraftContext) — offer to pick it back up.
   const [draftProgress] = useState(() => {
     const progress = storedDraftProgress();
@@ -122,6 +174,14 @@ export function LandingPage() {
       })
       .catch(() => {
         // Non-critical decoration — leave the "—" placeholders rather than show an error on the landing page.
+      });
+    api
+      .getSiteStats()
+      .then((stats) => {
+        if (!cancelled) setLive(stats);
+      })
+      .catch(() => {
+        // Same: social proof is optional, the page works without it.
       });
     return () => {
       cancelled = true;
@@ -197,6 +257,8 @@ export function LandingPage() {
             </dl>
           </div>
         </div>
+
+        {live && live.seasonsSimulated > 0 && <LiveStrip stats={live} />}
 
         <section className="mt-20">
           <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-smoke-600">Game modes</p>

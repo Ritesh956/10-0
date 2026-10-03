@@ -3,11 +3,12 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import type { CabinetEntryDto, ProfileDto, ProfileRunDto, TrophyCategory, TrophyKey } from "../api/types";
 import { CountryFlag } from "../components/CountryFlag";
+import { ShareActions } from "../components/ShareActions";
 import { Button } from "../components/ui/Button";
 import { Chip } from "../components/ui/Chip";
 import { useAuth } from "../lib/auth-context";
 import { leagueCountry, leagueLabel } from "../lib/leagues";
-import { formatRunDate, ordinal, sortCabinet, weeklyTrophy, type CabinetSort } from "../lib/profile";
+import { cabinetShareCard, formatRunDate, ordinal, sortCabinet, weeklyTrophy, type CabinetSort } from "../lib/profile";
 import { CATEGORY_LABELS, TIER_META, TROPHY_CATALOG } from "../lib/trophies";
 
 const CATEGORY_ORDER: TrophyCategory[] = ["season", "awards", "squad", "career", "europe", "modes", "fun"];
@@ -161,6 +162,7 @@ export function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [category, setCategory] = useState<TrophyCategory | "all">("all");
   const [sort, setSort] = useState<CabinetSort>("catalogue");
+  const [sharing, setSharing] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -308,7 +310,20 @@ export function ProfilePage() {
       )}
 
       <section className="space-y-3">
-        <SectionTitle aside={`${earnedCount} / ${profile.cabinet.length}`}>Trophy cabinet</SectionTitle>
+        <SectionTitle
+          aside={
+            earnedCount > 0 ? (
+              <button onClick={() => setSharing((v) => !v)} className="font-semibold uppercase tracking-wide text-mint-400 hover:text-mint-300">
+                {sharing ? "Hide share" : `Share your cabinet (${earnedCount} / ${profile.cabinet.length})`}
+              </button>
+            ) : (
+              `${earnedCount} / ${profile.cabinet.length}`
+            )
+          }
+        >
+          Trophy cabinet
+        </SectionTitle>
+        {sharing && <ShareActions {...cabinetShareCard(profile)} fileName="futbol-trophy-cabinet.png" />}
         <div className="flex flex-wrap gap-2">
           <Chip active={category === "all"} onClick={() => setCategory("all")}>
             All

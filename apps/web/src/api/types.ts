@@ -454,6 +454,15 @@ export interface ProfileDto {
   runs: ProfileRunDto[];
 }
 
+/** GET /stats — public counters for the landing page. */
+export interface SiteStatsDto {
+  seasonsSimulated: number;
+  xisDrafted: number;
+  matchesPlayed: number;
+  invincibles: number;
+  topRuns: { handle: string; points: number; won: number; drawn: number; lost: number; leagueName: string | null }[];
+}
+
 /** GET /worlds/:worldId/seasons/run-index — what a finished run's stats hub is built from. */
 export interface RunIndexDto {
   domesticSeasonId: string | null;

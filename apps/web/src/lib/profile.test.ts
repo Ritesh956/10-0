@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { CabinetEntryDto } from "../api/types";
-import { ordinal, sortCabinet, weekIndex, weeklyTrophy } from "./profile";
+import type { CabinetEntryDto, ProfileDto } from "../api/types";
+import { cabinetShareCard, ordinal, sortCabinet, weekIndex, weeklyTrophy } from "./profile";
 
 function entry(overrides: Partial<CabinetEntryDto>): CabinetEntryDto {
   return {
@@ -70,5 +70,38 @@ describe("ordinal", () => {
     [21, "21st"],
   ])("%i → %s", (n, s) => {
     expect(ordinal(n)).toBe(s);
+  });
+});
+
+describe("cabinetShareCard", () => {
+  const profile = (cabinet: CabinetEntryDto[]) =>
+    ({
+      user: { displayName: "Tester", isGuest: false, memberSince: "2026-10-01" },
+      stats: { seasonsFinished: 3, titles: 2, winRate: 0.6, bestPoints: { value: 88 }, unbeatenSeasons: 1 },
+      cabinet,
+    }) as unknown as ProfileDto;
+
+  it("leads with the trophy count and lists the rarest held trophies", () => {
+    const cabinet = [
+      entry({ key: "champions", count: 2, rarityPct: 40 }),
+      entry({ key: "invincible", tier: "legendary", count: 1, rarityPct: 0.5 }),
+      entry({ key: "united-nations", tier: "epic", rarityPct: 1 }),
+    ];
+    const { card, caption } = cabinetShareCard(profile(cabinet));
+    expect(card.headline).toBe("2 / 3");
+    expect(card.lines[0]).toContain("The Invincible");
+    expect(card.lines[1]).toContain("×2");
+    expect(card.lines.join(" ")).not.toContain("United Nations");
+    expect(card.ribbon).toBe("Legendary");
+    expect(caption).toContain("2 of 3 trophies");
+    expect(caption).toContain("Rarest: The Invincible");
+  });
+
+  it("summarises the overflow beyond five trophies", () => {
+    const keys = ["champions", "top-four", "golden-boot", "playmaker", "mvp", "golden-glove", "regular"] as const;
+    const { card } = cabinetShareCard(profile(keys.map((key) => entry({ key, count: 1 }))));
+    expect(card.lines).toHaveLength(6);
+    expect(card.lines[5]).toBe("+ 2 more");
+    expect(card.ribbon).toBeUndefined();
   });
 });

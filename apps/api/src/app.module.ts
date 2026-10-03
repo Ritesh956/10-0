@@ -14,6 +14,7 @@ import { DailyModule } from "./daily/daily.module.js";
 import { LeaguesModule } from "./leagues/leagues.module.js";
 import { LiveDraftModule } from "./live-draft/live-draft.module.js";
 import { ProfileModule } from "./profile/profile.module.js";
+import { SiteModule } from "./site/site.module.js";
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { ProfileModule } from "./profile/profile.module.js";
     LeaguesModule,
     LiveDraftModule,
     ProfileModule,
+    SiteModule,
   ],
 })
 export class AppModule {}

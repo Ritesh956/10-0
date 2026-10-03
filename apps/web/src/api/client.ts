@@ -43,6 +43,7 @@ import type {
   WorldDto,
   ProfileDto,
   RunIndexDto,
+  SiteStatsDto,
 } from "./types";
 
 const API_BASE_URL = (import.meta.env["VITE_API_URL"] as string | undefined) ?? "http://localhost:4000";
@@ -285,6 +286,8 @@ export const api = {
     request<FinalizeRunResultDto>(`/worlds/${worldId}/seasons/${seasonId}/finalize`, { method: "POST" }),
 
   getProfile: () => request<ProfileDto>("/profile"),
+
+  getSiteStats: () => request<SiteStatsDto>("/stats"),
 
   getRunIndex: (worldId: string) => request<RunIndexDto>(`/worlds/${worldId}/seasons/run-index`),
 
