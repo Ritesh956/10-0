@@ -70,6 +70,9 @@ export function positionLabel(position: Position): string {
  * can drop into a CDM double-pivot or push into a CAM role, etc). Always
  * includes the position itself. Used to decide whether a drafted player is
  * eligible for a pitch slot beyond an exact position match.
+ * MUST stay identical to apps/api/src/common/lineup.ts POSITION_COMPATIBILITY — the server
+ * re-validates every submitted lineup against that copy and rejects any slot this one allowed
+ * but it doesn't.
  */
 export const POSITION_COMPATIBILITY: Record<Position, Position[]> = {
   GK: ["GK"],

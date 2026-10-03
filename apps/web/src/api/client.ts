@@ -167,10 +167,11 @@ export const api = {
     formation: string,
     refPlayerSeasonIds: string[],
     refManagerId?: string,
+    lineup?: { position: string; refPlayerSeasonId: string }[],
   ) =>
     request(`/worlds/${worldId}/draft/fantasy`, {
       method: "POST",
-      body: JSON.stringify({ name, formation, refPlayerSeasonIds, refManagerId }),
+      body: JSON.stringify({ name, formation, refPlayerSeasonIds, refManagerId, lineup }),
     }),
 
   createSeason: (worldId: string, competitionName: string, opts: { size?: number; leagueId?: string | undefined }) =>

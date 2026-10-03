@@ -433,7 +433,20 @@ export function DraftPage() {
       });
       setWorldId(world.id);
       const refPlayerSeasonIds = slots.map((_, i) => picks[i]?.id).filter((id): id is string => Boolean(id));
-      await api.draftFantasy(world.id, effectiveSquadName, config.formation, refPlayerSeasonIds, managerPick?.id);
+      // Send the exact slot each player was placed in (incl. "Move a player") — the server stores
+      // this lineup as-is instead of re-deriving one from players' primary positions.
+      const lineup = slots.flatMap((slot, i) => {
+        const pick = picks[i];
+        return pick ? [{ position: slot.position, refPlayerSeasonId: pick.id }] : [];
+      });
+      await api.draftFantasy(
+        world.id,
+        effectiveSquadName,
+        config.formation,
+        refPlayerSeasonIds,
+        managerPick?.id,
+        lineup,
+      );
       navigate("/season");
     } catch (err) {
       // A 24h-old token can still be present locally (isAuthenticated only checks that) while the
