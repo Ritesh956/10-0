@@ -21,8 +21,10 @@ const NAV_LINKS: { to: string; label: MessageKey }[] = [
 const linkClass = ({ isActive }: { isActive: boolean }) => `transition hover:text-paper ${isActive ? "text-paper" : ""}`;
 
 /** One compact row on every screen size (it used to wrap into three rows — ~30% of a phone screen).
-    From `md` up the mode links sit inline; below that they live in a menu sheet behind a single
-    button, next to a "Play" shortcut that's always visible. */
+    Once the inline links fit they sit in the row; below that they live in a menu sheet behind a
+    single button, next to a "Play" shortcut that's always visible. A signed-in row carries more
+    (Profile, Save progress, name, Sign out), so it needs `xl` where a signed-out one fits at `lg`;
+    switching earlier made the links wrap into a taller header. */
 export function SiteHeader({ onRequestSaveProgress }: Props) {
   const { isAuthenticated, user, logout } = useAuth();
   const { t } = useT();
@@ -32,12 +34,17 @@ export function SiteHeader({ onRequestSaveProgress }: Props) {
 
   useEffect(() => setMenuOpen(false), [location.pathname]);
 
+  // Tailwind needs these as whole literal strings, hence the two spelled-out variants.
+  const bp = isAuthenticated
+    ? { navShow: "xl:flex", sideMargin: "xl:ml-0", hideAt: "xl:hidden" }
+    : { navShow: "lg:flex", sideMargin: "lg:ml-0", hideAt: "lg:hidden" };
+
   return (
     <header className="sticky top-0 z-30 border-b border-ink-800 bg-ink-950/90 backdrop-blur">
       {/* Thin four-color signature stripe tying the header to the accent tokens (mint, teal, plum,
           crimson). A true 4-stop gradient needs an arbitrary value — Tailwind's "via" takes one stop. */}
       <div className="h-[3px] bg-[linear-gradient(to_right,#1fbf75,#2f8fb0,#9c4f7a,#e5484d)]" />
-      <div className="mx-auto flex max-w-5xl items-center gap-4 px-4 py-2.5 sm:px-6 sm:py-3">
+      <div className="mx-auto flex max-w-7xl items-center gap-4 whitespace-nowrap px-4 py-2.5 sm:px-6 sm:py-3">
         <Link to="/" className="flex shrink-0 items-center gap-2">
           <span className="notch-sm flex h-7 w-7 items-center justify-center border-2 border-mint-500 bg-ink-900 font-display text-xs font-bold text-mint-400 shadow-[0_0_10px_-2px_rgba(31,191,117,0.6)]">
             XI
@@ -45,7 +52,7 @@ export function SiteHeader({ onRequestSaveProgress }: Props) {
           <span className="font-display text-sm font-bold uppercase tracking-[0.2em] text-paper">Futbol</span>
         </Link>
 
-        <nav className="hidden flex-1 items-center gap-5 text-sm text-smoke-400 md:flex">
+        <nav className={`hidden flex-1 items-center gap-5 text-sm text-smoke-400 ${bp.navShow}`}>
           {NAV_LINKS.map((l) => (
             <NavLink key={l.to} to={l.to} className={linkClass}>
               {t(l.label)}
@@ -58,8 +65,8 @@ export function SiteHeader({ onRequestSaveProgress }: Props) {
           )}
         </nav>
 
-        <div className="ml-auto flex items-center gap-2 md:ml-0">
-          <div className="hidden items-center gap-3 text-sm text-smoke-400 md:flex">
+        <div className={`ml-auto flex items-center gap-2 ${bp.sideMargin}`}>
+          <div className={`hidden items-center gap-3 text-sm text-smoke-400 ${bp.navShow}`}>
             <LanguageSwitcher />
             {canInstall && (
               <button onClick={() => void install()} className="transition hover:text-paper">
@@ -101,7 +108,7 @@ export function SiteHeader({ onRequestSaveProgress }: Props) {
             aria-expanded={menuOpen}
             aria-controls="site-menu"
             onClick={() => setMenuOpen((o) => !o)}
-            className="notch-sm flex h-8 w-8 items-center justify-center border border-ink-800 text-paper md:hidden"
+            className={`notch-sm flex h-8 w-8 items-center justify-center border border-ink-800 text-paper ${bp.hideAt}`}
           >
             <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
               {menuOpen ? <path d="M5 5l10 10M15 5L5 15" /> : <path d="M3 6h14M3 10h14M3 14h14" />}
@@ -111,7 +118,7 @@ export function SiteHeader({ onRequestSaveProgress }: Props) {
       </div>
 
       {menuOpen && (
-        <nav id="site-menu" className="border-t border-ink-800 bg-ink-950 px-4 pb-4 pt-2 md:hidden">
+        <nav id="site-menu" className={`border-t border-ink-800 bg-ink-950 px-4 pb-4 pt-2 ${bp.hideAt}`}>
           <ul className="space-y-1 text-base text-smoke-300">
             {NAV_LINKS.map((l) => (
               <li key={l.to}>

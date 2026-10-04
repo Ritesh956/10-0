@@ -261,6 +261,19 @@ export function SeasonPage() {
       if (!rangeDone && !stopped) await sleep(900);
     }
 
+    // The three fetches above run in parallel, so the status can read "complete" a moment after the
+    // matches query ran — which would drop the range's last matchday from the reel (and from
+    // January's halfway record). Once the range is known to be complete, read the matches again.
+    if (rangeDone && !stopped) {
+      const [userMatches, table] = await Promise.all([
+        api.getMatchesWithEvents(wId, seasonId, userClubId),
+        api.getStandings(wId, seasonId).catch(() => null),
+      ]);
+      if (table) setLiveStandings(table);
+      setDomesticReelMatches(userMatches.filter(inRange));
+      setDomesticReelPrior(userMatches.filter((m) => m.matchday < opts.fromMatchday));
+    }
+
     setReelStreaming(false); // range fully simulated — let the reel reveal any backlog and finish
     await replayDone;
   }
