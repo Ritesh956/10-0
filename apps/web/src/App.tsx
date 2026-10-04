@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./lib/auth-context";
@@ -9,32 +9,35 @@ import { playLeagueIdOf } from "./lib/leagues";
 import { fadeSlide } from "./lib/motion";
 import { routeTitle } from "./lib/routeTitles";
 import { useOnline } from "./lib/install";
-import { AuthPage } from "./pages/AuthPage";
-import { MagicLinkPage } from "./pages/MagicLinkPage";
 import { LandingPage } from "./pages/LandingPage";
-import { SetupPage } from "./pages/SetupPage";
-import { DraftPage } from "./pages/DraftPage";
-import { SeasonPage } from "./pages/SeasonPage";
-import { MultiplayerPage } from "./pages/MultiplayerPage";
-import { EventsPage } from "./pages/EventsPage";
-import { ProfilePage } from "./pages/ProfilePage";
-import { LeaderboardPage } from "./pages/LeaderboardPage";
-import { ClubsDirectoryPage } from "./pages/ClubsDirectoryPage";
-import { NationsDirectoryPage } from "./pages/NationsDirectoryPage";
-import { DailyChallengePage } from "./pages/DailyChallengePage";
-import { DailyArchivePage } from "./pages/DailyArchivePage";
-import { HowItWorksPage } from "./pages/HowItWorksPage";
-import { HowToPlayPage } from "./pages/HowToPlayPage";
-import { BestXiPage } from "./pages/BestXiPage";
-import { LeagueBestXiPage } from "./pages/LeagueBestXiPage";
-import { StoryPage } from "./pages/StoryPage";
-import { LeagueJoinPage } from "./pages/LeagueJoinPage";
-import { LeagueDetailPage } from "./pages/LeagueDetailPage";
-import { LiveDraftJoinPage } from "./pages/LiveDraftJoinPage";
-import { LiveDraftPage } from "./pages/LiveDraftPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { SiteHeader } from "./components/SiteHeader";
 import { SaveProgressModal } from "./components/SaveProgressModal";
+
+// Every page except the landing page and the 404 is its own chunk, so first load only ships what the
+// entry route needs (the Draft/Season pages and their charting/share code are the heavy ones).
+const AuthPage = lazy(() => import("./pages/AuthPage").then((m) => ({ default: m.AuthPage })));
+const MagicLinkPage = lazy(() => import("./pages/MagicLinkPage").then((m) => ({ default: m.MagicLinkPage })));
+const SetupPage = lazy(() => import("./pages/SetupPage").then((m) => ({ default: m.SetupPage })));
+const DraftPage = lazy(() => import("./pages/DraftPage").then((m) => ({ default: m.DraftPage })));
+const SeasonPage = lazy(() => import("./pages/SeasonPage").then((m) => ({ default: m.SeasonPage })));
+const MultiplayerPage = lazy(() => import("./pages/MultiplayerPage").then((m) => ({ default: m.MultiplayerPage })));
+const EventsPage = lazy(() => import("./pages/EventsPage").then((m) => ({ default: m.EventsPage })));
+const ProfilePage = lazy(() => import("./pages/ProfilePage").then((m) => ({ default: m.ProfilePage })));
+const LeaderboardPage = lazy(() => import("./pages/LeaderboardPage").then((m) => ({ default: m.LeaderboardPage })));
+const ClubsDirectoryPage = lazy(() => import("./pages/ClubsDirectoryPage").then((m) => ({ default: m.ClubsDirectoryPage })));
+const NationsDirectoryPage = lazy(() => import("./pages/NationsDirectoryPage").then((m) => ({ default: m.NationsDirectoryPage })));
+const DailyChallengePage = lazy(() => import("./pages/DailyChallengePage").then((m) => ({ default: m.DailyChallengePage })));
+const DailyArchivePage = lazy(() => import("./pages/DailyArchivePage").then((m) => ({ default: m.DailyArchivePage })));
+const HowItWorksPage = lazy(() => import("./pages/HowItWorksPage").then((m) => ({ default: m.HowItWorksPage })));
+const HowToPlayPage = lazy(() => import("./pages/HowToPlayPage").then((m) => ({ default: m.HowToPlayPage })));
+const BestXiPage = lazy(() => import("./pages/BestXiPage").then((m) => ({ default: m.BestXiPage })));
+const LeagueBestXiPage = lazy(() => import("./pages/LeagueBestXiPage").then((m) => ({ default: m.LeagueBestXiPage })));
+const StoryPage = lazy(() => import("./pages/StoryPage").then((m) => ({ default: m.StoryPage })));
+const LeagueJoinPage = lazy(() => import("./pages/LeagueJoinPage").then((m) => ({ default: m.LeagueJoinPage })));
+const LeagueDetailPage = lazy(() => import("./pages/LeagueDetailPage").then((m) => ({ default: m.LeagueDetailPage })));
+const LiveDraftJoinPage = lazy(() => import("./pages/LiveDraftJoinPage").then((m) => ({ default: m.LiveDraftJoinPage })));
+const LiveDraftPage = lazy(() => import("./pages/LiveDraftPage").then((m) => ({ default: m.LiveDraftPage })));
 
 /** Keeps the accent colour on the league being played (else the last one chosen, else the default). */
 function LeagueThemeSync() {
@@ -44,6 +47,14 @@ function LeagueThemeSync() {
     applyLeagueTheme(leagueId ?? storedLeagueTheme());
   }, [leagueId]);
   return null;
+}
+
+function PageLoading() {
+  return (
+    <p role="status" className="px-4 py-24 text-center text-sm text-paper/60">
+      Loading…
+    </p>
+  );
 }
 
 function Shell() {
@@ -78,34 +89,36 @@ function Shell() {
       <main>
         <AnimatePresence mode="wait">
           <motion.div key={location.pathname} variants={fadeSlide} initial="initial" animate="animate" exit="exit">
-            <Routes location={location}>
-              <Route path="/" element={<LandingPage />} />
-              <Route path="/signin" element={<AuthPage />} />
-              <Route path="/auth/magic" element={<MagicLinkPage />} />
-              <Route path="/setup" element={<SetupPage />} />
-              <Route path="/draft" element={<DraftPage />} />
-              <Route path="/season" element={<SeasonPage />} />
-              <Route path="/multiplayer" element={<MultiplayerPage />} />
-              <Route path="/events" element={<EventsPage />} />
-              <Route path="/multiplayer/join/:code" element={<LeagueJoinPage />} />
-              <Route path="/multiplayer/league/:leagueId" element={<LeagueDetailPage />} />
-              <Route path="/multiplayer/live/join/:code" element={<LiveDraftJoinPage />} />
-              <Route path="/multiplayer/live/:roomId" element={<LiveDraftPage />} />
-              <Route path="/profile" element={<ProfilePage />} />
-              <Route path="/history" element={<Navigate to="/profile" replace />} />
-              <Route path="/leaderboard" element={<LeaderboardPage />} />
-              <Route path="/clubs" element={<ClubsDirectoryPage />} />
-              <Route path="/nations" element={<NationsDirectoryPage />} />
-              <Route path="/daily" element={<DailyChallengePage />} />
-              <Route path="/daily/archive" element={<DailyArchivePage />} />
-              <Route path="/daily/:date" element={<DailyChallengePage />} />
-              <Route path="/how-it-works" element={<HowItWorksPage />} />
-              <Route path="/how-to-play" element={<HowToPlayPage />} />
-              <Route path="/best-xi" element={<BestXiPage />} />
-              <Route path="/best-xi/:league" element={<LeagueBestXiPage />} />
-              <Route path="/story" element={<StoryPage />} />
-              <Route path="*" element={<NotFoundPage />} />
-            </Routes>
+            <Suspense fallback={<PageLoading />}>
+              <Routes location={location}>
+                <Route path="/" element={<LandingPage />} />
+                <Route path="/signin" element={<AuthPage />} />
+                <Route path="/auth/magic" element={<MagicLinkPage />} />
+                <Route path="/setup" element={<SetupPage />} />
+                <Route path="/draft" element={<DraftPage />} />
+                <Route path="/season" element={<SeasonPage />} />
+                <Route path="/multiplayer" element={<MultiplayerPage />} />
+                <Route path="/events" element={<EventsPage />} />
+                <Route path="/multiplayer/join/:code" element={<LeagueJoinPage />} />
+                <Route path="/multiplayer/league/:leagueId" element={<LeagueDetailPage />} />
+                <Route path="/multiplayer/live/join/:code" element={<LiveDraftJoinPage />} />
+                <Route path="/multiplayer/live/:roomId" element={<LiveDraftPage />} />
+                <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/history" element={<Navigate to="/profile" replace />} />
+                <Route path="/leaderboard" element={<LeaderboardPage />} />
+                <Route path="/clubs" element={<ClubsDirectoryPage />} />
+                <Route path="/nations" element={<NationsDirectoryPage />} />
+                <Route path="/daily" element={<DailyChallengePage />} />
+                <Route path="/daily/archive" element={<DailyArchivePage />} />
+                <Route path="/daily/:date" element={<DailyChallengePage />} />
+                <Route path="/how-it-works" element={<HowItWorksPage />} />
+                <Route path="/how-to-play" element={<HowToPlayPage />} />
+                <Route path="/best-xi" element={<BestXiPage />} />
+                <Route path="/best-xi/:league" element={<LeagueBestXiPage />} />
+                <Route path="/story" element={<StoryPage />} />
+                <Route path="*" element={<NotFoundPage />} />
+              </Routes>
+            </Suspense>
           </motion.div>
         </AnimatePresence>
       </main>
