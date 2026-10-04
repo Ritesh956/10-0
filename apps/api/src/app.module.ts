@@ -8,10 +8,12 @@ import { WorldsModule } from "./worlds/worlds.module.js";
 import { DraftModule } from "./draft/draft.module.js";
 import { SeasonsModule } from "./seasons/seasons.module.js";
 import { EuropeModule } from "./europe/europe.module.js";
+import { NationsCupModule } from "./nations-cup/nations-cup.module.js";
 import { JanuaryModule } from "./january/january.module.js";
 import { LeaderboardModule } from "./leaderboard/leaderboard.module.js";
 import { DailyModule } from "./daily/daily.module.js";
 import { LeaguesModule } from "./leagues/leagues.module.js";
+import { EventsModule } from "./events/events.module.js";
 import { LiveDraftModule } from "./live-draft/live-draft.module.js";
 import { ProfileModule } from "./profile/profile.module.js";
 import { SiteModule } from "./site/site.module.js";
@@ -27,10 +29,12 @@ import { SiteModule } from "./site/site.module.js";
     DraftModule,
     SeasonsModule,
     EuropeModule,
+    NationsCupModule,
     JanuaryModule,
     LeaderboardModule,
     DailyModule,
     LeaguesModule,
+    EventsModule,
     LiveDraftModule,
     ProfileModule,
     SiteModule,

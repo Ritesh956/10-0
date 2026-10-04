@@ -105,3 +105,22 @@ describe("cabinetShareCard", () => {
     expect(card.ribbon).toBeUndefined();
   });
 });
+
+import { titlesByLeague } from "./profile";
+
+describe("titlesByLeague", () => {
+  const run = (leagueId: string | null, position: number | null, finished = true, trophies: string[] = []) => ({ leagueId, finished, position, trophies });
+  it("counts titles per league and lists all five", () => {
+    const out = titlesByLeague([
+      run("league-es1", 1),
+      run("league-es1", 3, true, ["champions"]),
+      run("league-it1", 2),
+      run("league-gb1", 1, false),
+      run(null, 1),
+    ]);
+    expect(out.map((o) => o.leagueId)).toEqual(["league-gb1", "league-es1", "league-it1", "league-l1", "league-fr1"]);
+    expect(out.find((o) => o.leagueId === "league-es1")!.titles).toBe(2);
+    expect(out.find((o) => o.leagueId === "league-it1")!.titles).toBe(0);
+    expect(out.find((o) => o.leagueId === "league-gb1")!.titles).toBe(0);
+  });
+});

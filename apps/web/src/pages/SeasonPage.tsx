@@ -32,6 +32,7 @@ import { ManagerStatCard } from "../components/ManagerStatCard";
 import { MatchLog } from "../components/MatchLog";
 import { MatchPopupReel } from "../components/MatchPopupReel";
 import { MiniTable } from "../components/MiniTable";
+import { NationsCupPanel } from "../components/NationsCupPanel";
 import { SeasonNarrative } from "../components/SeasonNarrative";
 import { ShareCard } from "../components/ShareCard";
 import { StandingsTable } from "../components/StandingsTable";
@@ -48,6 +49,7 @@ import { loadStatsHubCache, rebuildStatsHub, saveStatsHubCache } from "../lib/st
 import { EuropeShareCard } from "../components/EuropeShareCard";
 import { squadTierName, TIER_TEXT } from "../lib/squadRatings";
 import { useDraft } from "../state/DraftContext";
+import { useT } from "../lib/i18n/context";
 
 type Phase =
   | "no-season"
@@ -111,6 +113,7 @@ function ordinalPosition(n: number): string {
 
 export function SeasonPage() {
   const navigate = useNavigate();
+  const { t } = useT();
   const location = useLocation();
   // Set by DraftPage's "Simulate Season" — that press starts the season; no second click here.
   const autoStart = Boolean((location.state as { autoStart?: boolean } | null)?.autoStart);
@@ -681,6 +684,7 @@ export function SeasonPage() {
 
   const userClub = world.clubs.find((c) => c.managedByUserId);
   const europeName = europeTier === 2 ? "Continental Cup" : "European Nights";
+  const europeLabel = t(europeTier === 2 ? "europe.cup" : "europe.nights");
   const userPhasePosition =
     userClub && europeLeagueStandings ? europeLeagueStandings.rows.findIndex((r) => r.clubId === userClub.id) + 1 : 0;
   const nameFor = (clubId: string) => worldClubLabel(world.clubs.find((c) => c.id === clubId), clubId);
@@ -727,7 +731,7 @@ export function SeasonPage() {
         <p className="mt-1 text-sm text-smoke-500">
           {world.clubs.length > 1
             ? // European Nights adds other leagues' clubs to the world; the league is its own table.
-              `${standings?.rows.length ?? world.clubs.length}-club league`
+              t("season.leagueClubs", { n: standings?.rows.length ?? world.clubs.length })
             : "Your XI is ready — kick off when you are."}
         </p>
       </div>
@@ -737,7 +741,7 @@ export function SeasonPage() {
       {phase === "no-season" && (
         <div className="text-center">
           <Button size="lg" disabled={busy} onClick={() => void handleStartSeason()}>
-            {busy ? "Starting..." : "Simulate Season →"}
+            {busy ? "…" : `${t("season.simulate")} →`}
           </Button>
         </div>
       )}
@@ -760,7 +764,7 @@ export function SeasonPage() {
       )}
 
       {phase === "domestic-replay" && userClub && (
-        <MiniTable standings={liveStandings} clubs={world.clubs} userClubId={userClub.id} title="Live table" />
+        <MiniTable standings={liveStandings} clubs={world.clubs} userClubId={userClub.id} title={t("season.liveTable")} />
       )}
 
       {phase === "january" && userClub && season && (
@@ -786,19 +790,19 @@ export function SeasonPage() {
           clubs={world.clubs}
           userClubId={userClub.id}
           radius={4}
-          title="The table at halfway"
+          title={t("season.halfwayTable")}
         />
       )}
 
       {phase === "domestic-standings" && standings && (
         <div className="space-y-4">
           <h2 className="text-center font-display text-lg font-semibold uppercase tracking-wide text-paper">
-            Final standings
+            {t("season.finalStandings")}
           </h2>
           <StandingsTable standings={standings} clubs={world.clubs} highlightClubId={userClub?.id} />
           <div className="text-center">
             <Button variant="ghost" size="sm" onClick={skipPause}>
-              Continue &rarr;
+              {t("season.continue")} &rarr;
             </Button>
           </div>
         </div>
@@ -807,12 +811,12 @@ export function SeasonPage() {
       {phase === "team-stats" && teamStats && (
         <div className="space-y-4">
           <h2 className="text-center font-display text-lg font-semibold uppercase tracking-wide text-paper">
-            {userClub?.name}&apos;s season
+            {t("season.clubSeason", { club: userClub?.name ?? "" })}
           </h2>
           <TeamStatsPanel stats={teamStats} record={recordFor(standings)} />
           <div className="text-center">
             <Button variant="ghost" size="sm" onClick={skipPause}>
-              Continue &rarr;
+              {t("season.continue")} &rarr;
             </Button>
           </div>
         </div>
@@ -829,9 +833,7 @@ export function SeasonPage() {
             &#127942;
           </motion.p>
           <motion.h2 variants={staggerItem} className="font-display text-2xl font-bold uppercase tracking-wide text-paper">
-            {europeTier === 2
-              ? `${userClub?.name} earned a place in the Continental Cup`
-              : `Congratulations! ${userClub?.name} qualified for European Nights`}
+            {t(europeTier === 2 ? "europe.cupQualified" : "europe.qualified", { club: userClub?.name ?? "" })}
           </motion.h2>
           <motion.p variants={staggerItem} className="text-sm text-smoke-400">
             {europeTier === 2
@@ -840,10 +842,10 @@ export function SeasonPage() {
           </motion.p>
           <motion.div variants={staggerItem} className="flex flex-col items-center justify-center gap-2 sm:flex-row">
             <Button onClick={() => europeChoiceRef.current?.(true)}>
-              {europeTier === 2 ? "Enter the Continental Cup" : "Continue to European Nights"} &rarr;
+              {t(europeTier === 2 ? "europe.enterCup" : "europe.continue")} &rarr;
             </Button>
             <Button variant="ghost" size="sm" onClick={() => europeChoiceRef.current?.(false)}>
-              Skip Europe, see my season
+              {t("europe.skip")}
             </Button>
           </motion.div>
         </motion.div>
@@ -877,7 +879,7 @@ export function SeasonPage() {
       {phase === "europe-league-standings" && europeLeagueStandings && (
         <div className="space-y-4">
           <h2 className="text-center font-display text-lg font-semibold uppercase tracking-wide text-paper">
-            European Nights &middot; League Phase Standings
+            {t("europe.nights")} &middot; {t("europe.leaguePhaseStandings")}
           </h2>
           {userPhasePosition > 0 && (
             <p className="text-center text-sm text-smoke-300">{leaguePhaseVerdict(userPhasePosition)}</p>
@@ -892,7 +894,7 @@ export function SeasonPage() {
           />
           <div className="text-center">
             <Button variant="ghost" size="sm" onClick={skipPause}>
-              Continue to Knockouts &rarr;
+              {t("europe.continueKnockouts")} &rarr;
             </Button>
           </div>
         </div>
@@ -901,7 +903,7 @@ export function SeasonPage() {
       {phase === "europe-knockout-replay" && knockoutRound && (
         <div className="space-y-3">
           <p className="text-center text-xs font-semibold uppercase tracking-widest text-smoke-600">
-            {europeName} &middot; {ROUND_LABEL[knockoutRound]}
+            {europeLabel} &middot; {ROUND_LABEL[knockoutRound]}
           </p>
           <MatchPopupReel
             matches={onlyMine(knockoutMatches)}
@@ -935,7 +937,7 @@ export function SeasonPage() {
             &#127942;
           </motion.p>
           <motion.p variants={staggerItem} className="text-xs font-semibold uppercase tracking-[0.3em] text-smoke-600">
-            {europeTier === 2 ? "Continental Cup Winners" : "European Champions"}
+            {t(europeTier === 2 ? "europe.cupWinners" : "europe.champions")}
           </motion.p>
           <motion.h2 variants={staggerItem} className="font-display text-3xl font-bold uppercase tracking-tight text-paper">
             {nameFor(champion)}
@@ -965,9 +967,9 @@ export function SeasonPage() {
           )}
           {summary.position !== undefined && summary.userRow && (
             <div className="notch border border-ink-800 bg-ink-900/50 p-5 text-center">
-              <p className="text-xs uppercase tracking-widest text-smoke-500">Final position</p>
+              <p className="text-xs uppercase tracking-widest text-smoke-500">{t("season.finalPosition")}</p>
               <p className="font-display text-4xl font-bold text-paper">
-                {summary.position === 1 ? "Champions" : ordinalPosition(summary.position)}
+                {summary.position === 1 ? t("season.champions") : ordinalPosition(summary.position)}
               </p>
               <p className="mt-1 text-sm text-smoke-400">
                 {summary.userRow.won}W {summary.userRow.drawn}D {summary.userRow.lost}L &middot;{" "}
@@ -987,6 +989,15 @@ export function SeasonPage() {
           {narrative && <SeasonNarrative narrative={narrative} />}
 
           <TrophyCabinet trophies={trophies} />
+
+          {worldId && userClub && domesticSeasonId && (
+            <NationsCupPanel
+              worldId={worldId}
+              domesticSeasonId={domesticSeasonId}
+              userClubId={userClub.id}
+              onTrophies={(keys) => setTrophies((prev) => [...new Set([...prev, ...(keys as TrophyKey[])])])}
+            />
+          )}
 
           <ShareCard
             summary={summary}
@@ -1016,10 +1027,10 @@ export function SeasonPage() {
           {qualified && (
             <div className="flex justify-center gap-2">
               <Button variant={statsTab === "league" ? "primary" : "outline"} size="sm" onClick={() => setStatsTab("league")}>
-                League
+                {t("season.league")}
               </Button>
               <Button variant={statsTab === "europe" ? "primary" : "outline"} size="sm" onClick={() => setStatsTab("europe")}>
-                {europeName}
+                {europeLabel}
               </Button>
             </div>
           )}
@@ -1044,7 +1055,7 @@ export function SeasonPage() {
               {leagueManagerStats && <ManagerStatCard stats={leagueManagerStats} clubs={world.clubs} />}
               <details className="notch border border-ink-800 bg-ink-900/40 p-3">
                 <summary className="cursor-pointer select-none text-center font-display text-sm font-semibold uppercase tracking-wide text-paper">
-                  League table
+                  {t("season.table")}
                 </summary>
                 <div className="mt-3">
                   <StandingsTable standings={standings} clubs={world.clubs} highlightClubId={userClub?.id} />
@@ -1066,7 +1077,7 @@ export function SeasonPage() {
           {statsTab === "europe" && qualified && (
             <div className="space-y-4">
               <h2 className="text-center font-display text-lg font-semibold uppercase tracking-wide text-paper">
-                {europeName}
+                {europeLabel}
               </h2>
               {allTies.length > 0 && <KnockoutBracket ties={allTies} clubs={world.clubs} highlightClubId={userClub?.id} />}
               {europeLeagueStandings && (

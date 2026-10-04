@@ -1,3 +1,4 @@
+import { useT } from "../lib/i18n/context";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
@@ -8,7 +9,7 @@ import { Button } from "../components/ui/Button";
 import { Chip } from "../components/ui/Chip";
 import { useAuth } from "../lib/auth-context";
 import { leagueCountry, leagueLabel } from "../lib/leagues";
-import { cabinetShareCard, formatRunDate, ordinal, sortCabinet, weeklyTrophy, type CabinetSort } from "../lib/profile";
+import { cabinetShareCard, formatRunDate, ordinal, sortCabinet, titlesByLeague, weeklyTrophy, type CabinetSort } from "../lib/profile";
 import { CATEGORY_LABELS, TIER_META, TROPHY_CATALOG } from "../lib/trophies";
 
 const CATEGORY_ORDER: TrophyCategory[] = ["season", "awards", "squad", "career", "europe", "modes", "fun"];
@@ -48,6 +49,7 @@ function SectionTitle({ children, aside }: { children: React.ReactNode; aside?: 
 }
 
 function TrophyCard({ entry }: { entry: CabinetEntryDto }) {
+  const { tOr } = useT();
   const meta = TROPHY_CATALOG[entry.key];
   const tier = TIER_META[entry.tier];
   const earned = entry.count > 0;
@@ -69,7 +71,7 @@ function TrophyCard({ entry }: { entry: CabinetEntryDto }) {
         </span>
       </div>
       <p className={`font-display text-sm font-bold uppercase tracking-wide ${earned ? "text-paper" : "text-smoke-400"}`}>
-        {meta.name}
+        {tOr(`trophy.${entry.key}`, meta.name)}
       </p>
       <p className="text-xs leading-snug text-smoke-500">{meta.description}</p>
       {!earned && entry.progress && (
@@ -268,6 +270,18 @@ export function ProfilePage() {
               />
               <StatTile label="Unbeaten seasons" value={stats.unbeatenSeasons} sub={`${stats.invincibles} invincible`} />
               <StatTile label="European titles" value={stats.europeanTitles} />
+            </div>
+            <div className="mt-3 notch border border-ink-800 bg-ink-900/40 p-4">
+              <p className="mb-2 text-center text-xs font-semibold uppercase tracking-widest text-smoke-500">Titles by league</p>
+              <ul className="grid grid-cols-5 gap-2 text-center">
+                {titlesByLeague(profile.runs).map(({ leagueId, titles }) => (
+                  <li key={leagueId} className={titles > 0 ? "text-paper" : "text-smoke-600"}>
+                    <CountryFlag country={leagueCountry(leagueId)} className={`mx-auto h-4 w-6 ${titles > 0 ? "" : "opacity-40"}`} />
+                    <p className="mt-1 font-display text-xl font-bold">{titles}</p>
+                    <p className="text-[10px] uppercase tracking-wide">{leagueLabel(leagueId)}</p>
+                  </li>
+                ))}
+              </ul>
             </div>
           </section>
 

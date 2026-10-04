@@ -2,16 +2,20 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../lib/auth-context";
 import { useInstallPrompt } from "../lib/install";
+import { useT } from "../lib/i18n/context";
+import type { MessageKey } from "../lib/i18n";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 
 interface Props {
   onRequestSaveProgress?: (() => void) | undefined;
 }
 
-const NAV_LINKS: { to: string; label: string }[] = [
-  { to: "/daily", label: "Daily" },
-  { to: "/clubs", label: "One-Club XI" },
-  { to: "/multiplayer", label: "Play with mates" },
-  { to: "/leaderboard", label: "Leaderboard" },
+const NAV_LINKS: { to: string; label: MessageKey }[] = [
+  { to: "/daily", label: "nav.daily" },
+  { to: "/clubs", label: "nav.oneClub" },
+  { to: "/multiplayer", label: "nav.mates" },
+  { to: "/events", label: "nav.events" },
+  { to: "/leaderboard", label: "nav.leaderboard" },
 ];
 
 const linkClass = ({ isActive }: { isActive: boolean }) => `transition hover:text-paper ${isActive ? "text-paper" : ""}`;
@@ -21,6 +25,7 @@ const linkClass = ({ isActive }: { isActive: boolean }) => `transition hover:tex
     button, next to a "Play" shortcut that's always visible. */
 export function SiteHeader({ onRequestSaveProgress }: Props) {
   const { isAuthenticated, user, logout } = useAuth();
+  const { t } = useT();
   const { canInstall, install, iosHint } = useInstallPrompt();
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
@@ -43,21 +48,22 @@ export function SiteHeader({ onRequestSaveProgress }: Props) {
         <nav className="hidden flex-1 items-center gap-5 text-sm text-smoke-400 md:flex">
           {NAV_LINKS.map((l) => (
             <NavLink key={l.to} to={l.to} className={linkClass}>
-              {l.label}
+              {t(l.label)}
             </NavLink>
           ))}
           {isAuthenticated && (
             <NavLink to="/profile" className={linkClass}>
-              Profile
+              {t("nav.profile")}
             </NavLink>
           )}
         </nav>
 
         <div className="ml-auto flex items-center gap-2 md:ml-0">
           <div className="hidden items-center gap-3 text-sm text-smoke-400 md:flex">
+            <LanguageSwitcher />
             {canInstall && (
               <button onClick={() => void install()} className="transition hover:text-paper">
-                Install app
+                {t("nav.installApp")}
               </button>
             )}
             {isAuthenticated ? (
@@ -67,17 +73,17 @@ export function SiteHeader({ onRequestSaveProgress }: Props) {
                     onClick={onRequestSaveProgress}
                     className="notch-sm border border-teal-500/40 bg-teal-500/10 px-3 py-1.5 text-xs font-semibold text-teal-400 transition hover:bg-teal-500/20"
                   >
-                    Save progress
+                    {t("nav.saveProgress")}
                   </button>
                 )}
                 <span className="max-w-[8rem] truncate">{user?.displayName}</span>
                 <button onClick={logout} className="transition hover:text-paper">
-                  Sign out
+                  {t("nav.signOut")}
                 </button>
               </>
             ) : (
               <Link to="/signin" className="transition hover:text-paper">
-                Sign in
+                {t("nav.signIn")}
               </Link>
             )}
           </div>
@@ -86,7 +92,7 @@ export function SiteHeader({ onRequestSaveProgress }: Props) {
             to="/setup"
             className="notch-sm bg-mint-500 px-3.5 py-1.5 text-sm font-semibold text-ink-950 transition hover:bg-mint-400"
           >
-            Play
+            {t("nav.play")}
           </Link>
 
           <button
@@ -110,22 +116,25 @@ export function SiteHeader({ onRequestSaveProgress }: Props) {
             {NAV_LINKS.map((l) => (
               <li key={l.to}>
                 <NavLink to={l.to} className={({ isActive }) => `block py-2 ${isActive ? "text-paper" : ""}`}>
-                  {l.label}
+                  {t(l.label)}
                 </NavLink>
               </li>
             ))}
             <li>
               <NavLink to="/nations" className="block py-2">
-                Nations
+                {t("nav.nations")}
               </NavLink>
             </li>
             {isAuthenticated && (
               <li>
                 <NavLink to="/profile" className="block py-2">
-                  Profile
+                  {t("nav.profile")}
                 </NavLink>
               </li>
             )}
+            <li className="py-2">
+              <LanguageSwitcher />
+            </li>
             {canInstall && (
               <li>
                 <button onClick={() => void install()} className="block w-full py-2 text-left font-semibold text-mint-400">
@@ -145,16 +154,16 @@ export function SiteHeader({ onRequestSaveProgress }: Props) {
                 <span className="min-w-0 flex-1 truncate">{user?.displayName}</span>
                 {user?.isGuest && onRequestSaveProgress && (
                   <button onClick={onRequestSaveProgress} className="font-semibold text-teal-400">
-                    Save progress
+                    {t("nav.saveProgress")}
                   </button>
                 )}
                 <button onClick={logout} className="hover:text-paper">
-                  Sign out
+                  {t("nav.signOut")}
                 </button>
               </>
             ) : (
               <Link to="/signin" className="hover:text-paper">
-                Sign in
+                {t("nav.signIn")}
               </Link>
             )}
           </div>

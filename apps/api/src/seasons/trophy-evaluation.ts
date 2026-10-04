@@ -37,6 +37,8 @@ export interface RunSummary {
   oneClubLocked?: boolean | undefined;
   /** True when this world's European competition has been played and the user's club won the Final. */
   europeChampion?: boolean | undefined;
+  /** The user's XI won the Nations Cup tournament. */
+  nationsCupChampion?: boolean | undefined;
   /** The user's club won the Continental Cup (the second European tier). */
   cupChampion?: boolean | undefined;
   /** The user's European Nights campaign, when they played it. */
@@ -76,6 +78,7 @@ export function evaluateTrophies(run: RunSummary): TrophyKey[] {
   if (run.europeChampion) trophies.push("european-champion");
   if (run.europeChampion && champion) trophies.push("the-double");
   if (run.cupChampion) trophies.push("continental-cup");
+  if (run.nationsCupChampion) trophies.push("nations-cup-winner");
   trophies.push(...evaluateEuropeTrophies(run));
   if (run.goldenBootClubId === run.userClubId) trophies.push("golden-boot");
   if (run.playmakerClubId === run.userClubId) trophies.push("playmaker");

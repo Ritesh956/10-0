@@ -1,3 +1,4 @@
+import { useT } from "../lib/i18n/context";
 import { motion } from "framer-motion";
 import type { TrophyKey } from "../api/types";
 import { TROPHY_CATALOG } from "../lib/trophies";
@@ -11,6 +12,7 @@ interface Props {
     on both the results screen and the history page. Renders nothing for an empty cabinet — a
     non-winning season isn't a broken/empty state, it's just the common case. */
 export function TrophyCabinet({ trophies }: Props) {
+  const { tOr } = useT();
   if (trophies.length === 0) return null;
 
   return (
@@ -29,7 +31,7 @@ export function TrophyCabinet({ trophies }: Props) {
             className={`notch space-y-1 border-2 bg-ink-900/50 p-4 text-center ${meta.colorClass}`}
           >
             <p className="text-2xl">{meta.icon}</p>
-            <p className="font-display text-sm font-bold uppercase tracking-wide text-paper">{meta.name}</p>
+            <p className="font-display text-sm font-bold uppercase tracking-wide text-paper">{tOr(`trophy.${key}`, meta.name)}</p>
             <p className="text-xs text-smoke-500">{meta.description}</p>
           </motion.div>
         );

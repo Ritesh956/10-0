@@ -4,6 +4,7 @@ import type { StandingsDto, WorldClubDto } from "../api/types";
 import type { TableZone } from "../lib/europe";
 import { staggerContainer, staggerItem } from "../lib/motion";
 import { CountryFlag } from "./CountryFlag";
+import { useT } from "../lib/i18n/context";
 
 interface Props {
   standings: StandingsDto;
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export function StandingsTable({ standings, clubs, highlightClubId, zoneFor, legend, showFlags }: Props) {
+  const { t } = useT();
   const nameFor = (clubId: string) => worldClubLabel(clubs.find((c) => c.id === clubId), clubId);
   const countryFor = (clubId: string) => clubs.find((c) => c.id === clubId)?.country ?? undefined;
 
@@ -28,15 +30,15 @@ export function StandingsTable({ standings, clubs, highlightClubId, zoneFor, leg
         <thead className="bg-ink-900 text-left font-display text-xs uppercase tracking-widest text-smoke-600">
           <tr>
             <th className="px-3 py-2">#</th>
-            <th className="px-3 py-2">Club</th>
-            <th className="px-3 py-2 text-center">P</th>
-            <th className="px-3 py-2 text-center">W</th>
-            <th className="px-3 py-2 text-center">D</th>
-            <th className="px-3 py-2 text-center">L</th>
-            <th className="px-3 py-2 text-center">GF</th>
-            <th className="px-3 py-2 text-center">GA</th>
-            <th className="px-3 py-2 text-center">GD</th>
-            <th className="px-3 py-2 text-center font-bold">Pts</th>
+            <th className="px-3 py-2">{t("table.club")}</th>
+            <th className="px-3 py-2 text-center">{t("table.p")}</th>
+            <th className="px-3 py-2 text-center">{t("table.w")}</th>
+            <th className="px-3 py-2 text-center">{t("table.d")}</th>
+            <th className="px-3 py-2 text-center">{t("table.l")}</th>
+            <th className="px-3 py-2 text-center">{t("table.gf")}</th>
+            <th className="px-3 py-2 text-center">{t("table.ga")}</th>
+            <th className="px-3 py-2 text-center">{t("table.gd")}</th>
+            <th className="px-3 py-2 text-center font-bold">{t("table.pts")}</th>
           </tr>
         </thead>
         <motion.tbody

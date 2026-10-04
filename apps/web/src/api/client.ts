@@ -13,6 +13,10 @@ import type {
   DailyRecapDto,
   EraDto,
   EuropeAdvanceResultDto,
+  WeeklyEventDto,
+  NationsCupGroupDto,
+  NationsCupStartDto,
+  NationsCupStatusDto,
   EuropeCupDto,
   EuropeDrawDto,
   EuropeLeaguePhaseDto,
@@ -281,6 +285,18 @@ export const api = {
     request<EuropeLeaguePhaseDto>(`/worlds/${worldId}/europe/league-phase?domesticSeasonId=${domesticSeasonId}`, {
       method: "POST",
     }),
+
+  getWeeklyEvents: () => request<WeeklyEventDto[]>("/events/current"),
+
+  getNationsCupStatus: (worldId: string) => request<NationsCupStatusDto>(`/worlds/${worldId}/nations-cup`),
+
+  startNationsCup: (worldId: string) => request<NationsCupStartDto>(`/worlds/${worldId}/nations-cup`, { method: "POST" }),
+
+  getNationsCupGroups: (worldId: string, seasonId: string) =>
+    request<NationsCupGroupDto[]>(`/worlds/${worldId}/nations-cup/groups?seasonId=${seasonId}`),
+
+  startNationsCupKnockouts: (worldId: string, competitionId: string) =>
+    request<EuropeRoundDto>(`/worlds/${worldId}/nations-cup/${competitionId}/knockouts`, { method: "POST" }),
 
   startEuropeCup: (worldId: string, domesticSeasonId: string) =>
     request<EuropeCupDto>(`/worlds/${worldId}/europe/cup?domesticSeasonId=${domesticSeasonId}`, { method: "POST" }),

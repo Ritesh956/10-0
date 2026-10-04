@@ -318,6 +318,38 @@ export interface EuropeDrawDto {
   clubs: EuropeDrawClubDto[];
 }
 
+/** One Nations Cup group: letter + its table (best first). */
+export interface NationsCupGroupDto {
+  letter: string;
+  rows: StandingsRowDto[];
+}
+
+export type NationsCupStatusDto =
+  | { started: false }
+  | { started: true; competitionId: string; groupSeasonId: string | null; champion: string | null };
+
+export interface NationsCupStartDto {
+  competitionId: string;
+  seasonId: string;
+  groups: NationsCupGroupDto[];
+}
+
+/** GET /events/current — one public weekly event per league. */
+export interface WeeklyEventDto {
+  key: string;
+  week: string;
+  leagueId: string;
+  name: string;
+  twist: string;
+  difficulty: "easy" | "normal" | "hard";
+  formation: string | null;
+  /** Joined through the normal league invite flow: /multiplayer/join/<inviteCode>. */
+  inviteCode: string;
+  endsAt: string;
+  memberCount: number;
+  top: { rank: number; handle: string; points: number; goalDiff: number }[];
+}
+
 export interface EuropeCupDto {
   competitionId: string;
   round: EuropeRoundDto;
@@ -441,7 +473,8 @@ export type TrophyKey =
   | "top-of-europe"
   | "grand-tour"
   | "continental-raiders"
-  | "five-league-xi";
+  | "five-league-xi"
+  | "nations-cup-winner";
 
 // Mirrors @futbol/domain's TrophyCategory / TrophyTier.
 export type TrophyCategory = "season" | "awards" | "squad" | "career" | "europe" | "modes" | "fun";

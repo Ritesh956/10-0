@@ -270,6 +270,12 @@ export const TROPHY_CATALOG: Record<TrophyKey, TrophyMeta> = {
     icon: "🏴‍☠️",
     colorClass: "text-crimson-300 border-crimson-400/60",
   },
+  "nations-cup-winner": {
+    name: "World Beaters",
+    description: "Won the Nations Cup — your XI against sixteen national teams.",
+    icon: "🌐",
+    colorClass: "text-amber-300 border-amber-400/60",
+  },
   "five-league-xi": {
     name: "Five-League XI",
     description: "Started players from clubs in all five leagues.",

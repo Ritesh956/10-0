@@ -85,3 +85,19 @@ export function ordinal(n: number): string {
 export function formatRunDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
+
+/** Titles won in each of the five leagues, from the finished runs (a run is a title when it
+    finished first or earned "champions"). Every league is listed, with 0 where nothing's been won,
+    so the profile can show the five-league collection and how far it is from complete. */
+export function titlesByLeague(runs: { leagueId: string | null; finished: boolean; position: number | null; trophies: string[] }[]): {
+  leagueId: string;
+  titles: number;
+}[] {
+  const ids = ["league-gb1", "league-es1", "league-it1", "league-l1", "league-fr1"];
+  const counts = new Map(ids.map((id) => [id, 0]));
+  for (const run of runs) {
+    if (!run.finished || !run.leagueId || !counts.has(run.leagueId)) continue;
+    if (run.position === 1 || run.trophies.includes("champions")) counts.set(run.leagueId, counts.get(run.leagueId)! + 1);
+  }
+  return ids.map((leagueId) => ({ leagueId, titles: counts.get(leagueId)! }));
+}

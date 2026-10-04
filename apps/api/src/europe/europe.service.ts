@@ -293,7 +293,9 @@ export class EuropeService {
       pairs = nextRoundPairings(winners);
     }
 
-    const next = await this.createRound(worldId, competitionId, NEXT_STAGE[round], pairs, userId);
+    const next = await this.createRound(worldId, competitionId, NEXT_STAGE[round], pairs, userId, {
+      singleLeg: competition?.type === "INTERNATIONAL",
+    });
     return { resolvedRound: round, resolvedTies, next };
   }
 
@@ -481,18 +483,24 @@ export class EuropeService {
 
   // ---- Knockout rounds ------------------------------------------------------------------------
 
-  private async createRound(
+  /**
+   * Creates one knockout round — a fresh Season, the fixtures and the ties — and queues it. Two legs
+   * per tie (the weaker seed hosts the first) except the Final and any `singleLeg` round (the Nations
+   * Cup, played at neutral venues). Public so the Nations Cup can reuse it.
+   */
+  async createRound(
     worldId: string,
     competitionId: string,
     round: KnockoutStage,
     pairs: Pairing[],
     userId: string,
+    options: { singleLeg?: boolean } = {},
   ) {
     const season = await this.prisma.season.create({
       data: { worldId, competitionId, year: new Date().getFullYear(), status: "SCHEDULED" },
     });
 
-    const isFinal = round === "FINAL";
+    const isFinal = round === "FINAL" || options.singleLeg === true;
     // Each tie is independent, so they're written side by side; nothing depends on creation order
     // (the bracket is recovered from the clubs — see bracketOrder).
     const ties = await Promise.all(

@@ -9,11 +9,13 @@ import { LeagueSwitcher } from "../components/LeagueSwitcher";
 import { playLeagueIdOf } from "../lib/leagues";
 import { rememberLeagueTheme, storedLeagueTheme } from "../lib/leagueTheme";
 import { SiteFooter } from "../components/SiteFooter";
+import { useT } from "../lib/i18n/context";
+import type { MessageKey } from "../lib/i18n";
 import { Button } from "../components/ui/Button";
 
 interface ModeCard {
-  title: string;
-  description: string;
+  title: MessageKey;
+  description: MessageKey;
   icon: string;
   to: string;
 }
@@ -24,32 +26,38 @@ interface ModeCard {
     all here. All five modes now link straight to where they actually live. */
 const MODE_CARDS: ModeCard[] = [
   {
-    title: "Classic Draft",
-    description: "Spin a random club-season from any top-5 league and build your fantasy XI, shirt by shirt.",
+    title: "mode.classic.title",
+    description: "mode.classic.desc",
     icon: "\u{1F3C6}",
     to: "/setup",
   },
   {
-    title: "Play with Mates",
-    description: "Async leagues on your own time, or a live turn-by-turn draft room. Same rules, best season wins.",
+    title: "mode.mates.title",
+    description: "mode.mates.desc",
     icon: "\u{26BD}",
     to: "/multiplayer",
   },
   {
-    title: "One-Club XI",
-    description: "Draft one real club's greatest XI, pulled from across its own history.",
+    title: "mode.events.title",
+    description: "mode.events.desc",
+    icon: "\u{1F4C5}",
+    to: "/events",
+  },
+  {
+    title: "mode.oneClub.title",
+    description: "mode.oneClub.desc",
     icon: "\u{1F3DF}\u{FE0F}",
     to: "/clubs",
   },
   {
-    title: "Daily Challenge",
-    description: "One fresh, themed puzzle a day. Same draw for everyone, five attempts.",
+    title: "mode.daily.title",
+    description: "mode.daily.desc",
     icon: "\u{1F5D3}\u{FE0F}",
     to: "/daily",
   },
   {
-    title: "Nations Trophy",
-    description: "Draft a nation's XI, pulled from every player of that nationality across the top-5.",
+    title: "mode.nations.title",
+    description: "mode.nations.desc",
     icon: "\u{1F30D}",
     to: "/nations",
   },
@@ -161,6 +169,7 @@ function LiveStrip({ stats }: { stats: SiteStatsDto }) {
 
 export function LandingPage() {
   const navigate = useNavigate();
+  const { t } = useT();
   const { config, setConfig } = useDraft();
   const chosenLeague = playLeagueIdOf(config) ?? storedLeagueTheme();
   const [archive, setArchive] = useState<ArchiveStats | null>(null);
@@ -199,7 +208,7 @@ export function LandingPage() {
         <div className="grid gap-12 md:grid-cols-[3fr_2fr] md:items-center">
           <div>
             <span className="notch-sm inline-flex items-center gap-2 border-2 border-mint-500/30 bg-mint-500/5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-smoke-400">
-              Fan project &middot; not affiliated with any league
+              {t("landing.fanProject")}
             </span>
 
             <div className="mt-6">
@@ -213,34 +222,33 @@ export function LandingPage() {
             </div>
 
             <h1 className="mt-6 font-display text-5xl font-bold uppercase leading-[1.05] tracking-tight text-paper sm:text-6xl">
-              Draft a legend
+              {t("landing.hero1")}
               <br />
-              from any league,
+              {t("landing.hero2")}
               <br />
               <span className="bg-gradient-to-r from-mint-300 via-mint-400 to-crimson-400 bg-clip-text text-transparent">
-                any era.
+                {t("landing.hero3")}
               </span>
             </h1>
 
             <p className="mt-6 max-w-md text-sm leading-relaxed text-smoke-500">
-              Set your rules, draw random clubs and seasons out of the archive, and build a starting XI one shirt
-              at a time. Then simulate a season and see how far an unbeaten run gets you.
+              {t("landing.sub")}
             </p>
 
             {draftProgress && (
               <div className="mt-8">
                 <Button size="lg" fullWidth onClick={() => navigate("/draft")}>
-                  Continue your draft ({draftProgress.picks}/11) &rarr;
+                  {t("landing.continue", { n: draftProgress.picks })} &rarr;
                 </Button>
               </div>
             )}
             <div className={`${draftProgress ? "mt-3" : "mt-8"} flex flex-col gap-3 sm:flex-row`}>
               <Button size="lg" variant={draftProgress ? "outline" : "primary"} onClick={() => navigate("/setup")}>
-                Start a draft &rarr;
+                {t("landing.start")} &rarr;
               </Button>
               <a href="#how-it-works">
                 <Button variant="outline" size="lg" fullWidth>
-                  See how a run works
+                  {t("landing.seeHow")}
                 </Button>
               </a>
             </div>
@@ -297,8 +305,8 @@ export function LandingPage() {
                       {card.icon}
                     </span>
                     <span>
-                      <span className="block font-display font-bold uppercase tracking-wide text-paper">{card.title}</span>
-                      <span className="block text-sm text-smoke-500">{card.description}</span>
+                      <span className="block font-display font-bold uppercase tracking-wide text-paper">{t(card.title)}</span>
+                      <span className="block text-sm text-smoke-500">{t(card.description)}</span>
                     </span>
                   </span>
                   <span className="shrink-0 text-smoke-600">&rarr;</span>

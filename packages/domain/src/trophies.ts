@@ -66,6 +66,8 @@ export const trophyKey = z.enum([
   "grand-tour",
   "continental-raiders",
   "five-league-xi",
+  // P3 — the Nations Cup tournament (your XI v national teams built from the catalog).
+  "nations-cup-winner",
 ]);
 export type TrophyKey = z.infer<typeof trophyKey>;
 
@@ -126,6 +128,7 @@ export const TROPHY_DEFS: Record<TrophyKey, TrophyDef> = {
   "continental-raiders": { category: "europe", tier: "legendary" },
 
   "nations-champion": { category: "modes", tier: "epic" },
+  "nations-cup-winner": { category: "modes", tier: "legendary" },
   "club-record-breaker": { category: "modes", tier: "rare" },
   "club-worst-ever": { category: "modes", tier: "common" },
 

@@ -15,6 +15,7 @@ import { isRealCountry, playLeagueIdOf } from "../lib/leagues";
 import { checkFormationFillable } from "../lib/oneClubValidation";
 import { useDraft, type Difficulty, type DraftMode, type PlayerRatingsMode } from "../state/DraftContext";
 import { formatSeason } from "../lib/season";
+import { useT } from "../lib/i18n/context";
 
 type SectionAccent = "mint" | "teal" | "plum" | "crimson" | "amber";
 
@@ -67,6 +68,7 @@ const ERA_PRESETS: Array<{ label: string; startYear: number }> = [
 ];
 
 export function SetupPage() {
+  const { t } = useT();
   const navigate = useNavigate();
   const { config, setConfig, resetDraft } = useDraft();
 
@@ -182,14 +184,14 @@ export function SetupPage() {
     <>
     <div className="mx-auto max-w-2xl space-y-7 px-4 pb-4 pt-8 sm:px-6 sm:pt-10">
       <div className="text-center">
-        <h1 className="font-display text-2xl font-bold uppercase tracking-wide text-paper sm:text-3xl">Set the Rules</h1>
-        <p className="mt-1 text-sm text-smoke-500">Your last settings are remembered. Tweak anything, then enter the draft room.</p>
+        <h1 className="font-display text-2xl font-bold uppercase tracking-wide text-paper sm:text-3xl">{t("setup.title")}</h1>
+        <p className="mt-1 text-sm text-smoke-500">{t("setup.sub")}</p>
       </div>
 
       {error && <p className="text-center text-sm text-crimson-400">{error}</p>}
 
       {config.multiplayerLeagueId ? (
-        <Section title="League" accent="mint">
+        <Section title={t("setup.league")} accent="mint">
           <div className="notch flex flex-wrap items-center justify-between gap-3 border border-mint-500/30 bg-mint-500/5 p-4">
             <div>
               <p className="text-[10px] uppercase tracking-wide text-smoke-600">Multiplayer League</p>
@@ -254,7 +256,7 @@ export function SetupPage() {
           </div>
         </Section>
       ) : (
-        <Section title="League" accent="mint">
+        <Section title={t("setup.league")} accent="mint">
           <LeaguePicker
             leagues={leagues}
             selectedIds={[playLeagueIdOf(config)].filter((id): id is string => Boolean(id))}
@@ -266,7 +268,7 @@ export function SetupPage() {
             singleSelect
           />
           <div className="mt-3 space-y-1.5">
-            <p className="text-center text-xs font-semibold uppercase tracking-widest text-smoke-500">Draft from</p>
+            <p className="text-center text-xs font-semibold uppercase tracking-widest text-smoke-500">{t("setup.draftFrom")}</p>
             <SegmentedControl<"league" | "all">
               accent="mint"
               columns={2}
@@ -277,11 +279,11 @@ export function SetupPage() {
                   : setConfig({ draftPool: "league", leagueIds: [playLeagueIdOf(config) ?? leagues[0]?.id].filter((id): id is string => Boolean(id)), playLeagueId: undefined })
               }
               options={[
-                { value: "league", label: "This league", description: "Every spin is a club from the league you'll play in." },
+                { value: "league", label: t("setup.thisLeague"), description: t("setup.thisLeagueDesc") },
                 {
                   value: "all",
-                  label: "All Top-5",
-                  description: "Spin clubs from all five leagues — then play the season in the league you picked above.",
+                  label: t("setup.allTop5"),
+                  description: t("setup.allTop5Desc"),
                 },
               ]}
             />
@@ -289,7 +291,7 @@ export function SetupPage() {
         </Section>
       )}
 
-      <Section title="Formation" accent="teal">
+      <Section title={t("setup.formation")} accent="teal">
         {config.multiplayerFormationLocked ? (
           <p className="notch-sm border border-ink-800 bg-ink-900/40 px-3 py-2 text-center text-xs text-smoke-500">
             Formation locked to <span className="font-semibold text-paper">{config.formation}</span> by this league&apos;s rules.
@@ -309,7 +311,7 @@ export function SetupPage() {
         {checkingFit && <p className="text-center text-xs text-smoke-600">Checking this club&apos;s history fits this formation...</p>}
       </Section>
 
-      <Section title="Difficulty" accent="amber">
+      <Section title={t("setup.difficulty")} accent="amber">
         {config.multiplayerLeagueId ? (
           <p className="notch-sm border border-ink-800 bg-ink-900/40 px-3 py-2 text-center text-xs text-smoke-500">
             Locked to <span className="font-semibold capitalize text-paper">{config.difficulty}</span> by this league&apos;s rules.
@@ -323,29 +325,29 @@ export function SetupPage() {
               setConfig({ difficulty, showRatings: difficulty === "hard" ? false : config.showRatings })
             }
             options={[
-              { value: "easy", label: "Easy", description: "3 redraws available" },
-              { value: "normal", label: "Normal", description: "1 redraw available" },
-              { value: "hard", label: "Hard", description: "No redraws · ratings hidden" },
+              { value: "easy", label: t("setup.easy"), description: t("setup.easyDesc") },
+              { value: "normal", label: t("setup.normal"), description: t("setup.normalDesc") },
+              { value: "hard", label: t("setup.hard"), description: t("setup.hardDesc") },
             ]}
           />
         )}
       </Section>
 
       <div className="grid gap-7 sm:grid-cols-2 sm:gap-5">
-      <Section title="Show Ratings" accent="plum">
+      <Section title={t("setup.showRatings")} accent="plum">
         <SegmentedControl<"on" | "off">
           accent="plum"
           columns={2}
           value={config.showRatings ? "on" : "off"}
           onChange={(v) => setConfig({ showRatings: v === "on" })}
           options={[
-            { value: "on", label: "On", description: "Player overalls visible" },
-            { value: "off", label: "Off", description: "Blind mode: trust your gut" },
+            { value: "on", label: t("setup.on"), description: t("setup.ratingsOnDesc") },
+            { value: "off", label: t("setup.off"), description: t("setup.ratingsOffDesc") },
           ]}
         />
       </Section>
 
-      <Section title="Draft Mode" accent="mint">
+      <Section title={t("setup.draftMode")} accent="mint">
         <SegmentedControl<DraftMode>
           accent="mint"
           columns={2}
@@ -354,35 +356,35 @@ export function SetupPage() {
           options={[
             {
               value: "squad-first",
-              label: "Squad first",
-              description: "Draw a club, pick any player, then choose their slot",
+              label: t("setup.squadFirst"),
+              description: t("setup.squadFirstDesc"),
             },
             {
               value: "position-first",
-              label: "Position first",
-              description: "Pick a slot, then draw a club to fill it",
+              label: t("setup.positionFirst"),
+              description: t("setup.positionFirstDesc"),
             },
           ]}
         />
       </Section>
 
       {config.lockedClubId ? (
-        <Section title="Player Ratings" accent="teal">
+        <Section title={t("setup.playerRatings")} accent="teal">
           <p className="notch-sm border border-ink-800 bg-ink-900/40 px-3 py-2 text-center text-xs text-smoke-500">
             Forced to <span className="font-semibold text-paper">Season</span> for One-Club XI — a career-best
             &quot;Prime&quot; row could belong to a different club.
           </p>
         </Section>
       ) : (
-        <Section title="Player Ratings" accent="teal">
+        <Section title={t("setup.playerRatings")} accent="teal">
           <SegmentedControl<PlayerRatingsMode>
             accent="teal"
             columns={2}
             value={config.playerRatings}
             onChange={(playerRatings) => setConfig({ playerRatings })}
             options={[
-              { value: "prime", label: "Prime", description: "Every player drafted at their career-best rating" },
-              { value: "season", label: "Season", description: "Players rated as they were that exact season" },
+              { value: "prime", label: t("setup.prime"), description: t("setup.primeDesc") },
+              { value: "season", label: t("setup.season"), description: t("setup.seasonDesc") },
             ]}
           />
         </Section>
@@ -390,7 +392,7 @@ export function SetupPage() {
 
       </div>
 
-      <Section title="Era" accent="plum">
+      <Section title={t("setup.era")} accent="plum">
         <div className="flex flex-wrap gap-2">
           {/* Skip presets that start at/before the league's first season — on a 2012+ dataset
               "2000s+" and "2010s+" are just "All-time" again, and all three lit up at once. */}
@@ -413,7 +415,7 @@ export function SetupPage() {
           formatLabel={formatSeason}
         />
         <p className="text-center text-xs text-smoke-500">
-          {(config.eraYearMax ?? yearMax) - (config.eraYearMin ?? yearMin) + 1} of {yearMax - yearMin + 1} seasons
+          {t("setup.seasonsOf", { n: (config.eraYearMax ?? yearMax) - (config.eraYearMin ?? yearMin) + 1, total: yearMax - yearMin + 1 })}
         </p>
         <p className="text-center text-xs text-ink-600">
           Only club-seasons in this range can be drawn — narrow it to draft from an era you know.
@@ -421,7 +423,7 @@ export function SetupPage() {
       </Section>
 
       <Section
-        title="Advanced"
+        title={t("setup.advanced")}
         accent="teal"
         right={
           <button
@@ -430,7 +432,7 @@ export function SetupPage() {
             onClick={() => setAdvancedOpen((v) => !v)}
             className="text-xs text-smoke-500 hover:text-paper"
           >
-            {advancedOpen ? "Hide" : "Change"}
+            {advancedOpen ? t("setup.hide") : t("setup.change")}
           </button>
         }
       >
@@ -444,22 +446,22 @@ export function SetupPage() {
           <div className="space-y-3">
             <Toggle
               accent="mint"
-              label="Managers (Gaffers)"
-              description="After the draft, appoint a gaffer for the story. Off = no manager."
+              label={t("setup.managers")}
+              description={t("setup.managersDesc")}
               checked={config.managers}
               onChange={(managers) => setConfig({ managers })}
             />
             <Toggle
               accent="teal"
-              label="European Nights"
-              description="Finish in the top eight and your XI plays on against clubs from all five leagues. Off = just the league."
+              label={t("setup.europe")}
+              description={t("setup.europeDesc")}
               checked={config.europeanNights}
               onChange={(europeanNights) => setConfig({ europeanNights })}
             />
             <Toggle
               accent="amber"
-              label="January Transfer Window"
-              description="At halfway, gamble on one January event. It can help or hurt. No undo."
+              label={t("setup.january")}
+              description={t("setup.januaryDesc")}
               checked={config.januaryWindow}
               onChange={(januaryWindow) => setConfig({ januaryWindow })}
             />

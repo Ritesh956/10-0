@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./lib/auth-context";
+import { I18nProvider } from "./lib/i18n/context";
 import { DraftProvider, useDraft } from "./state/DraftContext";
 import { applyLeagueTheme, storedLeagueTheme } from "./lib/leagueTheme";
 import { playLeagueIdOf } from "./lib/leagues";
@@ -15,6 +16,7 @@ import { SetupPage } from "./pages/SetupPage";
 import { DraftPage } from "./pages/DraftPage";
 import { SeasonPage } from "./pages/SeasonPage";
 import { MultiplayerPage } from "./pages/MultiplayerPage";
+import { EventsPage } from "./pages/EventsPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
 import { ClubsDirectoryPage } from "./pages/ClubsDirectoryPage";
@@ -84,6 +86,7 @@ function Shell() {
               <Route path="/draft" element={<DraftPage />} />
               <Route path="/season" element={<SeasonPage />} />
               <Route path="/multiplayer" element={<MultiplayerPage />} />
+              <Route path="/events" element={<EventsPage />} />
               <Route path="/multiplayer/join/:code" element={<LeagueJoinPage />} />
               <Route path="/multiplayer/league/:leagueId" element={<LeagueDetailPage />} />
               <Route path="/multiplayer/live/join/:code" element={<LiveDraftJoinPage />} />
@@ -114,13 +117,15 @@ function Shell() {
 export default function App() {
   return (
     <MotionConfig reducedMotion="user">
-      <AuthProvider>
-        <DraftProvider>
-          <BrowserRouter>
-            <Shell />
-          </BrowserRouter>
-        </DraftProvider>
-      </AuthProvider>
+      <I18nProvider>
+        <AuthProvider>
+          <DraftProvider>
+            <BrowserRouter>
+              <Shell />
+            </BrowserRouter>
+          </DraftProvider>
+        </AuthProvider>
+      </I18nProvider>
     </MotionConfig>
   );
 }

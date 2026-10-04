@@ -1,7 +1,8 @@
 import { worldClubLabel } from "../lib/clubNames";
 import { motion } from "framer-motion";
 import type { KnockoutTieDto, WorldClubDto } from "../api/types";
-import { EUROPE_STAGES, ROUND_HEADING } from "../lib/europe";
+import { EUROPE_STAGES } from "../lib/europe";
+import { useT } from "../lib/i18n/context";
 import { staggerContainer, staggerItem } from "../lib/motion";
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
 
 
 export function KnockoutBracket({ ties, clubs, highlightClubId }: Props) {
+  const { t } = useT();
   const nameFor = (clubId: string) => worldClubLabel(clubs.find((c) => c.id === clubId), clubId);
   const rounds = EUROPE_STAGES.map((round) => ({ round, ties: ties.filter((t) => t.round === round) })).filter(
     (group) => group.ties.length > 0,
@@ -21,7 +23,7 @@ export function KnockoutBracket({ ties, clubs, highlightClubId }: Props) {
     <div className="space-y-5">
       {rounds.map(({ round, ties: roundTies }) => (
         <div key={round}>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-smoke-600">{ROUND_HEADING[round]}</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-smoke-600">{t(`round.${round}` as const)}</p>
           <motion.div variants={staggerContainer} initial="initial" animate="animate" className="space-y-2">
             {roundTies.map((tie) => {
               const homeWon = tie.winnerClubId === tie.homeClubId;

@@ -696,6 +696,9 @@ export class SeasonsService {
     const league = leagueId ? await this.prisma.refLeague.findUnique({ where: { id: leagueId } }) : null;
     const europeRun = await loadEuropeRun(this.prisma, worldId, userClub.id, league?.country);
     const europeChampion = europeRun.championClubId === userClub.id;
+    const nationsFinal = await this.prisma.knockoutTie.findFirst({
+      where: { worldId, round: "FINAL", winnerClubId: { not: null }, competitionId: { in: await this.competitionIds(worldId, "INTERNATIONAL") } },
+    });
     // Worlds drafted before settings carried leagueId: record the inferred one so the profile's
     // per-league stats and the career trophies can read it straight off settings from now on.
     if (leagueId && !settings.leagueId) {
@@ -717,6 +720,7 @@ export class SeasonsService {
       oneClubLocked: Boolean(settings.oneClubClubId),
       europeChampion,
       cupChampion: europeRun.cupChampionClubId === userClub.id,
+      nationsCupChampion: nationsFinal?.winnerClubId === userClub.id,
       europe: europeRun.summary ?? undefined,
       goalsFor: userRow.goalsFor,
       goalsAgainst: userRow.goalsAgainst,
@@ -889,6 +893,10 @@ export class SeasonsService {
       });
     }
     return mine;
+  }
+
+  private async competitionIds(worldId: string, type: "INTERNATIONAL" | "CONTINENTAL" | "LEAGUE"): Promise<string[]> {
+    return (await this.prisma.competition.findMany({ where: { worldId, type }, select: { id: true } })).map((c) => c.id);
   }
 
   /** The league a world's AI clubs come from, for worlds drafted before settings carried it. */

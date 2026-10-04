@@ -4,6 +4,7 @@ import { worldClubLabel } from "../lib/clubNames";
 import { staggerContainer, staggerItem } from "../lib/motion";
 import { CountryFlag } from "./CountryFlag";
 import { Button } from "./ui/Button";
+import { useT } from "../lib/i18n/context";
 
 interface Props {
   draw: EuropeDrawDto;
@@ -18,6 +19,7 @@ interface Props {
 
 /** The European Nights draw: four pots seeded by squad strength, then the user's eight opponents. */
 export function EuropeDraw({ draw, clubs, userClubId, fixtures, cup, onContinue }: Props) {
+  const { t } = useT();
   const nameFor = (clubId: string) => worldClubLabel(clubs.find((c) => c.id === clubId), clubId);
   const byClub = new Map(draw.clubs.map((c) => [c.clubId, c]));
   const pots = [1, 2, 3, 4].map((pot) => ({ pot, clubs: draw.clubs.filter((c) => c.pot === pot) }));
@@ -39,9 +41,9 @@ export function EuropeDraw({ draw, clubs, userClubId, fixtures, cup, onContinue 
     <motion.div variants={staggerContainer} initial="initial" animate="animate" className="space-y-6">
       <motion.div variants={staggerItem} className="text-center">
         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-smoke-600">
-          {cup ? "Continental Cup" : "European Nights"}
+          {t(cup ? "europe.cup" : "europe.nights")}
         </p>
-        <h2 className="mt-1 font-display text-2xl font-bold uppercase tracking-wide text-paper">The Draw</h2>
+        <h2 className="mt-1 font-display text-2xl font-bold uppercase tracking-wide text-paper">{t("europe.theDraw")}</h2>
         <p className="mt-1 text-sm text-smoke-400">
           {draw.clubs.length} clubs from {leagues} leagues &middot;{" "}
           {cup ? "straight knockout, two legs a tie" : "8 games each · two opponents from every pot"}
@@ -52,8 +54,8 @@ export function EuropeDraw({ draw, clubs, userClubId, fixtures, cup, onContinue 
         {pots.map(({ pot, clubs: potClubs }) => (
           <motion.div key={pot} variants={staggerItem} className="notch border border-ink-800 bg-ink-900/40 p-3">
             <p className="mb-2 flex items-baseline justify-between font-display text-xs font-semibold uppercase tracking-widest text-smoke-500">
-              <span>{cup ? `Seeds ${(pot - 1) * 4 + 1}–${pot * 4}` : `Pot ${pot}`}</span>
-              <span className="text-[10px] font-normal normal-case tracking-normal text-smoke-600">rating</span>
+              <span>{cup ? `${(pot - 1) * 4 + 1}–${pot * 4}` : t("europe.pot", { n: pot })}</span>
+              <span className="text-[10px] font-normal normal-case tracking-normal text-smoke-600">{t("europe.rating")}</span>
             </p>
             <ul className="space-y-1">
               {potClubs.map((c) => (
@@ -79,7 +81,7 @@ export function EuropeDraw({ draw, clubs, userClubId, fixtures, cup, onContinue 
       {mine.length > 0 && (
         <motion.div variants={staggerItem} className="notch border border-mint-500/30 bg-mint-500/5 p-4">
           <p className="mb-2 text-center font-display text-xs font-semibold uppercase tracking-widest text-mint-300">
-            Your league phase
+            {t("europe.yourLeaguePhase")}
           </p>
           <ul className="grid gap-1.5 sm:grid-cols-2">
             {mine.map((m) => (
@@ -91,7 +93,9 @@ export function EuropeDraw({ draw, clubs, userClubId, fixtures, cup, onContinue 
                 </span>
                 <CountryFlag country={m.opponent?.country} />
                 <span className="min-w-0 flex-1 truncate">{nameFor(m.opponentId)}</span>
-                {m.opponent && <span className="shrink-0 text-[10px] uppercase text-smoke-600">Pot {m.opponent.pot}</span>}
+                {m.opponent && (
+                  <span className="shrink-0 text-[10px] uppercase text-smoke-600">{t("europe.pot", { n: m.opponent.pot })}</span>
+                )}
               </li>
             ))}
           </ul>
@@ -100,7 +104,7 @@ export function EuropeDraw({ draw, clubs, userClubId, fixtures, cup, onContinue 
 
       {myTie && userClubId && (
         <motion.div variants={staggerItem} className="notch border border-mint-500/30 bg-mint-500/5 p-4 text-center">
-          <p className="mb-1 font-display text-xs font-semibold uppercase tracking-widest text-mint-300">Your first tie</p>
+          <p className="mb-1 font-display text-xs font-semibold uppercase tracking-widest text-mint-300">{t("europe.yourFirstTie")}</p>
           <p className="flex items-center justify-center gap-2 text-sm text-paper">
             {(() => {
               const opponentId = myTie.homeClubId === userClubId ? myTie.awayClubId : myTie.homeClubId;
@@ -122,7 +126,7 @@ export function EuropeDraw({ draw, clubs, userClubId, fixtures, cup, onContinue 
       )}
 
       <motion.div variants={staggerItem} className="text-center">
-        <Button onClick={onContinue}>{cup ? "Start the Cup" : "Play the league phase"} &rarr;</Button>
+        <Button onClick={onContinue}>{t(cup ? "europe.startCup" : "europe.playLeaguePhase")} &rarr;</Button>
       </motion.div>
     </motion.div>
   );

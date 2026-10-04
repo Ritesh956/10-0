@@ -31,6 +31,8 @@ const api = vi.hoisted(() => ({
   getCompetitionStats: vi.fn(),
   getTeamStatsForCompetition: vi.fn(),
   getEuropeStatus: vi.fn(),
+  startEuropeCup: vi.fn(),
+  getNationsCupStatus: vi.fn().mockResolvedValue({ started: false }),
   startEuropeLeaguePhase: vi.fn(),
   startEuropeKnockouts: vi.fn(),
   advanceEuropeKnockouts: vi.fn(),
@@ -480,4 +482,73 @@ describe("SeasonPage — Phase 5 finalize-run wiring", () => {
     await waitFor(() => expect(api.getSummary).toHaveBeenCalled(), { timeout: 5000 });
     expect(queryByText(/don't lose this season/i)).toBeNull();
   }, 15000);
+});
+
+describe("SeasonPage — Continental Cup (the second European tier)", () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it("invites a 9th-12th finish to the cup, shows its draw, and plays straight through the knockouts", async () => {
+    setup();
+    api.getEuropeStatus.mockResolvedValue({
+      qualified: false,
+      position: 10,
+      qualifierCount: 8,
+      ties: [],
+      cup: { qualified: true, clubCount: 16 },
+    });
+    const tie = (round: string, winner: string | null = null) => ({
+      id: `t-${round}`,
+      round,
+      homeClubId: "user-club",
+      awayClubId: "ai-club",
+      firstLegFixtureId: null,
+      secondLegFixtureId: null,
+      winnerClubId: winner,
+      wentToPenalties: false,
+    });
+    api.startEuropeCup.mockResolvedValue({
+      competitionId: "cup-c1",
+      round: { round: "R16", seasonId: "s-r16", ties: [tie("R16")] },
+      draw: {
+        clubs: [
+          { clubId: "user-club", name: "Our XI", country: "England", seed: 1, pot: 1, strength: 85 },
+          { clubId: "ai-club", name: "AI FC", country: "Spain", seed: 2, pot: 1, strength: 83 },
+        ],
+      },
+    });
+    api.advanceEuropeKnockouts.mockImplementation(async (_w: string, _c: string, round: string) => {
+      if (round === "R16") return { resolvedRound: "R16", resolvedTies: [tie("R16", "ai-club")], next: { round: "FINAL", seasonId: "s-final", ties: [tie("FINAL")] } };
+      return { resolvedRound: "FINAL", resolvedTies: [tie("FINAL", "ai-club")], champion: "ai-club" };
+    });
+    api.getSummary.mockResolvedValue({ standings, userClub: { id: "user-club", name: "Our XI" }, userRow: standings.rows[0], position: 10, unbeaten: false });
+
+    const { getByRole, findByText, findByRole } = render(
+      <MemoryRouter>
+        <SeasonPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => expect(api.getWorld).toHaveBeenCalled());
+    getByRole("button", { name: /simulate season/i }).click();
+    await findByRole("button", { name: /^continue/i }, { timeout: 5000 });
+    getByRole("button", { name: /^continue/i }).click();
+    await findByRole("button", { name: /^continue/i }, { timeout: 5000 });
+    getByRole("button", { name: /^continue/i }).click();
+
+    // The invitation names the cup, not European Nights.
+    await findByText(/earned a place in the continental cup/i, {}, { timeout: 5000 });
+    getByRole("button", { name: /enter the continental cup/i }).click();
+
+    // The cup's draw: no league phase, a straight knockout.
+    await findByText(/straight knockout/i, {}, { timeout: 5000 });
+    getByRole("button", { name: /start the cup/i }).click();
+
+    await findByText(/continental cup winners/i, {}, { timeout: 15000 });
+    expect(api.startEuropeLeaguePhase).not.toHaveBeenCalled();
+    expect(api.startEuropeKnockouts).not.toHaveBeenCalled();
+    await findByText(/season result/i, {}, { timeout: 10000 });
+  }, 40000);
 });
