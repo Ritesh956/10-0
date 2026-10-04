@@ -137,6 +137,6 @@ describe("DraftPage — recovers from a stale-but-present session (401 on confir
 
     await waitFor(() => expect(playAsGuestSpy).toHaveBeenCalled());
     await waitFor(() => expect(api.createWorld).toHaveBeenCalledTimes(2));
-    expect(api.draftFantasy).toHaveBeenCalledWith("world-1", "Test XI", "4-4-2", expect.any(Array), undefined);
+    expect(api.draftFantasy).toHaveBeenCalledWith("world-1", "Test XI", "4-4-2", expect.any(Array), undefined, expect.any(Array));
   }, 12000);
 });

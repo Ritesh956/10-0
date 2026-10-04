@@ -5,14 +5,25 @@ import type {
   CompetitionStatsDto,
   CreateLeagueDto,
   CreateLiveDraftRoomDto,
+  DailyArchiveRowDto,
   DailyChallengeDto,
+  DailyMyArchiveDto,
   DailyChallengeEntryDto,
+  DailyMyEntryDto,
+  DailyRecapDto,
   EraDto,
   EuropeAdvanceResultDto,
+  WeeklyEventDto,
+  NationsCupGroupDto,
+  NationsCupStartDto,
+  NationsCupStatusDto,
+  EuropeCupDto,
+  EuropeDrawDto,
   EuropeLeaguePhaseDto,
   EuropeRoundDto,
   EuropeStatusDto,
   FinalizeRunResultDto,
+  JanuaryOfferDto,
   JanuaryResultDto,
   JoinLeagueResultDto,
   JoinLiveDraftResultDto,
@@ -38,7 +49,11 @@ import type {
   SummaryDto,
   TeamStatsDto,
   WorldDto,
-  WorldHistoryRowDto,
+  ProfileDto,
+  RunIndexDto,
+  SiteStatsDto,
+  BestXiSlotDto,
+  AuthProvidersDto,
 } from "./types";
 
 const API_BASE_URL = (import.meta.env["VITE_API_URL"] as string | undefined) ?? "http://localhost:4000";
@@ -77,15 +92,46 @@ export class ApiError extends Error {
   }
 }
 
+/** Backoff before each retry of an idempotent GET. The hosted Postgres sleeps when idle and the
+    first queries after a wake-up fail outright (the API returns a 500), so a page's very first
+    load used to show a raw "Internal server error". Two quick retries ride out the wake-up. */
+const GET_RETRY_DELAYS_MS = [700, 1800];
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
   headers.set("Content-Type", "application/json");
   if (authToken) headers.set("Authorization", `Bearer ${authToken}`);
 
-  const res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  const isGet = (options.method ?? "GET").toUpperCase() === "GET";
+  const retryDelays = isGet ? GET_RETRY_DELAYS_MS : [];
+  let res: Response | undefined;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+    } catch (err) {
+      // Network failure (API down/restarting): retry GETs, otherwise surface it.
+      if (attempt < retryDelays.length) {
+        await sleep(retryDelays[attempt]!);
+        continue;
+      }
+      throw new ApiError("Can't reach the server right now — check your connection and try again.", 0);
+    }
+    if (res.status >= 500 && attempt < retryDelays.length) {
+      await sleep(retryDelays[attempt]!);
+      continue;
+    }
+    break;
+  }
+
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { message?: unknown };
-    const message = typeof body.message === "string" ? body.message : `Request failed (${res.status})`;
+    const serverMessage = typeof body.message === "string" ? body.message : undefined;
+    const message =
+      res.status >= 500
+        ? "The archive is taking a moment to wake up — please try again."
+        : (serverMessage ?? `Request failed (${res.status})`);
     throw new ApiError(message, res.status);
   }
   if (res.status === 204) return undefined as T;
@@ -111,6 +157,21 @@ export const api = {
       body: JSON.stringify({ displayName }),
     }),
 
+  getAuthProviders: () => request<AuthProvidersDto>("/auth/providers"),
+
+  /** Emails a one-time sign-in link; the current guest session (if any) rides along automatically. */
+  requestMagicLink: (email: string, redirect?: string) =>
+    request<{ sent: boolean }>("/auth/magic-link", {
+      method: "POST",
+      body: JSON.stringify(redirect ? { email, redirect } : { email }),
+    }),
+
+  verifyMagicLink: (token: string) =>
+    request<AuthResponse>("/auth/magic-link/verify", { method: "POST", body: JSON.stringify({ token }) }),
+
+  signInWithGoogle: (credential: string) =>
+    request<AuthResponse>("/auth/google", { method: "POST", body: JSON.stringify({ credential }) }),
+
   upgradeAccount: (email: string, password: string) =>
     request<AuthResponse>("/auth/upgrade", {
       method: "POST",
@@ -128,6 +189,8 @@ export const api = {
 
   listPlayerSeasons: (filter: CatalogFilter) =>
     request<PlayerSeasonDto[]>(`/catalog/player-seasons?${toQuery(filter)}`),
+
+  getBestXi: (leagueId: string) => request<BestXiSlotDto[]>(`/catalog/best-xi?leagueId=${encodeURIComponent(leagueId)}`),
 
   listManagers: () => request<ManagerDto[]>("/catalog/managers"),
 
@@ -148,6 +211,10 @@ export const api = {
       oneClubClubId?: string;
       multiplayerLeagueId?: string;
       nationsNationality?: string;
+      leagueId?: string;
+      /** "all" = drafted from every league (All Top-5); `leagueId` is then the league played in. */
+      draftPool?: "all";
+      projection?: { finish: number; points: number; overall: number };
     },
   ) => request<WorldDto>("/worlds", { method: "POST", body: JSON.stringify({ eraId, type: "SINGLE", settings }) }),
 
@@ -167,10 +234,11 @@ export const api = {
     formation: string,
     refPlayerSeasonIds: string[],
     refManagerId?: string,
+    lineup?: { position: string; refPlayerSeasonId: string }[],
   ) =>
     request(`/worlds/${worldId}/draft/fantasy`, {
       method: "POST",
-      body: JSON.stringify({ name, formation, refPlayerSeasonIds, refManagerId }),
+      body: JSON.stringify({ name, formation, refPlayerSeasonIds, refManagerId, lineup }),
     }),
 
   createSeason: (worldId: string, competitionName: string, opts: { size?: number; leagueId?: string | undefined }) =>
@@ -218,6 +286,21 @@ export const api = {
       method: "POST",
     }),
 
+  getWeeklyEvents: () => request<WeeklyEventDto[]>("/events/current"),
+
+  getNationsCupStatus: (worldId: string) => request<NationsCupStatusDto>(`/worlds/${worldId}/nations-cup`),
+
+  startNationsCup: (worldId: string) => request<NationsCupStartDto>(`/worlds/${worldId}/nations-cup`, { method: "POST" }),
+
+  getNationsCupGroups: (worldId: string, seasonId: string) =>
+    request<NationsCupGroupDto[]>(`/worlds/${worldId}/nations-cup/groups?seasonId=${seasonId}`),
+
+  startNationsCupKnockouts: (worldId: string, competitionId: string) =>
+    request<EuropeRoundDto>(`/worlds/${worldId}/nations-cup/${competitionId}/knockouts`, { method: "POST" }),
+
+  startEuropeCup: (worldId: string, domesticSeasonId: string) =>
+    request<EuropeCupDto>(`/worlds/${worldId}/europe/cup?domesticSeasonId=${domesticSeasonId}`, { method: "POST" }),
+
   startEuropeKnockouts: (worldId: string, competitionId: string, leaguePhaseSeasonId: string) =>
     request<EuropeRoundDto>(
       `/worlds/${worldId}/europe/${competitionId}/knockouts?leaguePhaseSeasonId=${leaguePhaseSeasonId}`,
@@ -229,19 +312,31 @@ export const api = {
       method: "POST",
     }),
 
+  getEuropeDraw: (worldId: string, competitionId: string) =>
+    request<EuropeDrawDto>(`/worlds/${worldId}/europe/${competitionId}/draw`),
+
   getEuropeBracket: (worldId: string, competitionId: string) =>
     request<KnockoutTieDto[]>(`/worlds/${worldId}/europe/${competitionId}/bracket`),
 
   getLeaguePhaseStandings: (worldId: string, seasonId: string) =>
     request<StandingsDto>(`/worlds/${worldId}/europe/league-phase-standings?seasonId=${seasonId}`),
 
-  resolveJanuaryGamble: (worldId: string, seasonId: string) =>
-    request<JanuaryResultDto>(`/worlds/${worldId}/january/${seasonId}/resolve`, { method: "POST" }),
+  getJanuaryOffer: (worldId: string, seasonId: string) => request<JanuaryOfferDto>(`/worlds/${worldId}/january/${seasonId}/offer`),
+
+  resolveJanuaryGamble: (worldId: string, seasonId: string, choiceId?: string) =>
+    request<JanuaryResultDto>(`/worlds/${worldId}/january/${seasonId}/resolve`, {
+      method: "POST",
+      body: JSON.stringify(choiceId ? { choiceId } : {}),
+    }),
 
   finalizeRun: (worldId: string, seasonId: string) =>
     request<FinalizeRunResultDto>(`/worlds/${worldId}/seasons/${seasonId}/finalize`, { method: "POST" }),
 
-  getHistory: () => request<WorldHistoryRowDto[]>("/worlds/history"),
+  getProfile: () => request<ProfileDto>("/profile"),
+
+  getSiteStats: () => request<SiteStatsDto>("/stats"),
+
+  getRunIndex: (worldId: string) => request<RunIndexDto>(`/worlds/${worldId}/seasons/run-index`),
 
   submitToLeaderboard: (worldId: string, seasonId: string, dto: SubmitLeaderboardDto) =>
     request<SubmitLeaderboardResultDto>(`/worlds/${worldId}/seasons/${seasonId}/leaderboard`, {
@@ -267,6 +362,16 @@ export const api = {
     request<LeaderboardEntryDto>(`/leaderboard/${entryId}/report`, { method: "POST" }),
 
   getDailyChallenge: () => request<DailyChallengeDto>("/daily/today"),
+
+  getDailyByDate: (date: string) => request<DailyChallengeDto>(`/daily/date/${encodeURIComponent(date)}`),
+
+  getDailyArchive: () => request<DailyArchiveRowDto[]>("/daily/archive"),
+
+  getMyDailyArchive: () => request<DailyMyArchiveDto>("/daily/archive/mine"),
+
+  getDailyRecap: () => request<{ recap: DailyRecapDto | null }>("/daily/yesterday").then((r) => r.recap),
+
+  getMyDailyEntry: (challengeId: string) => request<DailyMyEntryDto>(`/daily/${challengeId}/me`),
 
   getDailyLeaderboard: (challengeId: string, limit = 50) =>
     request<DailyChallengeEntryDto[]>(`/daily/${challengeId}/leaderboard?limit=${limit}`),

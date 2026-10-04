@@ -3,6 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import type { RealClubDto } from "../api/types";
 import { initials } from "../lib/positionColors";
+import { clubDisplayName } from "../lib/clubNames";
+import { CountryFlag } from "../components/CountryFlag";
 import { useDraft } from "../state/DraftContext";
 
 /** One-Club XI directory (38-0 §7b, Phase 7): every real top-5 club as a card. Picking one locks
@@ -17,6 +19,7 @@ export function ClubsDirectoryPage() {
   const [clubs, setClubs] = useState<RealClubDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [leagueTab, setLeagueTab] = useState<string>("all");
 
   useEffect(() => {
     void api
@@ -25,12 +28,20 @@ export function ClubsDirectoryPage() {
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load clubs"));
   }, []);
 
+  const leagueTabs = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const c of clubs ?? []) if (!seen.has(c.currentLeagueName)) seen.set(c.currentLeagueName, c.country);
+    return [...seen.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [clubs]);
+
   const filtered = useMemo(() => {
     if (!clubs) return null;
     const q = search.trim().toLowerCase();
-    if (!q) return clubs;
-    return clubs.filter((c) => c.name.toLowerCase().includes(q) || c.country.toLowerCase().includes(q));
-  }, [clubs, search]);
+    return clubs
+      .filter((c) => leagueTab === "all" || c.currentLeagueName === leagueTab)
+      .filter((c) => !q || c.name.toLowerCase().includes(q) || clubDisplayName(c.name).toLowerCase().includes(q) || c.country.toLowerCase().includes(q))
+      .sort((a, b) => clubDisplayName(a.name).localeCompare(clubDisplayName(b.name)));
+  }, [clubs, search, leagueTab]);
 
   function pickClub(club: RealClubDto) {
     resetDraft();
@@ -38,7 +49,7 @@ export function ClubsDirectoryPage() {
       eraId: "era-all-time",
       leagueIds: [club.currentLeagueId],
       lockedClubId: club.id,
-      lockedClubName: club.name,
+      lockedClubName: clubDisplayName(club.name),
       lockedNationality: undefined,
       playerRatings: "season",
       eraYearMin: undefined,
@@ -46,18 +57,48 @@ export function ClubsDirectoryPage() {
     });
     // Only fill in a default name if the user hasn't already typed one this session — matches
     // DraftPage's own "untouched squadName defaults, doesn't clobber" convention.
-    if (!squadName) setSquadName(`${club.name} All-Time XI`);
+    if (!squadName) setSquadName(`${clubDisplayName(club.name)} All-Time XI`);
     navigate("/setup");
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 px-6 py-12">
+    <div className="mx-auto max-w-4xl space-y-6 px-4 py-8 sm:px-6 sm:py-12">
       <div className="text-center">
         <h1 className="font-display text-3xl font-bold uppercase tracking-wide text-paper">One-Club XI</h1>
         <p className="mt-2 text-sm text-smoke-500">
           Pick a real club and draft your all-time greatest XI from their entire history — any era, any season.
         </p>
+        <p className="mt-1 text-xs text-smoke-500">
+          Beat the club&apos;s best simulated record for <span className="text-amber-300">Club Record Breaker</span>; set its worst for{" "}
+          <span className="text-crimson-300">Club Worst Ever</span>.
+        </p>
       </div>
+
+      {leagueTabs.length > 1 && (
+        <div className="flex flex-wrap justify-center gap-1.5" role="tablist" aria-label="League">
+          {[["all", ""] as [string, string], ...leagueTabs].map(([name, country]) => (
+            <button
+              key={name}
+              type="button"
+              role="tab"
+              aria-selected={leagueTab === name}
+              onClick={() => setLeagueTab(name)}
+              className={`notch-sm border px-3 py-1.5 text-xs font-semibold transition ${
+                leagueTab === name ? "border-mint-500 bg-mint-500/10 text-mint-300" : "border-ink-700 text-smoke-400 hover:text-paper"
+              }`}
+            >
+              {name === "all" ? (
+                "All leagues"
+              ) : (
+                <span className="inline-flex items-center gap-1.5">
+                  <CountryFlag country={country} />
+                  {name}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
 
       <input
         value={search}
@@ -91,14 +132,18 @@ export function ClubsDirectoryPage() {
                 />
               ) : (
                 <span className="notch-sm flex h-12 w-12 items-center justify-center bg-mint-500/15 font-display text-sm font-bold text-mint-300">
-                  {initials(club.name)}
+                  {initials(clubDisplayName(club.name))}
                 </span>
               )}
-              <span className="font-display text-sm font-semibold leading-tight text-paper">{club.name}</span>
-              <span className="text-[11px] text-smoke-500">{club.currentLeagueName}</span>
+              <span className="font-display text-sm font-semibold leading-tight text-paper" title={club.name}>
+                {clubDisplayName(club.name)}
+              </span>
+              <span className="inline-flex items-center gap-1 text-[11px] text-smoke-500">
+                <CountryFlag country={club.country} className="h-2.5 w-[15px]" /> {club.currentLeagueName}
+              </span>
             </button>
             <Link
-              to={`/leaderboard?mode=one-club&clubId=${club.id}&clubName=${encodeURIComponent(club.name)}`}
+              to={`/leaderboard?mode=one-club&clubId=${club.id}&clubName=${encodeURIComponent(clubDisplayName(club.name))}`}
               className="text-[10px] text-teal-400 underline hover:text-teal-300"
             >
               View leaderboard

@@ -3,12 +3,18 @@ import { motion } from "framer-motion";
 import type { SummaryDto } from "../api/types";
 import { fireTitleBurst, fireUnbeatenBurst } from "../lib/confetti";
 import { SPRING_BOUNCY } from "../lib/motion";
+import { ordinal, SHARE_COLORS, type ShareCardModel } from "../lib/shareImage";
+import { ShareActions } from "./ShareActions";
 
 interface Props {
   summary: SummaryDto;
+  /** Context line for the image ("🏴 Premier League · 4-3-3 · Normal"). */
+  subtitle?: string | undefined;
+  /** Supporting lines for the image (verdict, awards…). */
+  lines?: string[] | undefined;
 }
 
-export function ShareCard({ summary }: Props) {
+export function ShareCard({ summary, subtitle, lines = [] }: Props) {
   const { userClub, userRow, position, unbeaten, shareText } = summary;
 
   useEffect(() => {
@@ -18,11 +24,26 @@ export function ShareCard({ summary }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function copyToClipboard() {
-    if (shareText) await navigator.clipboard.writeText(shareText);
-  }
-
   if (!userClub || !userRow) return null;
+
+  const headline = unbeaten && position === 1 ? "Unbeaten champions" : position === 1 ? "Champions" : position ? `${ordinal(position)} place` : "Full time";
+  const card: ShareCardModel = {
+    kicker: "Season result",
+    title: userClub.name,
+    ...(subtitle ? { subtitle } : {}),
+    headline,
+    headlineColor: position === 1 ? SHARE_COLORS.amber : SHARE_COLORS.paper,
+    stats: [
+      { label: "Won", value: String(userRow.won), color: SHARE_COLORS.mint },
+      { label: "Drawn", value: String(userRow.drawn) },
+      { label: "Lost", value: String(userRow.lost), color: SHARE_COLORS.crimson },
+      { label: "Points", value: String(userRow.points) },
+    ],
+    lines: [`${userRow.goalsFor} scored · ${userRow.goalsAgainst} conceded`, ...lines],
+    ...(unbeaten ? { ribbon: "Unbeaten", accent: SHARE_COLORS.amber } : {}),
+  };
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const caption = `${shareText ?? `${userClub.name}: ${headline}, ${userRow.won}-${userRow.drawn}-${userRow.lost}, ${userRow.points} pts.`} Can you beat it? ${origin}`.trim();
 
   return (
     <div
@@ -48,7 +69,7 @@ export function ShareCard({ summary }: Props) {
 
       <div className="mx-auto mt-6 grid max-w-xs grid-cols-3 gap-4 text-center">
         <div>
-          <div className="font-display text-2xl font-bold text-teal-400">{userRow.won}</div>
+          <div className="font-display text-2xl font-bold text-mint-400">{userRow.won}</div>
           <div className="text-xs uppercase text-smoke-600">Won</div>
         </div>
         <div>
@@ -66,12 +87,7 @@ export function ShareCard({ summary }: Props) {
         <span className="text-sm font-normal text-smoke-500">goals for/against</span>
       </p>
 
-      <button
-        onClick={copyToClipboard}
-        className="notch-sm mt-8 border-2 border-paper bg-paper px-5 py-2 text-sm font-display font-semibold uppercase tracking-wide text-ink-950 transition hover:bg-mint-300 hover:border-mint-300"
-      >
-        Copy result to share
-      </button>
+      <ShareActions card={card} caption={caption} fileName="futbol-season.png" />
     </div>
   );
 }

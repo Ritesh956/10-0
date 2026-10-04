@@ -2,7 +2,9 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { motion } from "framer-motion";
 import { SPRING_SNAPPY } from "../../lib/motion";
 
-type Variant = "primary" | "outline" | "ghost" | "danger";
+/** `gamble` (amber) is for risky-but-optional choices like the January window — crimson reads as an
+    error, which a gamble isn't. */
+type Variant = "primary" | "outline" | "ghost" | "danger" | "gamble";
 type Size = "sm" | "md" | "lg";
 
 /** Native props framer-motion's HTMLMotionProps redefines with an incompatible signature
@@ -29,6 +31,7 @@ const VARIANT_CLASSES: Record<Variant, string> = {
   outline: "border-2 border-ink-600 text-paper hover:border-mint-500/60 hover:bg-ink-800/60",
   ghost: "text-smoke-500 hover:text-paper hover:bg-ink-800/60",
   danger: "bg-crimson-500 text-paper hover:bg-crimson-400",
+  gamble: "bg-amber-500 text-ink-950 hover:bg-amber-400",
 };
 
 const SIZE_CLASSES: Record<Size, string> = {

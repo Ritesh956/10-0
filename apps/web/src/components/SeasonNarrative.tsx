@@ -10,7 +10,7 @@ interface Props {
     January recap, standout-player quote, manager closing line) — a template-bank narrative, no
     LLM involved; every piece of text comes from lib/seasonNarrative.ts's pure signal functions. */
 export function SeasonNarrative({ narrative }: Props) {
-  const { verdict, unitTiers, compositionSentence, finishParagraph, januaryLines, standout, managerLine } = narrative;
+  const { verdict, unitTiers, compositionSentence, finishParagraph, januaryLines, derbyLine, standout, managerLine } = narrative;
 
   return (
     <motion.div
@@ -48,6 +48,12 @@ export function SeasonNarrative({ narrative }: Props) {
             </span>
           </div>
         </motion.div>
+      )}
+
+      {derbyLine && (
+        <motion.p variants={staggerItem} className="border-t border-ink-800 pt-3 text-sm text-smoke-300">
+          {derbyLine}
+        </motion.p>
       )}
 
       {januaryLines.length > 0 && (

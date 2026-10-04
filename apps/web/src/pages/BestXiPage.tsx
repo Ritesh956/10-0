@@ -1,4 +1,7 @@
+import { Link } from "react-router-dom";
+import { CountryFlag } from "../components/CountryFlag";
 import { SiteFooter } from "../components/SiteFooter";
+import { LEAGUE_SLUGS, leagueCountry, leagueLabel } from "../lib/leagues";
 
 interface Legend {
   name: string;
@@ -8,7 +11,7 @@ interface Legend {
 }
 
 /** Our own editorial shortlist (38-0 §5's "Greatest XI" static page), scoped to the same top-5,
-    2012-2024 window our real dataset covers — factual names/positions/clubs, our own opinionated
+    2012/13-2025/26 window our real dataset covers — factual names/positions/clubs, our own opinionated
     picks, not sourced from or endorsed by any official body (see SiteFooter's standing disclaimer). */
 const LEGENDS: Legend[] = [
   { name: "Manuel Neuer", position: "GK", club: "Bayern Munich", note: "Redefined the sweeper-keeper role for a generation." },
@@ -33,13 +36,26 @@ export function BestXiPage() {
             The archive&apos;s best XI
           </span>
           <h1 className="mt-4 font-display text-4xl font-bold uppercase leading-tight tracking-tight text-paper">
-            Our greatest top-5 XI, 2012&ndash;2024.
+            Our greatest top-5 XI, 2012&ndash;2026.
           </h1>
           <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-smoke-500">
             Every one of these names is in the draft pool right now, at the club-seasons that made them legends. Our
             own editorial shortlist, not an official ranking — see what you can draw and build around.
           </p>
         </div>
+
+        <nav aria-label="Best XI by league" className="flex flex-wrap justify-center gap-2">
+          {LEAGUE_SLUGS.map((l) => (
+            <Link
+              key={l.slug}
+              to={`/best-xi/${l.slug}`}
+              className="notch-sm flex items-center gap-2 border border-ink-700 px-3 py-1.5 text-sm text-smoke-400 hover:border-mint-500/60 hover:text-paper"
+            >
+              <CountryFlag country={leagueCountry(l.leagueId)} />
+              {leagueLabel(l.leagueId)}
+            </Link>
+          ))}
+        </nav>
 
         <div className="grid gap-3 sm:grid-cols-2">
           {LEGENDS.map((legend, i) => {

@@ -5,14 +5,14 @@ describe("squadTierName", () => {
   it("maps the exact band boundaries correctly", () => {
     expect(squadTierName(88)).toBe("Galácticos");
     expect(squadTierName(87)).toBe("Elite");
-    expect(squadTierName(82)).toBe("Elite");
-    expect(squadTierName(81)).toBe("Strong");
-    expect(squadTierName(76)).toBe("Strong");
-    expect(squadTierName(75)).toBe("Mid-table");
-    expect(squadTierName(68)).toBe("Mid-table");
-    expect(squadTierName(67)).toBe("Budget");
-    expect(squadTierName(60)).toBe("Budget");
-    expect(squadTierName(59)).toBe("Minnows");
+    expect(squadTierName(85)).toBe("Elite");
+    expect(squadTierName(84)).toBe("Strong");
+    expect(squadTierName(82)).toBe("Strong");
+    expect(squadTierName(81)).toBe("Mid-table");
+    expect(squadTierName(78)).toBe("Mid-table");
+    expect(squadTierName(77)).toBe("Budget");
+    expect(squadTierName(74)).toBe("Budget");
+    expect(squadTierName(73)).toBe("Minnows");
     expect(squadTierName(0)).toBe("Minnows");
   });
 
@@ -24,6 +24,12 @@ describe("squadTierName", () => {
       expect(rank).toBeGreaterThanOrEqual(prevRank);
       prevRank = rank;
     }
+  });
+
+  it("agrees with the projection: Galácticos are title favourites, Minnows are relegation fodder", async () => {
+    const { computePreseasonOdds } = await import("./preseasonOdds");
+    expect(computePreseasonOdds(88).projectedFinish).toBeLessThanOrEqual(3);
+    expect(computePreseasonOdds(73).relegationPct).toBeGreaterThan(50);
   });
 
   it("has a color token for every tier", () => {

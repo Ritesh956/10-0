@@ -3,6 +3,13 @@ import {
   EVENT_WEIGHTS,
   biasPoolForEvent,
   findWeakestSlot,
+  JANUARY_KINDS,
+  biasPoolForKind,
+  drawDistinct,
+  eventTypeForDelta,
+  pickKind,
+  pickTargetSlot,
+  seededRandom,
   pickEventType,
   totalEventWeight,
   type LineupSlotJson,
@@ -87,5 +94,86 @@ describe("biasPoolForEvent", () => {
     // the draw with zero candidates.
     expect(biasPoolForEvent(pool, "POSITIVE", 999)).toEqual(pool);
     expect(biasPoolForEvent(pool, "NEGATIVE", -1)).toEqual(pool);
+  });
+});
+
+describe("January event kinds", () => {
+  const lineup: LineupSlotJson[] = [
+    { position: "GK", playerId: "a" },
+    { position: "CB", playerId: "b" },
+    { position: "ST", playerId: "c" },
+  ];
+  const byId = new Map([
+    ["a", { overall: 70 }],
+    ["b", { overall: 64 }],
+    ["c", { overall: 88 }],
+  ]);
+
+  it("the offer is a pure function of its seed, so it can't be re-rolled by asking again", () => {
+    const a = seededRandom("season-1:club-1");
+    const b = seededRandom("season-1:club-1");
+    expect([a(), a(), a()]).toEqual([b(), b(), b()]);
+    expect(pickKind(seededRandom("x")).kind).toBe(pickKind(seededRandom("x")).kind);
+  });
+
+  it("every kind is reachable and weights cover the whole roll", () => {
+    const seen = new Set<string>();
+    for (let i = 0; i < 400; i++) seen.add(pickKind(seededRandom(`s${i}`)).kind);
+    expect(seen.size).toBe(JANUARY_KINDS.length);
+  });
+
+  it("targets the weakest, strongest or a random slot as the event says", () => {
+    const r = seededRandom("t");
+    expect(pickTargetSlot(lineup, byId, "weakest", r)?.slot.playerId).toBe("b");
+    expect(pickTargetSlot(lineup, byId, "strongest", r)?.slot.playerId).toBe("c");
+    expect(["a", "b", "c"]).toContain(pickTargetSlot(lineup, byId, "random", r)?.slot.playerId);
+  });
+
+  it("a star sale is a downgrade, but within 8 points when possible", () => {
+    const spec = JANUARY_KINDS.find((k) => k.kind === "star-wants-out")!;
+    const pool = [{ overall: 60 }, { overall: 82 }, { overall: 85 }, { overall: 90 }];
+    expect(biasPoolForKind(pool, spec, 88).map((p) => p.overall)).toEqual([82, 85]);
+  });
+
+  it("draws distinct options and labels the outcome by the actual delta", () => {
+    const picks = drawDistinct([1, 2, 3, 4, 5], 3, seededRandom("d"));
+    expect(new Set(picks).size).toBe(3);
+    expect(eventTypeForDelta(3)).toBe("POSITIVE");
+    expect(eventTypeForDelta(1)).toBe("NEUTRAL");
+    expect(eventTypeForDelta(-2)).toBe("NEGATIVE");
+  });
+});
+
+import { eventLabel, eventPremise, JANUARY_KINDS, pickForeignLeague, seededRandom } from "./january.logic.js";
+
+describe("cross-border January events", () => {
+  const leagues = [{ id: "es" }, { id: "gb" }, { id: "it" }, { id: "de" }, { id: "fr" }];
+
+  it("never picks the home league, and names the same one for the same window", () => {
+    for (let i = 0; i < 50; i++) {
+      const pick = pickForeignLeague(leagues, "gb", seededRandom(`window-${i}`));
+      expect(pick).toBeDefined();
+      expect(pick!.id).not.toBe("gb");
+    }
+    expect(pickForeignLeague(leagues, "gb", seededRandom("same"))).toEqual(pickForeignLeague(leagues, "gb", seededRandom("same")));
+  });
+
+  it("reaches different leagues across different windows", () => {
+    const seen = new Set(Array.from({ length: 60 }, (_, i) => pickForeignLeague(leagues, "gb", seededRandom(`w${i}`))!.id));
+    expect(seen.size).toBeGreaterThanOrEqual(3);
+  });
+
+  it("names the league in the label and premise of a cross-border event", () => {
+    const raid = JANUARY_KINDS.find((k) => k.kind === "border-raid")!;
+    expect(eventLabel(raid, "Bundesliga")).toBe("Bundesliga Bargain");
+    expect(eventPremise(raid, "Bundesliga")).toContain("A Bundesliga side");
+    const loan = JANUARY_KINDS.find((k) => k.kind === "loan-swap")!;
+    expect(eventLabel(loan, "Serie A")).toBe("Serie A Loan Swap");
+    const plain = JANUARY_KINDS.find((k) => k.kind === "bargain-buy")!;
+    expect(eventLabel(plain, "Serie A")).toBe("Bargain Buy");
+  });
+
+  it("is only ever a foreign league for the events that say so", () => {
+    expect(JANUARY_KINDS.filter((k) => k.otherLeagues).map((k) => k.kind).sort()).toEqual(["border-raid", "loan-swap"]);
   });
 });

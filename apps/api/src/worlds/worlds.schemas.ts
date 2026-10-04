@@ -21,6 +21,18 @@ export const worldSettingsSchema = z.object({
       "nations-champion" trophy. The nationality string itself doubles as the id (there's no
       separate Nation model), same as how clubName/refClubId aren't unified in One-Club either. */
   nationsNationality: z.string().optional(),
+  /** The real league the season is played in (RefLeague id), when the draft picked one. Display
+      context only — SeasonsService takes the league from createSeason's own body. */
+  leagueId: z.string().optional(),
+  /** "all" when the draft wheel spanned every real league (All Top-5); `leagueId` is then the league
+      the season is played in rather than the one the squad came from. */
+  draftPool: z.enum(["all"]).optional(),
+  /** The pre-season projection exactly as the draft room showed it, so the end-of-season verdict
+      compares the finish against what the player actually saw (and not a re-derivation from an
+      overall that the January window may have changed since). */
+  projection: z
+    .object({ finish: z.number().int().min(1), points: z.number().int().min(0), overall: z.number() })
+    .optional(),
 });
 export type WorldSettingsDto = z.infer<typeof worldSettingsSchema>;
 

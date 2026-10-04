@@ -1,5 +1,5 @@
 import { createRng, simulate } from "@futbol/engine";
-import { generateMatchSetup } from "@futbol/engine/testing";
+import { generateMatchSetup, overallToEngineQuality } from "@futbol/engine/testing";
 
 export interface BatchConfig {
   trials: number;
@@ -81,11 +81,8 @@ export function runBatch(config: BatchConfig): BatchStats {
   };
 }
 
-/** Maps an `overall` (70-99) to engine quality the same way packages/db/prisma/seed-real.ts does,
-    so league simulations here mirror what real drafted squads actually feed the engine. */
-export function overallToQuality(overall: number): number {
-  return Math.min(1, Math.max(0, 0.42 + ((overall - 70) / 29) * 0.58));
-}
+/** Maps an `overall` to engine quality exactly the way packages/db/prisma/seed-real.ts does. */
+export const overallToQuality = overallToEngineQuality;
 
 export interface LeagueStats {
   seasons: number;

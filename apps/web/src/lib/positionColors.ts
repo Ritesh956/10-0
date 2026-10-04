@@ -39,7 +39,13 @@ export function initials(name: string): string {
   return (first + last).toUpperCase();
 }
 
+/** Lower-case name particles that belong with the surname ("van Dijk", "de Bruyne", "dos Santos"). */
+const PARTICLES = new Set(["van", "von", "de", "der", "den", "da", "das", "do", "dos", "di", "del", "della", "la", "le", "ter", "ten", "mac", "bin", "el", "al"]);
+
 export function surname(name: string): string {
   const parts = name.trim().split(/\s+/);
-  return parts[parts.length - 1] ?? name;
+  if (parts.length <= 1) return parts[0] ?? name;
+  let start = parts.length - 1;
+  while (start > 1 && PARTICLES.has(parts[start - 1]!.toLowerCase())) start--;
+  return parts.slice(start).join(" ");
 }

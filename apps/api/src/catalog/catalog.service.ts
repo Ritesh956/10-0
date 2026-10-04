@@ -3,6 +3,7 @@ import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import type { PrismaClient } from "@futbol/db";
 import { PRISMA } from "../prisma/prisma.module.js";
 import type { ClubSeasonFilterDto, PlayerSeasonFilterDto } from "./catalog.schemas.js";
+import { BEST_XI_SLOTS, pickBestXi, type BestXiCandidate, type BestXiSlot } from "./best-xi.logic.js";
 
 /** Mirrors apps/web/src/lib/leagues.ts's REAL_LEAGUE_COUNTRIES (and seasons.service.ts's own copy)
     — the real top-5 dataset shares an era with the fictional placeholder one, so anything listing
@@ -12,17 +13,70 @@ const REAL_LEAGUE_COUNTRIES = ["England", "Spain", "Italy", "Germany", "France"]
 
 @Injectable()
 export class CatalogService {
+  /** The reference catalog only changes on a reseed (which restarts nothing, but is rare), so each
+      league's Best XI is computed once per process. */
+  private readonly bestXiCache = new Map<string, Promise<BestXiSlot[]>>();
+
   constructor(@Inject(PRISMA) private readonly prisma: PrismaClient) {}
+
+  /** A league's top-rated XI across every season we have, with alternatives per slot (pickBestXi). */
+  getBestXi(leagueId: string): Promise<BestXiSlot[]> {
+    let cached = this.bestXiCache.get(leagueId);
+    if (!cached) {
+      cached = this.loadBestXi(leagueId);
+      this.bestXiCache.set(leagueId, cached);
+      cached.catch(() => this.bestXiCache.delete(leagueId));
+    }
+    return cached;
+  }
+
+  private async loadBestXi(leagueId: string): Promise<BestXiSlot[]> {
+    const league = await this.prisma.refLeague.findUnique({ where: { id: leagueId } });
+    if (!league) throw new NotFoundException("League not found");
+    const positions = [...new Set(BEST_XI_SLOTS.flatMap((s) => s.positions))];
+    // Top 40 rows per primary position (a player can appear once per season, so this leaves
+    // plenty of distinct players for two centre-backs plus three alternatives each).
+    const rows = await this.prisma.$queryRaw<BestXiCandidate[]>`
+      SELECT "playerSeasonId", "playerId", name, nationality, "photoUrl", "clubName", "seasonYear", overall, position
+      FROM (
+        SELECT rps.id AS "playerSeasonId", rps."playerId", p.name, p.nationality, p."photoUrl",
+               c.name AS "clubName", rps."seasonYear", rps.overall, rps.positions[1] AS position,
+               ROW_NUMBER() OVER (PARTITION BY rps.positions[1] ORDER BY rps.overall DESC, rps."seasonYear" DESC) AS rn
+        FROM ref_player_seasons rps
+        JOIN ref_club_seasons cs ON cs.id = rps."clubSeasonId"
+        JOIN ref_clubs c ON c.id = cs."clubId"
+        JOIN ref_players p ON p.id = rps."playerId"
+        WHERE cs."leagueId" = ${leagueId} AND rps.positions[1] = ANY(${positions})
+      ) ranked
+      WHERE rn <= 40`;
+    return pickBestXi(rows);
+  }
 
   listEras() {
     return this.prisma.era.findMany({ orderBy: { startYear: "asc" } });
   }
 
-  listLeagues(eraId?: string) {
-    return this.prisma.refLeague.findMany({
-      ...(eraId ? { where: { eraId } } : {}),
-      orderBy: { name: "asc" },
-    });
+  /** Each league carries the season span it actually has data for, so the web era slider and the
+      landing page's archive stats reflect the real catalog instead of the era's nominal range (the
+      all-time era is 1992–2025 nominally, but the real top-5 data only covers 2012/13–2025/26). */
+  async listLeagues(eraId?: string) {
+    const [leagues, spans] = await Promise.all([
+      this.prisma.refLeague.findMany({
+        ...(eraId ? { where: { eraId } } : {}),
+        orderBy: { name: "asc" },
+      }),
+      this.prisma.refClubSeason.groupBy({
+        by: ["leagueId"],
+        _min: { seasonYear: true },
+        _max: { seasonYear: true },
+      }),
+    ]);
+    const spanByLeague = new Map(spans.map((s) => [s.leagueId, s]));
+    return leagues.map((league) => ({
+      ...league,
+      minSeasonYear: spanByLeague.get(league.id)?._min.seasonYear ?? null,
+      maxSeasonYear: spanByLeague.get(league.id)?._max.seasonYear ?? null,
+    }));
   }
 
   listClubSeasons(filter: ClubSeasonFilterDto) {

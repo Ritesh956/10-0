@@ -2,12 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* The primary accent as "r g b" triples; lib/leagueTheme.ts overrides these per league. */
+  --c-mint-500: 31 191 117;
+  --c-mint-400: 62 217 143;
+  --c-mint-300: 125 232 182;
+}
+
 html {
   color-scheme: dark;
 }
 
 ::selection {
-  background-color: rgba(31, 191, 117, 0.35);
+  background-color: rgb(var(--c-mint-500) / 0.35);
 }
 
 /* Soft rounded-corner shape language (replaced the old angular notched/clip-path silhouette) —
@@ -50,7 +57,7 @@ html {
   width: 16px;
   height: 16px;
   border-radius: 9999px;
-  background: rgb(31 191 117);
+  background: rgb(var(--c-mint-500));
   cursor: pointer;
   margin-top: 0;
 }

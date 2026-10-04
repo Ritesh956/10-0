@@ -1,5 +1,5 @@
 """
-Builds packages/db/prisma/data/real-top5-2012-2024.json.gz — the real
+Builds packages/db/prisma/data/real-top5-2012-2025.json.gz — the real
 reference-catalog dataset consumed by packages/db/prisma/seed-real.ts.
 
 Source: dcaribou/transfermarkt-datasets (https://github.com/dcaribou/transfermarkt-datasets),
@@ -14,7 +14,7 @@ contribution, and involvement (minutes played), specifically so we're never
 copying a third party's proprietary rating.
 
 Usage:
-    python build_real_catalog.py [--data-dir raw] [--out ../../packages/db/prisma/data/real-top5-2012-2024.json.gz]
+    python build_real_catalog.py [--data-dir raw] [--out ../../packages/db/prisma/data/real-top5-2012-2025.json.gz]
 """
 
 import argparse
@@ -27,18 +27,21 @@ from statistics import NormalDist
 import numpy as np
 import pandas as pd
 
+from ovr_spread import FINAL_CAP, spread
+
 # Target OVERALL curve. See the long comment where these are used below: the
 # blended score is quantile-mapped onto a normal(mean, sd) clamped to
 # [floor, cap], so the final rating distribution looks like real football
 # (floor 70, bulk clustered in the low 80s, thin elite tail to 99) instead of
 # the near-flat 40-99 spread a raw linear map produced. Keep these in sync with
 # rescale_existing_overall.py, which applies the identical curve to the already
-# shipped dataset.
+# shipped dataset. This is stage 1 only — ovr_spread.py's stage 2 then stretches
+# the top tail and lowers the floor (final range 58-97); see that file.
 OVR_MEAN, OVR_SD, OVR_FLOOR, OVR_CAP = 81.5, 5.0, 70, 99
 
 TOP5 = {"GB1": "England", "ES1": "Spain", "IT1": "Italy", "L1": "Germany", "FR1": "France"}
 TOP5_NAMES = {"GB1": "Premier League", "ES1": "LaLiga", "IT1": "Serie A", "L1": "Bundesliga", "FR1": "Ligue 1"}
-SEASON_MIN, SEASON_MAX = 2012, 2024
+SEASON_MIN, SEASON_MAX = 2012, 2025
 MIN_MINUTES = 300
 
 POSITION_MAP = {
@@ -69,7 +72,7 @@ def slugify(s: str) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser()
     default_data_dir = Path(__file__).parent / "raw"
-    default_out = Path(__file__).parent.parent.parent / "packages" / "db" / "prisma" / "data" / "real-top5-2012-2024.json.gz"
+    default_out = Path(__file__).parent.parent.parent / "packages" / "db" / "prisma" / "data" / "real-top5-2012-2025.json.gz"
     parser.add_argument("--data-dir", type=Path, default=default_data_dir)
     parser.add_argument("--out", type=Path, default=default_out)
     args = parser.parse_args()
@@ -185,10 +188,13 @@ def main() -> None:
     pct = blend.rank(pct=True, method="average")
     eps = 0.5 / len(agg)
     pct = pct.clip(eps, 1 - eps)  # avoid inv_cdf(0)/inv_cdf(1) = +/-inf
-    agg["overall"] = pct.map(nd.inv_cdf).round().clip(OVR_FLOOR, OVR_CAP).astype(int)
+    stage1 = pct.map(nd.inv_cdf).clip(OVR_FLOOR, OVR_CAP)
+    # Stage 2 (ovr_spread.py): stretch the top tail so 90+ is genuinely rare and a league's best
+    # and worst XIs sit far enough apart for a realistic simulated table.
+    agg["overall"] = stage1.map(spread).astype(int)
 
     age_bonus = ((25 - agg["age"]).clip(lower=0) * 0.8).round()
-    agg["potential"] = (agg["overall"] + age_bonus).clip(upper=OVR_CAP)
+    agg["potential"] = (agg["overall"] + age_bonus).clip(upper=FINAL_CAP)
     agg["potential"] = agg[["overall", "potential"]].max(axis=1).astype(int)
 
     agg["preferred_foot"] = agg["foot"].map({"right": "right", "left": "left", "both": "both"}).fillna("right")

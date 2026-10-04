@@ -11,11 +11,13 @@ import { Toggle } from "../components/ui/Toggle";
 import { Chip } from "../components/ui/Chip";
 import { SiteFooter } from "../components/SiteFooter";
 import { isFormation, positionLabel } from "../lib/formations";
-import { isRealCountry } from "../lib/leagues";
+import { isRealCountry, playLeagueIdOf } from "../lib/leagues";
 import { checkFormationFillable } from "../lib/oneClubValidation";
 import { useDraft, type Difficulty, type DraftMode, type PlayerRatingsMode } from "../state/DraftContext";
+import { formatSeason } from "../lib/season";
+import { useT } from "../lib/i18n/context";
 
-type SectionAccent = "mint" | "teal" | "plum" | "crimson";
+type SectionAccent = "mint" | "teal" | "plum" | "crimson" | "amber";
 
 interface SectionProps {
   title: string;
@@ -32,6 +34,7 @@ const SECTION_ACCENT_DOT: Record<SectionAccent, string> = {
   teal: "bg-teal-400",
   plum: "bg-plum-400",
   crimson: "bg-crimson-400",
+  amber: "bg-amber-400",
 };
 
 const SECTION_ACCENT_BORDER: Record<SectionAccent, string> = {
@@ -39,12 +42,13 @@ const SECTION_ACCENT_BORDER: Record<SectionAccent, string> = {
   teal: "border-teal-500/30",
   plum: "border-plum-500/30",
   crimson: "border-crimson-500/30",
+  amber: "border-amber-500/30",
 };
 
 function Section({ title, children, right, accent = "mint" }: SectionProps) {
   return (
-    <section className="space-y-3">
-      <div className={`flex items-center justify-between border-b pb-2 ${SECTION_ACCENT_BORDER[accent]}`}>
+    <section className="space-y-2.5">
+      <div className={`flex items-center justify-between border-b pb-1.5 ${SECTION_ACCENT_BORDER[accent]}`}>
         <h2 className="flex items-center gap-2 font-display text-xs font-semibold uppercase tracking-widest text-smoke-500">
           <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${SECTION_ACCENT_DOT[accent]}`} />
           {title}
@@ -64,6 +68,7 @@ const ERA_PRESETS: Array<{ label: string; startYear: number }> = [
 ];
 
 export function SetupPage() {
+  const { t } = useT();
   const navigate = useNavigate();
   const { config, setConfig, resetDraft } = useDraft();
 
@@ -71,7 +76,8 @@ export function SetupPage() {
   const [leagues, setLeagues] = useState<LeagueDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [advancedOpen, setAdvancedOpen] = useState(true);
+  // Collapsed by default with a one-line summary: these three are on for almost everyone.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -109,9 +115,12 @@ export function SetupPage() {
         setLeagues(real);
         // A specific league is required now (no "All Leagues") — AI-fill builds the season out of
         // that league's own current clubs, so default to the first one rather than leave it unset.
+        // Default to the Premier League (the most familiar starting point) rather than whatever
+        // sorts first alphabetically — that used to make the Bundesliga everyone's default.
         if (config.leagueIds.length === 0 && real.length > 0) {
           const sorted = [...real].sort((a, b) => a.tier - b.tier || a.name.localeCompare(b.name));
-          setConfig({ leagueIds: [sorted[0]!.id] });
+          const preferred = sorted.find((l) => l.name === "Premier League") ?? sorted[0]!;
+          setConfig({ leagueIds: [preferred.id] });
         }
       })
       .catch(() => setLeagues([]));
@@ -146,8 +155,26 @@ export function SetupPage() {
   const fillability = config.lockedClubId && clubPositions ? checkFormationFillable(config.formation, clubPositions) : null;
 
   const activeEra = eras.find((e) => e.id === config.eraId);
-  const yearMin = activeEra?.startYear ?? 1992;
-  const yearMax = activeEra?.endYear ?? new Date().getFullYear();
+  // Bound the era slider by the seasons the chosen league(s) really have, not the era's nominal
+  // range — otherwise most of the slider (1992–2011) selects nothing at all.
+  const selectedLeagues = leagues.filter((l) => config.leagueIds.includes(l.id));
+  const spanMins = selectedLeagues.map((l) => l.minSeasonYear).filter((y): y is number => typeof y === "number");
+  const spanMaxes = selectedLeagues.map((l) => l.maxSeasonYear).filter((y): y is number => typeof y === "number");
+  const yearMin = spanMins.length ? Math.min(...spanMins) : (activeEra?.startYear ?? 1992);
+  const yearMax = spanMaxes.length ? Math.max(...spanMaxes) : (activeEra?.endYear ?? new Date().getFullYear());
+
+  // Keep the chosen range inside the bounds whenever they change (league switch, data loading).
+  useEffect(() => {
+    const curMin = config.eraYearMin ?? yearMin;
+    const curMax = config.eraYearMax ?? yearMax;
+    let nextMin = Math.min(Math.max(curMin, yearMin), yearMax);
+    let nextMax = Math.min(Math.max(curMax, yearMin), yearMax);
+    if (nextMin > nextMax) [nextMin, nextMax] = [yearMin, yearMax];
+    if (nextMin !== config.eraYearMin || nextMax !== config.eraYearMax) {
+      setConfig({ eraYearMin: nextMin, eraYearMax: nextMax });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yearMin, yearMax]);
 
   if (loading) {
     return <p className="px-6 py-16 text-center text-smoke-500">Loading...</p>;
@@ -155,16 +182,16 @@ export function SetupPage() {
 
   return (
     <>
-    <div className="mx-auto max-w-2xl space-y-10 px-6 py-12">
+    <div className="mx-auto max-w-2xl space-y-7 px-4 pb-4 pt-8 sm:px-6 sm:pt-10">
       <div className="text-center">
-        <h1 className="font-display text-3xl font-bold uppercase tracking-wide text-paper">Set the Rules</h1>
-        <p className="mt-2 text-sm text-smoke-500">Configure the draft before you pull a single name.</p>
+        <h1 className="font-display text-2xl font-bold uppercase tracking-wide text-paper sm:text-3xl">{t("setup.title")}</h1>
+        <p className="mt-1 text-sm text-smoke-500">{t("setup.sub")}</p>
       </div>
 
       {error && <p className="text-center text-sm text-crimson-400">{error}</p>}
 
       {config.multiplayerLeagueId ? (
-        <Section title="League" accent="mint">
+        <Section title={t("setup.league")} accent="mint">
           <div className="notch flex flex-wrap items-center justify-between gap-3 border border-mint-500/30 bg-mint-500/5 p-4">
             <div>
               <p className="text-[10px] uppercase tracking-wide text-smoke-600">Multiplayer League</p>
@@ -229,17 +256,42 @@ export function SetupPage() {
           </div>
         </Section>
       ) : (
-        <Section title="League" accent="mint">
+        <Section title={t("setup.league")} accent="mint">
           <LeaguePicker
             leagues={leagues}
-            selectedIds={config.leagueIds}
-            onChange={(leagueIds) => setConfig({ leagueIds })}
+            selectedIds={[playLeagueIdOf(config)].filter((id): id is string => Boolean(id))}
+            onChange={(ids) =>
+              config.draftPool === "all"
+                ? setConfig({ playLeagueId: ids[0] })
+                : setConfig({ leagueIds: ids, playLeagueId: undefined })
+            }
             singleSelect
           />
+          <div className="mt-3 space-y-1.5">
+            <p className="text-center text-xs font-semibold uppercase tracking-widest text-smoke-500">{t("setup.draftFrom")}</p>
+            <SegmentedControl<"league" | "all">
+              accent="mint"
+              columns={2}
+              value={config.draftPool ?? "league"}
+              onChange={(pool) =>
+                pool === "all"
+                  ? setConfig({ draftPool: "all", leagueIds: leagues.map((l) => l.id), playLeagueId: playLeagueIdOf(config) })
+                  : setConfig({ draftPool: "league", leagueIds: [playLeagueIdOf(config) ?? leagues[0]?.id].filter((id): id is string => Boolean(id)), playLeagueId: undefined })
+              }
+              options={[
+                { value: "league", label: t("setup.thisLeague"), description: t("setup.thisLeagueDesc") },
+                {
+                  value: "all",
+                  label: t("setup.allTop5"),
+                  description: t("setup.allTop5Desc"),
+                },
+              ]}
+            />
+          </div>
         </Section>
       )}
 
-      <Section title="Formation" accent="teal">
+      <Section title={t("setup.formation")} accent="teal">
         {config.multiplayerFormationLocked ? (
           <p className="notch-sm border border-ink-800 bg-ink-900/40 px-3 py-2 text-center text-xs text-smoke-500">
             Formation locked to <span className="font-semibold text-paper">{config.formation}</span> by this league&apos;s rules.
@@ -259,42 +311,43 @@ export function SetupPage() {
         {checkingFit && <p className="text-center text-xs text-smoke-600">Checking this club&apos;s history fits this formation...</p>}
       </Section>
 
-      <Section title="Difficulty" accent="crimson">
+      <Section title={t("setup.difficulty")} accent="amber">
         {config.multiplayerLeagueId ? (
           <p className="notch-sm border border-ink-800 bg-ink-900/40 px-3 py-2 text-center text-xs text-smoke-500">
             Locked to <span className="font-semibold capitalize text-paper">{config.difficulty}</span> by this league&apos;s rules.
           </p>
         ) : (
           <SegmentedControl<Difficulty>
-            accent="crimson"
+            accent="amber"
             columns={3}
             value={config.difficulty}
             onChange={(difficulty) =>
               setConfig({ difficulty, showRatings: difficulty === "hard" ? false : config.showRatings })
             }
             options={[
-              { value: "easy", label: "Easy", description: "3 redraws available" },
-              { value: "normal", label: "Normal", description: "1 redraw available" },
-              { value: "hard", label: "Hard", description: "No redraws · ratings hidden" },
+              { value: "easy", label: t("setup.easy"), description: t("setup.easyDesc") },
+              { value: "normal", label: t("setup.normal"), description: t("setup.normalDesc") },
+              { value: "hard", label: t("setup.hard"), description: t("setup.hardDesc") },
             ]}
           />
         )}
       </Section>
 
-      <Section title="Show Ratings" accent="plum">
+      <div className="grid gap-7 sm:grid-cols-2 sm:gap-5">
+      <Section title={t("setup.showRatings")} accent="plum">
         <SegmentedControl<"on" | "off">
           accent="plum"
           columns={2}
           value={config.showRatings ? "on" : "off"}
           onChange={(v) => setConfig({ showRatings: v === "on" })}
           options={[
-            { value: "on", label: "On", description: "Player overalls visible" },
-            { value: "off", label: "Off", description: "Blind mode: trust your gut" },
+            { value: "on", label: t("setup.on"), description: t("setup.ratingsOnDesc") },
+            { value: "off", label: t("setup.off"), description: t("setup.ratingsOffDesc") },
           ]}
         />
       </Section>
 
-      <Section title="Draft Mode" accent="mint">
+      <Section title={t("setup.draftMode")} accent="mint">
         <SegmentedControl<DraftMode>
           accent="mint"
           columns={2}
@@ -303,43 +356,47 @@ export function SetupPage() {
           options={[
             {
               value: "squad-first",
-              label: "Squad First",
-              description: "Draw a club, pick any player, choose their position",
+              label: t("setup.squadFirst"),
+              description: t("setup.squadFirstDesc"),
             },
             {
               value: "position-first",
-              label: "Position First",
-              description: "Pick a slot, then draw a club to fill it",
+              label: t("setup.positionFirst"),
+              description: t("setup.positionFirstDesc"),
             },
           ]}
         />
       </Section>
 
       {config.lockedClubId ? (
-        <Section title="Player Ratings" accent="teal">
+        <Section title={t("setup.playerRatings")} accent="teal">
           <p className="notch-sm border border-ink-800 bg-ink-900/40 px-3 py-2 text-center text-xs text-smoke-500">
             Forced to <span className="font-semibold text-paper">Season</span> for One-Club XI — a career-best
             &quot;Prime&quot; row could belong to a different club.
           </p>
         </Section>
       ) : (
-        <Section title="Player Ratings" accent="teal">
+        <Section title={t("setup.playerRatings")} accent="teal">
           <SegmentedControl<PlayerRatingsMode>
             accent="teal"
             columns={2}
             value={config.playerRatings}
             onChange={(playerRatings) => setConfig({ playerRatings })}
             options={[
-              { value: "season", label: "Season", description: "Players rated as they were that exact season" },
-              { value: "prime", label: "Prime", description: "Every player drafted at their career-best rating" },
+              { value: "prime", label: t("setup.prime"), description: t("setup.primeDesc") },
+              { value: "season", label: t("setup.season"), description: t("setup.seasonDesc") },
             ]}
           />
         </Section>
       )}
 
-      <Section title="Era" accent="plum">
+      </div>
+
+      <Section title={t("setup.era")} accent="plum">
         <div className="flex flex-wrap gap-2">
-          {ERA_PRESETS.map((preset) => (
+          {/* Skip presets that start at/before the league's first season — on a 2012+ dataset
+              "2000s+" and "2010s+" are just "All-time" again, and all three lit up at once. */}
+          {ERA_PRESETS.filter((preset) => preset.startYear === 0 || preset.startYear > yearMin).map((preset) => (
             <Chip
               key={preset.label}
               active={config.eraYearMin === Math.max(preset.startYear, yearMin) && config.eraYearMax === yearMax}
@@ -355,45 +412,56 @@ export function SetupPage() {
           valueMin={config.eraYearMin ?? yearMin}
           valueMax={config.eraYearMax ?? yearMax}
           onChange={(min, max) => setConfig({ eraYearMin: min, eraYearMax: max })}
+          formatLabel={formatSeason}
         />
+        <p className="text-center text-xs text-smoke-500">
+          {t("setup.seasonsOf", { n: (config.eraYearMax ?? yearMax) - (config.eraYearMin ?? yearMin) + 1, total: yearMax - yearMin + 1 })}
+        </p>
         <p className="text-center text-xs text-ink-600">
           Only club-seasons in this range can be drawn — narrow it to draft from an era you know.
         </p>
       </Section>
 
       <Section
-        title="Advanced"
-        accent="crimson"
+        title={t("setup.advanced")}
+        accent="teal"
         right={
           <button
             type="button"
+            aria-expanded={advancedOpen}
             onClick={() => setAdvancedOpen((v) => !v)}
-            className="text-xs text-smoke-600 hover:text-smoke-400"
+            className="text-xs text-smoke-500 hover:text-paper"
           >
-            {advancedOpen ? "Hide" : "Show"}
+            {advancedOpen ? t("setup.hide") : t("setup.change")}
           </button>
         }
       >
+        {!advancedOpen && (
+          <p className="text-xs text-smoke-500">
+            Managers {config.managers ? "on" : "off"} · European Nights {config.europeanNights ? "on" : "off"} · January window{" "}
+            {config.januaryWindow ? "on" : "off"}
+          </p>
+        )}
         {advancedOpen && (
           <div className="space-y-3">
             <Toggle
               accent="mint"
-              label="Managers (Gaffers)"
-              description="After the draft, appoint a gaffer for the story. Off = no manager."
+              label={t("setup.managers")}
+              description={t("setup.managersDesc")}
               checked={config.managers}
               onChange={(managers) => setConfig({ managers })}
             />
             <Toggle
               accent="teal"
-              label="European Nights"
-              description="Finish in the top four and your XI plays on in Europe. Off = just the league."
+              label={t("setup.europe")}
+              description={t("setup.europeDesc")}
               checked={config.europeanNights}
               onChange={(europeanNights) => setConfig({ europeanNights })}
             />
             <Toggle
-              accent="crimson"
-              label="January Transfer Window"
-              description="At halfway, gamble on one January event. It can help or hurt. No undo."
+              accent="amber"
+              label={t("setup.january")}
+              description={t("setup.januaryDesc")}
               checked={config.januaryWindow}
               onChange={(januaryWindow) => setConfig({ januaryWindow })}
             />
@@ -401,17 +469,20 @@ export function SetupPage() {
         )}
       </Section>
 
-      <Button
-        size="lg"
-        fullWidth
-        disabled={checkingFit || (fillability !== null && !fillability.fillable)}
-        onClick={() => {
-          resetDraft();
-          navigate("/draft");
-        }}
-      >
-        Enter the Draft Room &rarr;
-      </Button>
+      {/* Sticky on phones so the primary action is always one tap away, wherever you are. */}
+      <div className="sticky bottom-0 z-20 -mx-4 border-t border-ink-800 bg-ink-950/95 px-4 py-3 backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0">
+        <Button
+          size="lg"
+          fullWidth
+          disabled={checkingFit || (fillability !== null && !fillability.fillable)}
+          onClick={() => {
+            resetDraft();
+            navigate("/draft");
+          }}
+        >
+          Enter the Draft Room &rarr;
+        </Button>
+      </div>
     </div>
     <SiteFooter />
     </>

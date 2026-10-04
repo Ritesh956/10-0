@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { LeaderboardDifficulty, LeaderboardRatingsMode, LeaderboardTimeWindow } from "../api/types";
 import type { Formation } from "../lib/formations";
 import { FORMATIONS } from "../lib/formations";
@@ -51,9 +51,60 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
     genuine top-5-over-38-0's-one-league addition. Squad tier is filtered client-side (squadTierName's
     thresholds already live in lib/squadRatings.ts; no need to duplicate them on the backend) — every
     other axis is a real server-side query filter. */
+const MODE_LABEL: Record<LeaderboardMode, string> = { solo: "Solo", "one-club": "One-Club XI", nations: "Nations Trophy" };
+const TIME_LABEL: Record<LeaderboardTimeWindow, string> = { all: "All time", week: "This week", today: "Today" };
+const cap = (s: string) => s[0]!.toUpperCase() + s.slice(1);
+
+/** The active (non-default) filters as removable pills, so a collapsed panel still says what it's showing. */
+function activeFilters(filters: LeaderboardFiltersState): { key: keyof LeaderboardFiltersState; label: string }[] {
+  const out: { key: keyof LeaderboardFiltersState; label: string }[] = [];
+  if (filters.mode !== "all") out.push({ key: "mode", label: MODE_LABEL[filters.mode] });
+  if (filters.timeWindow !== "all") out.push({ key: "timeWindow", label: TIME_LABEL[filters.timeWindow] });
+  if (filters.difficulty !== "all") out.push({ key: "difficulty", label: cap(filters.difficulty) });
+  if (filters.ratingsMode !== "all") out.push({ key: "ratingsMode", label: `${cap(filters.ratingsMode)} ratings` });
+  if (filters.leagueName !== "all") out.push({ key: "leagueName", label: filters.leagueName });
+  if (filters.squadTier !== "all") out.push({ key: "squadTier", label: filters.squadTier });
+  if (filters.formation !== "all") out.push({ key: "formation", label: filters.formation });
+  return out;
+}
+
 export function LeaderboardFilters({ filters, onChange, leagueNames }: Props) {
+  // Collapsed by default: ~45 chips expanded pushed the results far below the fold on a phone.
+  const [open, setOpen] = useState(false);
+  const active = activeFilters(filters);
+
   return (
-    <div className="notch space-y-4 border border-ink-800 bg-ink-900/50 p-4">
+    <div className="notch space-y-3 border border-ink-800 bg-ink-900/50 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+          className="notch-sm border border-ink-700 px-3 py-1.5 text-sm font-semibold text-paper hover:border-ink-600"
+        >
+          Filters {open ? "▴" : "▾"}
+          {active.length > 0 && <span className="ml-1 text-mint-400">({active.length})</span>}
+        </button>
+        {active.map((f) => (
+          <button
+            key={f.key}
+            type="button"
+            onClick={() => onChange({ [f.key]: DEFAULT_LEADERBOARD_FILTERS[f.key] } as Partial<LeaderboardFiltersState>)}
+            className="notch-sm border border-mint-500/40 bg-mint-500/10 px-2 py-1 text-xs text-mint-300"
+            aria-label={`Remove filter ${f.label}`}
+          >
+            {f.label} ✕
+          </button>
+        ))}
+        {active.length > 1 && (
+          <button type="button" onClick={() => onChange(DEFAULT_LEADERBOARD_FILTERS)} className="text-xs text-smoke-500 hover:text-paper">
+            Clear all
+          </button>
+        )}
+      </div>
+
+      {open && (
+      <div className="space-y-4 border-t border-ink-800 pt-3">
       <Row label="Mode">
         <Chip active={filters.mode === "all"} onClick={() => onChange({ mode: "all" })}>
           All
@@ -131,6 +182,8 @@ export function LeaderboardFilters({ filters, onChange, leagueNames }: Props) {
           </Chip>
         ))}
       </Row>
+      </div>
+      )}
     </div>
   );
 }

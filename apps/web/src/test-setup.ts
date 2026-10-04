@@ -3,6 +3,9 @@ import { cleanup } from "@testing-library/react";
 
 afterEach(() => {
   cleanup();
+  // DraftContext persists the in-progress draft (and worldId) to localStorage — clear it so one
+  // test's draft never leaks into the next test's fresh DraftProvider.
+  localStorage.clear();
 });
 
 // jsdom doesn't implement matchMedia — stub it so prefersReducedMotion() (lib/motion.ts) doesn't

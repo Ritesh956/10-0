@@ -1,25 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeManagerStats, findGoalkeeperId, type ClubMatchResult, type MatchSetupJson } from "./season-stats.logic.js";
-
-function setup(homeClubId: string, awayClubId: string, homeGkId: string, awayGkId: string): MatchSetupJson {
-  return {
-    home: { clubId: homeClubId, squad: { startingXI: [{ position: "GK", playerId: homeGkId }, { position: "ST", playerId: "home-st" }] } },
-    away: { clubId: awayClubId, squad: { startingXI: [{ position: "GK", playerId: awayGkId }, { position: "ST", playerId: "away-st" }] } },
-  };
-}
-
-describe("findGoalkeeperId", () => {
-  it("finds the GK slot for whichever side matches clubId", () => {
-    const s = setup("home-club", "away-club", "home-gk", "away-gk");
-    expect(findGoalkeeperId(s, "home-club")).toBe("home-gk");
-    expect(findGoalkeeperId(s, "away-club")).toBe("away-gk");
-  });
-
-  it("returns undefined when clubId matches neither side", () => {
-    const s = setup("home-club", "away-club", "home-gk", "away-gk");
-    expect(findGoalkeeperId(s, "unrelated-club")).toBeUndefined();
-  });
-});
+import { computeManagerStats, type ClubMatchResult } from "./season-stats.logic.js";
 
 describe("computeManagerStats", () => {
   function result(opponentClubId: string, ourScore: number, theirScore: number): ClubMatchResult {

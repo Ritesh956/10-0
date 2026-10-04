@@ -3,6 +3,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import type { NationDto } from "../api/types";
 import { initials } from "../lib/positionColors";
+import { nationFlag, supportsFlagEmoji } from "../lib/flags";
+import { CountryFlag, hasCountryFlag } from "../components/CountryFlag";
 import { useDraft } from "../state/DraftContext";
 
 /** Nations Trophy directory (38-0 §7d, Phase 10): every nationality represented in the top-5
@@ -77,9 +79,19 @@ export function NationsDirectoryPage() {
             className="notch flex flex-col items-center gap-2 border border-ink-800 bg-ink-900/50 p-4 text-center transition hover:border-plum-500/60 hover:bg-ink-900/80"
           >
             <button type="button" onClick={() => pickNation(nation)} className="flex flex-col items-center gap-2">
-              <span className="notch-sm flex h-12 w-12 items-center justify-center bg-plum-500/15 font-display text-sm font-bold text-plum-300">
-                {initials(nation.nationality)}
-              </span>
+              {hasCountryFlag(nation.nationality) ? (
+                <span aria-hidden className="flex h-12 w-12 items-center justify-center">
+                  <CountryFlag country={nation.nationality} className="h-8 w-12" />
+                </span>
+              ) : supportsFlagEmoji() && nationFlag(nation.nationality) ? (
+                <span aria-hidden className="flex h-12 w-12 items-center justify-center text-4xl leading-none">
+                  {nationFlag(nation.nationality)}
+                </span>
+              ) : (
+                <span className="notch-sm flex h-12 w-12 items-center justify-center bg-plum-500/15 font-display text-sm font-bold text-plum-300">
+                  {initials(nation.nationality)}
+                </span>
+              )}
               <span className="font-display text-sm font-semibold leading-tight text-paper">{nation.nationality}</span>
               <span className="text-[11px] text-smoke-500">{nation.playerCount} players</span>
             </button>

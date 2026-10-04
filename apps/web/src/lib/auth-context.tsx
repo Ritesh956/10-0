@@ -10,6 +10,10 @@ interface AuthContextValue {
   register: (email: string, password: string, displayName: string) => Promise<void>;
   playAsGuest: (displayName: string) => Promise<void>;
   upgradeAccount: (email: string, password: string) => Promise<void>;
+  /** Completes an emailed sign-in link (passwordless). */
+  verifyMagicLink: (token: string) => Promise<void>;
+  /** Completes Sign in with Google with the ID token Google Identity Services returned. */
+  signInWithGoogle: (credential: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -70,6 +74,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [persist],
   );
 
+  const verifyMagicLink = useCallback(
+    async (token: string) => {
+      const res = await api.verifyMagicLink(token);
+      persist(res.accessToken, res.user);
+    },
+    [persist],
+  );
+
+  const signInWithGoogle = useCallback(
+    async (credential: string) => {
+      const res = await api.signInWithGoogle(credential);
+      persist(res.accessToken, res.user);
+    },
+    [persist],
+  );
+
   const logout = useCallback(() => {
     setAuthToken(null);
     localStorage.removeItem(STORED_USER_KEY);
@@ -77,8 +97,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, isAuthenticated: user !== null, login, register, playAsGuest, upgradeAccount, logout }),
-    [user, login, register, playAsGuest, upgradeAccount, logout],
+    () => ({
+      user,
+      isAuthenticated: user !== null,
+      login,
+      register,
+      playAsGuest,
+      upgradeAccount,
+      verifyMagicLink,
+      signInWithGoogle,
+      logout,
+    }),
+    [user, login, register, playAsGuest, upgradeAccount, verifyMagicLink, signInWithGoogle, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

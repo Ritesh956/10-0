@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { api } from "../api/client";
 import type {
   CompetitionStatsDto,
+  EuropeDrawDto,
   EuropeRoundDto,
   EuropeStatusDto,
+  FixtureDto,
   JanuaryResultDto,
   KnockoutRound,
   KnockoutTieDto,
@@ -19,6 +21,8 @@ import type {
   WorldDto,
 } from "../api/types";
 import { CompetitionStatsPanel } from "../components/CompetitionStatsPanel";
+import { EuropeDraw } from "../components/EuropeDraw";
+import { LeagueBadge } from "../components/LeagueBadge";
 import { GuestPersistPrompt } from "../components/GuestPersistPrompt";
 import { JanuaryShareCard } from "../components/JanuaryShareCard";
 import { JanuaryWindow } from "../components/JanuaryWindow";
@@ -27,6 +31,8 @@ import { LeaderboardSubmitBlock } from "../components/LeaderboardSubmitBlock";
 import { ManagerStatCard } from "../components/ManagerStatCard";
 import { MatchLog } from "../components/MatchLog";
 import { MatchPopupReel } from "../components/MatchPopupReel";
+import { MiniTable } from "../components/MiniTable";
+import { NationsCupPanel } from "../components/NationsCupPanel";
 import { SeasonNarrative } from "../components/SeasonNarrative";
 import { ShareCard } from "../components/ShareCard";
 import { StandingsTable } from "../components/StandingsTable";
@@ -36,8 +42,14 @@ import { Button } from "../components/ui/Button";
 import { fireChampionShower, fireQualificationBurst } from "../lib/confetti";
 import { staggerContainer, staggerItem, staggerItemBounce } from "../lib/motion";
 import { buildSeasonNarrative } from "../lib/seasonNarrative";
+import { worldClubLabel } from "../lib/clubNames";
+import { leaguePhaseVerdict, ROUND_LABEL, zoneForPosition, ZONE_LEGEND } from "../lib/europe";
+import { leagueLabel, playLeagueIdOf } from "../lib/leagues";
+import { loadStatsHubCache, rebuildStatsHub, saveStatsHubCache } from "../lib/statsHubCache";
+import { EuropeShareCard } from "../components/EuropeShareCard";
 import { squadTierName, TIER_TEXT } from "../lib/squadRatings";
 import { useDraft } from "../state/DraftContext";
+import { useT } from "../lib/i18n/context";
 
 type Phase =
   | "no-season"
@@ -47,6 +59,7 @@ type Phase =
   | "domestic-standings"
   | "team-stats"
   | "europe-transition"
+  | "europe-draw"
   | "europe-league-replay"
   | "europe-league-standings"
   | "europe-knockout-replay"
@@ -55,8 +68,6 @@ type Phase =
   | "stats-hub";
 
 type StatsTab = "league" | "europe";
-
-const ROUND_LABEL: Record<KnockoutRound, string> = { QF: "Quarter-Final", SF: "Semi-Final", FINAL: "Final" };
 
 async function pollUntilCompleted(worldId: string, seasonId: string): Promise<void> {
   for (;;) {
@@ -68,64 +79,48 @@ async function pollUntilCompleted(worldId: string, seasonId: string): Promise<vo
   }
 }
 
-interface CachedStatsHub {
-  standings: StandingsDto;
-  teamStats: TeamStatsDto | null;
-  leagueCompetitionStats: CompetitionStatsDto | null;
-  qualified: boolean;
-  europeLeagueStandings: StandingsDto | null;
-  europeCompetitionStats: CompetitionStatsDto | null;
-  europeTeamStats: TeamStatsDto | null;
-  allTies: KnockoutTieDto[];
-  champion: string | null;
-  summary: SummaryDto;
-  /** Optional for backward compat with cache entries saved before the persistent match log existed. */
-  domesticMatches?: MatchSummaryDto[];
-  europeMatches?: MatchSummaryDto[];
-  /** null = January was off, or the user declined the gamble. Optional for backward compat with
-      cache entries saved before the January Transfer Window existed. Feeds the season narrative's
-      January recap lines and the two-way "Share your January" card. */
-  januaryOutcome?: JanuaryResultDto | null;
-  /** Domestic-only (38-0's own manager stat card has no per-competition split) — null for a
-      manager-less club or a world with no userClub. Optional for backward compat. */
-  leagueManagerStats?: ManagerStatsDto | null;
-  /** Trophies unlocked this run (SeasonsService.finalizeRun's persisted Achievement rows echoed
-      straight back). Optional for backward compat with cache entries saved before Phase 5. */
-  trophies?: TrophyKey[];
-  /** The domestic Season's id — needed to submit this run to the leaderboard (Phase 6), which is
-      scoped to a season the same way finalizeRun is. Optional for backward compat; a cache entry
-      saved before Phase 6 just won't offer the submit block until the next fresh run. */
-  domesticSeasonId?: string;
+const KNOCKOUT_STAGE: Record<KnockoutTieDto["round"], { label: string; order: number }> = {
+  PO: { label: "Play-off", order: 1 },
+  R16: { label: "R16", order: 2 },
+  QF: { label: "QF", order: 3 },
+  SF: { label: "SF", order: 4 },
+  FINAL: { label: "Final", order: 5 },
+};
+
+/** Fixture id -> knockout stage label ("QF · Leg 1", "Final") for the Europe campaign log, whose
+    league phase and each knockout round all restart matchday numbering at 1. */
+function knockoutStageFor(ties: KnockoutTieDto[]) {
+  const byFixture = new Map<string, { label: string; order: number }>();
+  for (const tie of ties) {
+    const stage = KNOCKOUT_STAGE[tie.round];
+    if (tie.round === "FINAL") {
+      if (tie.firstLegFixtureId) byFixture.set(tie.firstLegFixtureId, { label: "Final", order: stage.order * 10 });
+      continue;
+    }
+    if (tie.firstLegFixtureId) byFixture.set(tie.firstLegFixtureId, { label: `${stage.label} · Leg 1`, order: stage.order * 10 });
+    if (tie.secondLegFixtureId) byFixture.set(tie.secondLegFixtureId, { label: `${stage.label} · Leg 2`, order: stage.order * 10 + 1 });
+  }
+  return (fixtureId: string) => byFixture.get(fixtureId);
 }
 
-// A finished run's standings/stats are cached per-world so leaving /season and coming back (or
-// just reloading) lands straight back on the stats hub instead of re-running the whole animated
-// pipeline for data that hasn't changed — "easy to navigate anytime unless you start a new run"
-// falls out naturally, since a new draft always gets a new worldId and finds no cache entry.
-function statsHubCacheKey(worldId: string): string {
-  return `futbol_stats_hub_${worldId}`;
-}
-function saveStatsHubCache(worldId: string, data: CachedStatsHub): void {
-  try {
-    localStorage.setItem(statsHubCacheKey(worldId), JSON.stringify(data));
-  } catch {
-    // Storage full or unavailable — not worth failing the season over, the user just won't get
-    // the fast-path back to this screen next time.
-  }
-}
-function loadStatsHubCache(worldId: string): CachedStatsHub | null {
-  const raw = localStorage.getItem(statsHubCacheKey(worldId));
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as CachedStatsHub;
-  } catch {
-    return null;
-  }
+const cap = (s: string | undefined) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : "");
+
+const ORDINAL_SUFFIX = ["th", "st", "nd", "rd"];
+function ordinalPosition(n: number): string {
+  const v = n % 100;
+  return `${n}${ORDINAL_SUFFIX[(v - 20) % 10] ?? ORDINAL_SUFFIX[v] ?? ORDINAL_SUFFIX[0]}`;
 }
 
 export function SeasonPage() {
   const navigate = useNavigate();
-  const { worldId, config } = useDraft();
+  const { t } = useT();
+  const location = useLocation();
+  // Set by DraftPage's "Simulate Season" — that press starts the season; no second click here.
+  const autoStart = Boolean((location.state as { autoStart?: boolean } | null)?.autoStart);
+  const autoStartedRef = useRef(false);
+  const { worldId: draftWorldId, config } = useDraft();
+  // "/season?world=<id>" opens a past run (from the profile) without replacing the current draft's world.
+  const worldId = new URLSearchParams(location.search).get("world") ?? draftWorldId;
 
   const [world, setWorld] = useState<WorldDto | null>(null);
   const [season, setSeason] = useState<SeasonDto | null>(null);
@@ -140,17 +135,31 @@ export function SeasonPage() {
   // waves through the same "domestic-replay" phase. `domesticReelHalf` is bumped between waves and
   // used as the reel's `key` so its internal reveal state resets cleanly for the second half.
   const [domesticReelMatches, setDomesticReelMatches] = useState<MatchSummaryDto[]>([]);
+  // Matches before this wave's range (the first half, once the post-January wave starts) — handed to
+  // the reel so its played-count, W/D/L strip and feed carry on across January instead of resetting.
+  const [domesticReelPrior, setDomesticReelPrior] = useState<MatchSummaryDto[]>([]);
   const [domesticReelHalf, setDomesticReelHalf] = useState(0);
   // True while the worker is still simulating and the reel is being fed matchday-by-matchday as
   // results land (the "instant start" streaming reveal), so the reel holds instead of finishing.
   const [reelStreaming, setReelStreaming] = useState(false);
+  // "Skip to January" while the first half is revealing and the window is coming, else "Skip to the end".
+  const [reelSkipLabel, setReelSkipLabel] = useState("Skip to the end");
   const [januaryOutcome, setJanuaryOutcome] = useState<JanuaryResultDto | null>(null);
+  // The table at the halfway mark, for the January panel's "you're 3rd of 20" line.
+  const [halfwayStandings, setHalfwayStandings] = useState<StandingsDto | null>(null);
+  // The league table as it stands while the season is being revealed — your position ± 2 rows.
+  const [liveStandings, setLiveStandings] = useState<StandingsDto | null>(null);
   const [standings, setStandings] = useState<StandingsDto | null>(null);
   const [teamStats, setTeamStats] = useState<TeamStatsDto | null>(null);
   const [summary, setSummary] = useState<SummaryDto | null>(null);
 
   const [qualified, setQualified] = useState(false);
   const [europeCompetitionId, setEuropeCompetitionId] = useState<string | null>(null);
+  const [europeDraw, setEuropeDraw] = useState<EuropeDrawDto | null>(null);
+  // 1 = European Nights, 2 = the Continental Cup (a straight knockout for a 9th-12th finish).
+  const [europeTier, setEuropeTier] = useState<1 | 2>(1);
+  const [cupTies, setCupTies] = useState<KnockoutTieDto[]>([]);
+  const [europeFixtures, setEuropeFixtures] = useState<FixtureDto[]>([]);
   const [europeLeagueMatches, setEuropeLeagueMatches] = useState<MatchSummaryDto[]>([]);
   const [europeLeagueStandings, setEuropeLeagueStandings] = useState<StandingsDto | null>(null);
   const [knockoutRound, setKnockoutRound] = useState<KnockoutRound | null>(null);
@@ -163,7 +172,7 @@ export function SeasonPage() {
   // the replay), this accumulates across the whole campaign.
   const [europeAllMatches, setEuropeAllMatches] = useState<MatchSummaryDto[]>([]);
 
-  // Final stats hub: league and (if qualified) Champions League stats live side by side behind a
+  // Final stats hub: league and (if qualified) European Nights stats live side by side behind a
   // tab toggle instead of a one-shot "summary" screen, so the user can freely flip between them
   // afterward rather than only ever seeing whichever one the linear pipeline ended on.
   const [statsTab, setStatsTab] = useState<StatsTab>("league");
@@ -191,6 +200,7 @@ export function SeasonPage() {
   }
 
   const replayResolveRef = useRef<(() => void) | null>(null);
+  const europeChoiceRef = useRef<((play: boolean) => void) | null>(null);
   function waitForReplay(): Promise<void> {
     return new Promise((resolve) => {
       replayResolveRef.current = resolve;
@@ -214,7 +224,9 @@ export function SeasonPage() {
     userClubId: string | undefined,
     opts: { fromMatchday: number; toMatchday: number | null; half: 0 | 1 },
   ): Promise<void> {
+    setReelSkipLabel(opts.toMatchday !== null ? "Skip to January" : "Skip to the end");
     setDomesticReelMatches([]);
+    setDomesticReelPrior([]);
     setDomesticReelHalf(opts.half);
     setReelStreaming(true);
     setPhase("domestic-replay");
@@ -230,11 +242,15 @@ export function SeasonPage() {
 
     let rangeDone = false;
     while (!rangeDone && !stopped) {
-      const [season, userMatches] = await Promise.all([
+      const [season, userMatches, table] = await Promise.all([
         api.getSeason(wId, seasonId),
         api.getMatchesWithEvents(wId, seasonId, userClubId),
+        // Best-effort: the table is garnish, a failed fetch just leaves the last one showing.
+        api.getStandings(wId, seasonId).catch(() => null),
       ]);
+      if (table) setLiveStandings(table);
       setDomesticReelMatches(userMatches.filter(inRange));
+      setDomesticReelPrior(userMatches.filter((m) => m.matchday < opts.fromMatchday));
       rangeDone =
         opts.toMatchday === null
           ? season.status === "COMPLETED"
@@ -263,14 +279,23 @@ export function SeasonPage() {
     }
     void api
       .getWorld(worldId)
-      .then((w) => {
+      .then(async (w) => {
+        let cached = loadStatsHubCache(worldId);
+        // Not cached in this browser (another device, cleared storage, opened from the profile):
+        // a world that already has a season may be a finished run — rebuild its hub from the server.
+        // The world is set only afterwards, so the page stays on "Loading…" rather than flashing
+        // the pre-season screen.
+        if (!cached && w.clubs.length > 1) {
+          cached = await rebuildStatsHub(worldId).catch(() => null);
+          if (cached) saveStatsHubCache(worldId, cached);
+        }
         setWorld(w);
-        const cached = loadStatsHubCache(worldId);
         if (!cached) return;
         setStandings(cached.standings);
         setTeamStats(cached.teamStats);
         setLeagueCompetitionStats(cached.leagueCompetitionStats);
         setQualified(cached.qualified);
+        setEuropeTier(cached.europeTier ?? 1);
         setEuropeLeagueStandings(cached.europeLeagueStandings);
         setEuropeCompetitionStats(cached.europeCompetitionStats);
         setEuropeTeamStats(cached.europeTeamStats);
@@ -283,11 +308,22 @@ export function SeasonPage() {
         setLeagueManagerStats(cached.leagueManagerStats ?? null);
         setTrophies(cached.trophies ?? []);
         setDomesticSeasonId(cached.domesticSeasonId ?? null);
-        setStatsTab(cached.qualified ? "europe" : "league");
+        setStatsTab("league");
         setPhase("stats-hub");
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load world"));
   }, [worldId, navigate]);
+
+  // A world that still has only the user's club has no season yet — start it once. The ref (not
+  // the effect's deps) is the "only once" guard, so a re-render or StrictMode re-run can't create a
+  // second season; the router state is cleared so a reload doesn't try again either.
+  useEffect(() => {
+    if (!autoStart || autoStartedRef.current || !world || phase !== "no-season" || world.clubs.length > 1) return;
+    autoStartedRef.current = true;
+    navigate(location.pathname, { replace: true, state: null });
+    void handleStartSeason();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart, world, phase]);
 
   useEffect(() => {
     if (phase === "europe-transition") fireQualificationBurst();
@@ -308,7 +344,7 @@ export function SeasonPage() {
     setBusy(true);
     setError(null);
     try {
-      const created = await api.createSeason(worldId, "Fantasy Top Flight", { leagueId: config.leagueIds[0] });
+      const created = await api.createSeason(worldId, "Fantasy Top Flight", { leagueId: playLeagueIdOf(config) });
       setSeason(created);
       const refreshed = await api.getWorld(worldId);
       setWorld(refreshed);
@@ -345,6 +381,7 @@ export function SeasonPage() {
         half: 0,
       });
 
+      setHalfwayStandings(await api.getStandings(wId, domesticSeasonId).catch(() => null));
       setPhase("january");
       outcome = await waitForJanuary();
       setJanuaryOutcome(outcome);
@@ -429,12 +466,26 @@ export function SeasonPage() {
     // entirely — "Off = just the league" — even for a qualifying finish. `settings` is null for
     // worlds created before this toggle was wired, which defaults to the toggle's own on-by-default.
     const europeanNightsEnabled = w.settings?.europeanNights ?? true;
-    const status: Pick<EuropeStatusDto, "qualified"> = europeanNightsEnabled
+    const status: Pick<EuropeStatusDto, "qualified" | "cup"> = europeanNightsEnabled
       ? await api.getEuropeStatus(wId, domesticSeasonId)
       : { qualified: false };
-    setQualified(status.qualified);
+    // Tier 1 is European Nights (top 8); tier 2 is the Continental Cup (9th-12th). 0 = neither.
+    const tier: 0 | 1 | 2 = status.qualified ? 1 : status.cup?.qualified ? 2 : 0;
+    setQualified(tier > 0);
+    setEuropeTier(tier === 2 ? 2 : 1);
 
-    if (!status.qualified) {
+    // Qualifying is an invitation, not an obligation: the player chooses to play (it used to start
+    // automatically after a 3s pause) or to go straight to their season review.
+    let playEurope = tier > 0;
+    if (tier > 0) {
+      setPhase("europe-transition");
+      playEurope = await new Promise<boolean>((resolve) => {
+        europeChoiceRef.current = resolve;
+      });
+      if (!playEurope) setQualified(false);
+    }
+
+    if (!playEurope) {
       const summaryRes = await api.getSummary(wId, domesticSeasonId);
       setSummary(summaryRes);
       setStatsTab("league");
@@ -460,54 +511,93 @@ export function SeasonPage() {
       return;
     }
 
-    setPhase("europe-transition");
-    await pause(3000);
-
     // Clicking past a pause immediately kicks off a real backend call + polling wait with no
     // MatchPopupReel/animation to fill the gap — without an explicit loading phase here, the
     // screen just sits on the same stale content with the same "Continue" button still showing,
     // which reads as "Continue did nothing" even though the pipeline is actually progressing.
     setPhase("simulating");
-    setSimulatingLabel("Kicking off the Champions League…");
-    const { competitionId, seasonId: leaguePhaseSeasonId } = await api.startEuropeLeaguePhase(wId, domesticSeasonId);
-    setEuropeCompetitionId(competitionId);
-    await pollUntilCompleted(wId, leaguePhaseSeasonId);
+    let competitionId: string;
+    let leagueMatches: MatchSummaryDto[] = [];
+    let leagueStandings: StandingsDto | null = null;
+    let firstRound: EuropeRoundDto;
 
-    const [leagueMatches, leagueStandings] = await Promise.all([
-      api.getMatchesWithEvents(wId, leaguePhaseSeasonId),
-      api.getLeaguePhaseStandings(wId, leaguePhaseSeasonId),
-    ]);
-    setEuropeLeagueMatches(leagueMatches);
-    setEuropeLeagueStandings(leagueStandings);
-    setPhase("europe-league-replay");
-    await waitForReplay();
+    if (tier === 1) {
+      setSimulatingLabel("Drawing European Nights…");
+      const { competitionId: cId, seasonId: leaguePhaseSeasonId, draw } = await api.startEuropeLeaguePhase(wId, domesticSeasonId);
+      competitionId = cId;
+      setEuropeCompetitionId(cId);
+      setEuropeDraw(draw);
 
-    setPhase("europe-league-standings");
-    await pause(4000);
+      // The draw brought clubs from the other four leagues into the world — reload it so every table
+      // and result below can name them. The league phase is already simulating in the background
+      // while the draw is on screen.
+      const [withEurope, leaguePhaseSeason] = await Promise.all([api.getWorld(wId), api.getSeason(wId, leaguePhaseSeasonId)]);
+      setWorld(withEurope);
+      setEuropeFixtures(leaguePhaseSeason.fixtures);
+      setPhase("europe-draw");
+      await pause(15000);
 
-    // This is the one deliberate, required checkpoint in the whole knockout stage — everything
-    // from here (QF -> SF -> Final -> champion) plays straight through with no further "Continue"
-    // clicks needed, only brief auto-advancing pauses (see runKnockoutRound).
-    setPhase("simulating");
-    setSimulatingLabel("Setting up the knockouts…");
-    const qf = await api.startEuropeKnockouts(wId, competitionId, leaguePhaseSeasonId);
+      setPhase("simulating");
+      setSimulatingLabel("Playing the league phase…");
+      await pollUntilCompleted(wId, leaguePhaseSeasonId);
+
+      const [lm, ls] = await Promise.all([
+        api.getMatchesWithEvents(wId, leaguePhaseSeasonId),
+        api.getLeaguePhaseStandings(wId, leaguePhaseSeasonId),
+      ]);
+      leagueMatches = lm;
+      leagueStandings = ls;
+      setEuropeLeagueMatches(lm);
+      setEuropeLeagueStandings(ls);
+      setPhase("europe-league-replay");
+      await waitForReplay();
+
+      setPhase("europe-league-standings");
+      await pause(4000);
+
+      // This is the one deliberate, required checkpoint in the whole knockout stage — everything
+      // from here (play-off -> R16 -> QF -> SF -> Final -> champion) plays straight through with no
+      // further "Continue" clicks needed, only brief auto-advancing pauses (see runKnockoutRound).
+      setPhase("simulating");
+      setSimulatingLabel("Setting up the knockouts…");
+      firstRound = await api.startEuropeKnockouts(wId, cId, leaguePhaseSeasonId);
+    } else {
+      // The Continental Cup is a straight knockout: draw, then the same round-by-round pipeline.
+      setSimulatingLabel("Drawing the Continental Cup…");
+      const cup = await api.startEuropeCup(wId, domesticSeasonId);
+      competitionId = cup.competitionId;
+      setEuropeCompetitionId(cup.competitionId);
+      setEuropeDraw(cup.draw);
+      setCupTies(cup.round.ties);
+      setWorld(await api.getWorld(wId));
+      setEuropeFixtures([]);
+      setPhase("europe-draw");
+      await pause(15000);
+      firstRound = cup.round;
+    }
+
     const {
       champion: finalChampion,
       ties: finalTies,
       matches: knockoutHistory,
-    } = await runKnockoutRound(wId, competitionId, qf);
+    } = await runKnockoutRound(wId, competitionId, firstRound, [], [], userClub?.id);
     const europeMatches = [...leagueMatches, ...knockoutHistory];
     setEuropeAllMatches(europeMatches);
 
-    const [summaryRes, europeStats, europeTeam] = await Promise.all([
+    const [summaryRes, europeStats, europeTeam, europeFinalize] = await Promise.all([
       api.getSummary(wId, domesticSeasonId),
       api.getCompetitionStats(wId, competitionId),
       userClub ? api.getTeamStatsForCompetition(wId, competitionId, userClub.id) : Promise.resolve(null),
+      // Second (idempotent) finalize now that the Final exists — the first ran before Europe, so it
+      // couldn't award the European trophies ("european-champion" / "the-double" / the cup's).
+      userClub ? api.finalizeRun(wId, domesticSeasonId).catch(() => null) : Promise.resolve(null),
     ]);
+    const runTrophies = europeFinalize?.trophies ?? unlockedTrophies;
+    setTrophies(runTrophies);
     setSummary(summaryRes);
     setEuropeCompetitionStats(europeStats);
     setEuropeTeamStats(europeTeam);
-    setStatsTab("europe");
+    setStatsTab("league");
     setPhase("stats-hub");
     saveStatsHubCache(wId, {
       standings: standingsRes,
@@ -524,8 +614,9 @@ export function SeasonPage() {
       europeMatches,
       januaryOutcome: outcome,
       leagueManagerStats: managerStats,
-      trophies: unlockedTrophies,
+      trophies: runTrophies,
       domesticSeasonId,
+      europeTier: tier === 2 ? 2 : 1,
     });
   }
 
@@ -540,6 +631,7 @@ export function SeasonPage() {
     round: EuropeRoundDto,
     tiesSoFar: KnockoutTieDto[] = [],
     matchesSoFar: MatchSummaryDto[] = [],
+    userClubId?: string,
   ): Promise<{ champion: string; ties: KnockoutTieDto[]; matches: MatchSummaryDto[] }> {
     setKnockoutRound(round.round);
     // Same reasoning as the league-phase transition above — this covers both the first entry
@@ -554,8 +646,13 @@ export function SeasonPage() {
     const roundMatches = await api.getMatchesWithEvents(wId, round.seasonId);
     const matches = [...matchesSoFar, ...roundMatches];
     setKnockoutMatches(roundMatches);
-    setPhase("europe-knockout-replay");
-    await waitForReplay();
+    // A club that's out (or sat the round out on a bye) has nothing to replay — an empty reel with a
+    // 0-0-0 strip is just noise, so go straight to the round's results.
+    const userPlayed = !userClubId || roundMatches.some((m) => m.homeClubId === userClubId || m.awayClubId === userClubId);
+    if (userPlayed) {
+      setPhase("europe-knockout-replay");
+      await waitForReplay();
+    }
 
     const result = await api.advanceEuropeKnockouts(wId, competitionId, round.round);
     setResolvedTies(result.resolvedTies);
@@ -575,7 +672,7 @@ export function SeasonPage() {
     }
 
     if (result.next) {
-      return runKnockoutRound(wId, competitionId, result.next, resolvedTies, matches);
+      return runKnockoutRound(wId, competitionId, result.next, resolvedTies, matches, userClubId);
     }
 
     throw new Error("Knockout stage ended without a champion");
@@ -586,7 +683,11 @@ export function SeasonPage() {
   }
 
   const userClub = world.clubs.find((c) => c.managedByUserId);
-  const nameFor = (clubId: string) => world.clubs.find((c) => c.id === clubId)?.name ?? clubId;
+  const europeName = europeTier === 2 ? "Continental Cup" : "European Nights";
+  const europeLabel = t(europeTier === 2 ? "europe.cup" : "europe.nights");
+  const userPhasePosition =
+    userClub && europeLeagueStandings ? europeLeagueStandings.rows.findIndex((r) => r.clubId === userClub.id) + 1 : 0;
+  const nameFor = (clubId: string) => worldClubLabel(world.clubs.find((c) => c.id === clubId), clubId);
   // Replays only ever show the user's own fixtures — nobody wants to sit through all 380 league
   // matches (or every other tie in a knockout round) just to see their own team's results roll in.
   const onlyMine = (list: MatchSummaryDto[]) =>
@@ -609,6 +710,8 @@ export function SeasonPage() {
           clubName: userClub.name,
           userClubId: userClub.id,
           squadOverall: summary.squadOverall,
+          shownProjectedFinish: world.settings?.projection?.finish,
+          leagueId: world.settings?.leagueId ?? playLeagueIdOf(config),
           squad: summary.squad,
           matches: onlyMine(domesticMatches),
           teamStats,
@@ -622,7 +725,15 @@ export function SeasonPage() {
     <div className="mx-auto max-w-3xl space-y-8 px-6 py-12">
       <div className="text-center">
         <h1 className="font-display text-3xl font-bold uppercase tracking-wide text-paper">{userClub?.name ?? "Your XI"}</h1>
-        <p className="mt-1 text-sm text-smoke-500">{world.clubs.length} clubs in this save</p>
+        <div className="mt-2 flex justify-center">
+          <LeagueBadge leagueId={world.settings?.leagueId ?? playLeagueIdOf(config)} />
+        </div>
+        <p className="mt-1 text-sm text-smoke-500">
+          {world.clubs.length > 1
+            ? // European Nights adds other leagues' clubs to the world; the league is its own table.
+              t("season.leagueClubs", { n: standings?.rows.length ?? world.clubs.length })
+            : "Your XI is ready — kick off when you are."}
+        </p>
       </div>
 
       {error && <p className="text-center text-sm text-crimson-400">{error}</p>}
@@ -630,7 +741,7 @@ export function SeasonPage() {
       {phase === "no-season" && (
         <div className="text-center">
           <Button size="lg" disabled={busy} onClick={() => void handleStartSeason()}>
-            {busy ? "Starting..." : "Simulate Season →"}
+            {busy ? "…" : `${t("season.simulate")} →`}
           </Button>
         </div>
       )}
@@ -643,11 +754,17 @@ export function SeasonPage() {
         <MatchPopupReel
           key={`domestic-half-${domesticReelHalf}`}
           matches={onlyMine(domesticReelMatches)}
+          priorMatches={onlyMine(domesticReelPrior)}
           clubs={world.clubs}
           userClubId={userClub?.id}
           streaming={reelStreaming}
+          skipLabel={reelSkipLabel}
           onComplete={() => replayResolveRef.current?.()}
         />
+      )}
+
+      {phase === "domestic-replay" && userClub && (
+        <MiniTable standings={liveStandings} clubs={world.clubs} userClubId={userClub.id} title={t("season.liveTable")} />
       )}
 
       {phase === "january" && userClub && season && (
@@ -656,20 +773,36 @@ export function SeasonPage() {
           userClubId={userClub.id}
           totalMatchdays={Math.max(0, ...season.fixtures.map((f) => f.matchday))}
           matchdaysPlayed={Math.floor(Math.max(0, ...season.fixtures.map((f) => f.matchday)) / 2)}
-          onResolve={() => api.resolveJanuaryGamble(world.id, season.id)}
+          tablePosition={(() => {
+            const idx = halfwayStandings?.rows.findIndex((r) => r.clubId === userClub.id) ?? -1;
+            return idx >= 0 ? idx + 1 : undefined;
+          })()}
+          leagueSize={halfwayStandings?.rows.length}
+          onOffer={() => api.getJanuaryOffer(world.id, season.id)}
+          onResolve={(choiceId) => api.resolveJanuaryGamble(world.id, season.id, choiceId)}
           onDone={(outcome) => januaryResolveRef.current?.(outcome)}
+        />
+      )}
+
+      {phase === "january" && userClub && (
+        <MiniTable
+          standings={halfwayStandings ?? liveStandings}
+          clubs={world.clubs}
+          userClubId={userClub.id}
+          radius={4}
+          title={t("season.halfwayTable")}
         />
       )}
 
       {phase === "domestic-standings" && standings && (
         <div className="space-y-4">
           <h2 className="text-center font-display text-lg font-semibold uppercase tracking-wide text-paper">
-            Final standings
+            {t("season.finalStandings")}
           </h2>
           <StandingsTable standings={standings} clubs={world.clubs} highlightClubId={userClub?.id} />
           <div className="text-center">
             <Button variant="ghost" size="sm" onClick={skipPause}>
-              Continue &rarr;
+              {t("season.continue")} &rarr;
             </Button>
           </div>
         </div>
@@ -678,12 +811,12 @@ export function SeasonPage() {
       {phase === "team-stats" && teamStats && (
         <div className="space-y-4">
           <h2 className="text-center font-display text-lg font-semibold uppercase tracking-wide text-paper">
-            {userClub?.name}&apos;s season
+            {t("season.clubSeason", { club: userClub?.name ?? "" })}
           </h2>
           <TeamStatsPanel stats={teamStats} record={recordFor(standings)} />
           <div className="text-center">
             <Button variant="ghost" size="sm" onClick={skipPause}>
-              Continue &rarr;
+              {t("season.continue")} &rarr;
             </Button>
           </div>
         </div>
@@ -700,23 +833,39 @@ export function SeasonPage() {
             &#127942;
           </motion.p>
           <motion.h2 variants={staggerItem} className="font-display text-2xl font-bold uppercase tracking-wide text-paper">
-            Congratulations! {userClub?.name} qualified for the Champions League
+            {t(europeTier === 2 ? "europe.cupQualified" : "europe.qualified", { club: userClub?.name ?? "" })}
           </motion.h2>
           <motion.p variants={staggerItem} className="text-sm text-smoke-400">
-            Continuing into the European campaign&hellip;
+            {europeTier === 2
+              ? "Europe's second tier: 16 clubs from the five big leagues in a straight knockout — Round of 16, quarter-finals, semi-finals and a single-match Final."
+              : "Europe comes calling: 36 clubs from the five big leagues, eight league-phase games against rivals from abroad, then the knockouts — play-offs, Round of 16, all the way to the Final."}
           </motion.p>
-          <motion.div variants={staggerItem}>
-            <Button variant="ghost" size="sm" onClick={skipPause}>
-              Continue &rarr;
+          <motion.div variants={staggerItem} className="flex flex-col items-center justify-center gap-2 sm:flex-row">
+            <Button onClick={() => europeChoiceRef.current?.(true)}>
+              {t(europeTier === 2 ? "europe.enterCup" : "europe.continue")} &rarr;
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => europeChoiceRef.current?.(false)}>
+              {t("europe.skip")}
             </Button>
           </motion.div>
         </motion.div>
       )}
 
+      {phase === "europe-draw" && europeDraw && (
+        <EuropeDraw
+          draw={europeDraw}
+          clubs={world.clubs}
+          userClubId={userClub?.id}
+          fixtures={europeFixtures}
+          cup={europeTier === 2 ? { ties: cupTies } : undefined}
+          onContinue={skipPause}
+        />
+      )}
+
       {phase === "europe-league-replay" && (
         <div className="space-y-3">
           <p className="text-center text-xs font-semibold uppercase tracking-widest text-smoke-600">
-            Champions League &middot; League Phase
+            European Nights &middot; League Phase
           </p>
           <MatchPopupReel
             matches={onlyMine(europeLeagueMatches)}
@@ -730,12 +879,22 @@ export function SeasonPage() {
       {phase === "europe-league-standings" && europeLeagueStandings && (
         <div className="space-y-4">
           <h2 className="text-center font-display text-lg font-semibold uppercase tracking-wide text-paper">
-            Champions League &middot; League Phase Standings
+            {t("europe.nights")} &middot; {t("europe.leaguePhaseStandings")}
           </h2>
-          <StandingsTable standings={europeLeagueStandings} clubs={world.clubs} highlightClubId={userClub?.id} />
+          {userPhasePosition > 0 && (
+            <p className="text-center text-sm text-smoke-300">{leaguePhaseVerdict(userPhasePosition)}</p>
+          )}
+          <StandingsTable
+            standings={europeLeagueStandings}
+            clubs={world.clubs}
+            highlightClubId={userClub?.id}
+            zoneFor={zoneForPosition}
+            legend={ZONE_LEGEND}
+            showFlags
+          />
           <div className="text-center">
             <Button variant="ghost" size="sm" onClick={skipPause}>
-              Continue to Knockouts &rarr;
+              {t("europe.continueKnockouts")} &rarr;
             </Button>
           </div>
         </div>
@@ -744,7 +903,7 @@ export function SeasonPage() {
       {phase === "europe-knockout-replay" && knockoutRound && (
         <div className="space-y-3">
           <p className="text-center text-xs font-semibold uppercase tracking-widest text-smoke-600">
-            Champions League &middot; {ROUND_LABEL[knockoutRound]}
+            {europeLabel} &middot; {ROUND_LABEL[knockoutRound]}
           </p>
           <MatchPopupReel
             matches={onlyMine(knockoutMatches)}
@@ -760,6 +919,9 @@ export function SeasonPage() {
           <h2 className="font-display text-lg font-semibold uppercase tracking-wide text-paper">
             {ROUND_LABEL[knockoutRound]} results
           </h2>
+          {knockoutRound === "PO" && (
+            <p className="text-sm text-smoke-400">The top eight from the league phase wait in the Round of 16.</p>
+          )}
           <KnockoutBracket ties={resolvedTies} clubs={world.clubs} highlightClubId={userClub?.id} />
         </div>
       )}
@@ -775,7 +937,7 @@ export function SeasonPage() {
             &#127942;
           </motion.p>
           <motion.p variants={staggerItem} className="text-xs font-semibold uppercase tracking-[0.3em] text-smoke-600">
-            Champions League Winners
+            {t(europeTier === 2 ? "europe.cupWinners" : "europe.champions")}
           </motion.p>
           <motion.h2 variants={staggerItem} className="font-display text-3xl font-bold uppercase tracking-tight text-paper">
             {nameFor(champion)}
@@ -793,21 +955,64 @@ export function SeasonPage() {
           {qualified && champion && (
             <p className="text-center text-sm text-amber-400">
               {champion === userClub?.id
-                ? "European champions this season — the treble of storylines complete!"
-                : `${nameFor(champion)} lifted the Champions League this season.`}
+                ? summary.position === 1
+                  ? europeTier === 2
+                    ? "League champions and Continental Cup winners in the same season!"
+                    : "The Double — league champions and European champions in the same season!"
+                  : europeTier === 2
+                    ? "Continental Cup winners this season!"
+                    : "European champions this season!"
+                : `${nameFor(champion)} won the ${europeName} this season.`}
             </p>
           )}
-          {summary.squadOverall !== undefined && (
-            <p className="text-center text-xs text-smoke-500">
-              A <span className={TIER_TEXT[squadTierName(summary.squadOverall)]}>{squadTierName(summary.squadOverall)}</span>{" "}
-              squad (Overall {summary.squadOverall})
-            </p>
+          {summary.position !== undefined && summary.userRow && (
+            <div className="notch border border-ink-800 bg-ink-900/50 p-5 text-center">
+              <p className="text-xs uppercase tracking-widest text-smoke-500">{t("season.finalPosition")}</p>
+              <p className="font-display text-4xl font-bold text-paper">
+                {summary.position === 1 ? t("season.champions") : ordinalPosition(summary.position)}
+              </p>
+              <p className="mt-1 text-sm text-smoke-400">
+                {summary.userRow.won}W {summary.userRow.drawn}D {summary.userRow.lost}L &middot;{" "}
+                <span className="font-semibold text-paper">{summary.userRow.points} pts</span>
+                {summary.squadOverall !== undefined && (
+                  <>
+                    {" "}
+                    &middot; <span className={TIER_TEXT[squadTierName(summary.squadOverall)]}>{squadTierName(summary.squadOverall)}</span>{" "}
+                    (Overall {summary.squadOverall})
+                  </>
+                )}
+              </p>
+            </div>
           )}
+
+          {/* The story is the hero: it used to sit under a 20-row table at the bottom of a tab. */}
+          {narrative && <SeasonNarrative narrative={narrative} />}
 
           <TrophyCabinet trophies={trophies} />
 
-          <ShareCard summary={summary} />
-          {januaryOutcome && <JanuaryShareCard outcome={januaryOutcome} />}
+          {worldId && userClub && domesticSeasonId && (
+            <NationsCupPanel
+              worldId={worldId}
+              domesticSeasonId={domesticSeasonId}
+              userClubId={userClub.id}
+              onTrophies={(keys) => setTrophies((prev) => [...new Set([...prev, ...(keys as TrophyKey[])])])}
+            />
+          )}
+
+          <ShareCard
+            summary={summary}
+            subtitle={[leagueLabel(world.settings?.leagueId ?? playLeagueIdOf(config)), world.settings?.draftPool === "all" ? "All Top-5 draft" : "", config.formation, cap(config.difficulty)]
+              .filter(Boolean)
+              .join(" · ")}
+            lines={[
+              ...(narrative ? [narrative.verdict.label.toLowerCase().replace(/^./, (c) => c.toUpperCase())] : []),
+              ...(summary.squadOverall !== undefined ? [`${squadTierName(summary.squadOverall)} XI · Overall ${summary.squadOverall}`] : []),
+            ]}
+          />
+          {januaryOutcome && <JanuaryShareCard outcome={januaryOutcome} clubName={userClub?.name} />}
+          {qualified && champion && userClub && (
+            <EuropeShareCard competitionName={europeName} clubName={userClub.name} champion={champion === userClub.id} championName={nameFor(champion)} ties={allTies} userClubId={userClub.id} />
+          )}
           {worldId && domesticSeasonId && userClub && (
             <LeaderboardSubmitBlock
               worldId={worldId}
@@ -821,24 +1026,23 @@ export function SeasonPage() {
 
           {qualified && (
             <div className="flex justify-center gap-2">
-              <Button variant={statsTab === "europe" ? "primary" : "outline"} size="sm" onClick={() => setStatsTab("europe")}>
-                Champions League
-              </Button>
               <Button variant={statsTab === "league" ? "primary" : "outline"} size="sm" onClick={() => setStatsTab("league")}>
-                League
+                {t("season.league")}
+              </Button>
+              <Button variant={statsTab === "europe" ? "primary" : "outline"} size="sm" onClick={() => setStatsTab("europe")}>
+                {europeLabel}
               </Button>
             </div>
           )}
 
           {statsTab === "league" && standings && (
             <div className="space-y-4">
-              <h2 className="text-center font-display text-lg font-semibold uppercase tracking-wide text-paper">
-                League &middot; Final Standings
-              </h2>
-              <StandingsTable standings={standings} clubs={world.clubs} highlightClubId={userClub?.id} />
-              {narrative && <SeasonNarrative narrative={narrative} />}
               {leagueCompetitionStats && (
-                <CompetitionStatsPanel stats={leagueCompetitionStats} highlightClubId={userClub?.id} />
+                <CompetitionStatsPanel
+                  stats={leagueCompetitionStats}
+                  highlightClubId={userClub?.id}
+                  leagueId={world.settings?.leagueId ?? playLeagueIdOf(config)}
+                />
               )}
               {teamStats && (
                 <>
@@ -849,13 +1053,23 @@ export function SeasonPage() {
                 </>
               )}
               {leagueManagerStats && <ManagerStatCard stats={leagueManagerStats} clubs={world.clubs} />}
+              <details className="notch border border-ink-800 bg-ink-900/40 p-3">
+                <summary className="cursor-pointer select-none text-center font-display text-sm font-semibold uppercase tracking-wide text-paper">
+                  {t("season.table")}
+                </summary>
+                <div className="mt-3">
+                  <StandingsTable standings={standings} clubs={world.clubs} highlightClubId={userClub?.id} />
+                </div>
+              </details>
               {domesticMatches.length > 0 && (
-                <>
-                  <h3 className="text-center font-display text-base font-semibold uppercase tracking-wide text-paper">
-                    Season Results
-                  </h3>
-                  <MatchLog matches={onlyMine(domesticMatches)} clubs={world.clubs} userClubId={userClub?.id} />
-                </>
+                <details className="notch border border-ink-800 bg-ink-900/40 p-3">
+                  <summary className="cursor-pointer select-none text-center font-display text-sm font-semibold uppercase tracking-wide text-paper">
+                    All {onlyMine(domesticMatches).length} results
+                  </summary>
+                  <div className="mt-3">
+                    <MatchLog matches={onlyMine(domesticMatches)} clubs={world.clubs} userClubId={userClub?.id} />
+                  </div>
+                </details>
               )}
             </div>
           )}
@@ -863,11 +1077,25 @@ export function SeasonPage() {
           {statsTab === "europe" && qualified && (
             <div className="space-y-4">
               <h2 className="text-center font-display text-lg font-semibold uppercase tracking-wide text-paper">
-                Champions League
+                {europeLabel}
               </h2>
               {allTies.length > 0 && <KnockoutBracket ties={allTies} clubs={world.clubs} highlightClubId={userClub?.id} />}
               {europeLeagueStandings && (
-                <StandingsTable standings={europeLeagueStandings} clubs={world.clubs} highlightClubId={userClub?.id} />
+                <details className="notch border border-ink-800 bg-ink-900/40 p-3">
+                  <summary className="cursor-pointer select-none text-center font-display text-sm font-semibold uppercase tracking-wide text-paper">
+                    League phase table
+                  </summary>
+                  <div className="mt-3">
+                    <StandingsTable
+                      standings={europeLeagueStandings}
+                      clubs={world.clubs}
+                      highlightClubId={userClub?.id}
+                      zoneFor={zoneForPosition}
+                      legend={ZONE_LEGEND}
+                      showFlags
+                    />
+                  </div>
+                </details>
               )}
               {europeCompetitionStats && (
                 <CompetitionStatsPanel stats={europeCompetitionStats} highlightClubId={userClub?.id} />
@@ -875,7 +1103,7 @@ export function SeasonPage() {
               {europeTeamStats && (
                 <>
                   <h3 className="text-center font-display text-base font-semibold uppercase tracking-wide text-paper">
-                    {userClub?.name}&apos;s Champions League run
+                    {userClub?.name}&apos;s European run
                   </h3>
                   <TeamStatsPanel stats={europeTeamStats} record={recordFor(europeLeagueStandings)} />
                 </>
@@ -885,7 +1113,12 @@ export function SeasonPage() {
                   <h3 className="text-center font-display text-base font-semibold uppercase tracking-wide text-paper">
                     Campaign Results
                   </h3>
-                  <MatchLog matches={onlyMine(europeAllMatches)} clubs={world.clubs} userClubId={userClub?.id} />
+                  <MatchLog
+                    matches={onlyMine(europeAllMatches)}
+                    clubs={world.clubs}
+                    userClubId={userClub?.id}
+                    stageFor={knockoutStageFor(allTies)}
+                  />
                 </>
               )}
             </div>

@@ -8,5 +8,6 @@ import { EuropeService } from "./europe.service.js";
   imports: [WorldsModule, SeasonsModule],
   controllers: [EuropeController],
   providers: [EuropeService],
+  exports: [EuropeService],
 })
 export class EuropeModule {}

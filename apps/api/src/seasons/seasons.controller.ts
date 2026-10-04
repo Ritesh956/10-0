@@ -20,6 +20,12 @@ export class SeasonsController {
     return this.seasons.createSeason(worldId, user.sub, dto);
   }
 
+  // Registered before ":seasonId" so the literal segment isn't read as a season id.
+  @Get("run-index")
+  runIndex(@CurrentUser() user: AuthTokenPayload, @Param("worldId") worldId: string) {
+    return this.seasons.getRunIndex(worldId, user.sub);
+  }
+
   @Get(":seasonId")
   get(@CurrentUser() user: AuthTokenPayload, @Param("worldId") worldId: string, @Param("seasonId") seasonId: string) {
     return this.seasons.getSeason(worldId, seasonId, user.sub);

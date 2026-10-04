@@ -25,6 +25,7 @@
     "seed": "tsx prisma/seed.ts",
     "seed:real": "tsx prisma/seed-real.ts",
     "seed:managers": "tsx prisma/seed-managers.ts",
+    "wipe:test-leaderboard": "tsx prisma/wipe-test-leaderboard.ts",
     "typecheck:seed": "tsc -p tsconfig.scripts.json"
   },
   "dependencies": {

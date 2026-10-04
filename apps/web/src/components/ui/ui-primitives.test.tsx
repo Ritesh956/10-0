@@ -51,7 +51,7 @@ describe("motion-wrapped ui primitives still fire their handlers", () => {
         onChange={onChange}
       />,
     );
-    getByRole("button", { name: /option b/i }).click();
+    getByRole("radio", { name: /option b/i }).click();
     expect(onChange).toHaveBeenCalledWith("b");
   });
 

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { PlayerSeasonDto } from "../api/types";
 import type { Formation } from "../lib/formations";
 
@@ -20,6 +20,11 @@ export interface DraftConfig {
   // instead" escape hatch (clearing the club lock) need to do exactly that.
   eraYearMin?: number | undefined;
   eraYearMax?: number | undefined;
+  /** "all" = the draft wheel spans every real league (All Top-5), while `leagueIds` holds all five;
+      the league the season is *played* in is then `playLeagueId`. Otherwise (undefined / "league")
+      the wheel and the season share the single league in `leagueIds`. */
+  draftPool?: "league" | "all" | undefined;
+  playLeagueId?: string | undefined;
   managers: boolean;
   europeanNights: boolean;
   januaryWindow: boolean;
@@ -57,7 +62,9 @@ const DEFAULT_CONFIG: DraftConfig = {
   difficulty: "normal",
   showRatings: true,
   draftMode: "squad-first",
-  playerRatings: "season",
+  // Prime by default (2026-10): with Season ratings a typical drafted XI projects mid-table, which
+  // undersells the draft; Prime gives the "build a super-team" feel. Season is one tap away in Setup.
+  playerRatings: "prime",
   managers: true,
   europeanNights: true,
   januaryWindow: true,
@@ -89,14 +96,60 @@ interface DraftContextValue {
 const DraftContext = createContext<DraftContextValue | undefined>(undefined);
 
 const WORLD_ID_STORAGE_KEY = "futbol_world_id";
+const DRAFT_SESSION_STORAGE_KEY = "futbol_draft_session";
+
+interface StoredDraftSession {
+  config: DraftConfig;
+  picks: Record<number, PlayerSeasonDto>;
+  rerollsUsed: number;
+  squadName: string;
+}
+
+/** The in-progress draft survives a reload (it used to be lost — /draft bounced back to /setup with
+    every pick gone). Storage can be unavailable or hold an old shape, so every read is defensive. */
+function loadDraftSession(): StoredDraftSession | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoredDraftSession>;
+    if (!parsed.config || typeof parsed.config !== "object") return null;
+    return {
+      config: { ...DEFAULT_CONFIG, ...parsed.config },
+      picks: parsed.picks && typeof parsed.picks === "object" ? parsed.picks : {},
+      rerollsUsed: typeof parsed.rerollsUsed === "number" ? parsed.rerollsUsed : 0,
+      squadName: typeof parsed.squadName === "string" ? parsed.squadName : "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Number of picks in a persisted, still-unfinished draft — powers the landing page's
+    "Continue your draft" entry point without needing the provider. */
+export function storedDraftProgress(): { picks: number } | null {
+  const session = loadDraftSession();
+  if (!session || !session.config.eraId) return null;
+  const picks = Object.keys(session.picks).length;
+  return picks > 0 ? { picks } : null;
+}
 
 export function DraftProvider({ children }: { children: ReactNode }) {
-  const [config, setConfigState] = useState<DraftConfig>(DEFAULT_CONFIG);
-  const [picks, setPicks] = useState<Record<number, PlayerSeasonDto>>({});
-  const [rerollsUsed, setRerollsUsed] = useState(0);
+  const [initialSession] = useState(loadDraftSession);
+  const [config, setConfigState] = useState<DraftConfig>(initialSession?.config ?? DEFAULT_CONFIG);
+  const [picks, setPicks] = useState<Record<number, PlayerSeasonDto>>(initialSession?.picks ?? {});
+  const [rerollsUsed, setRerollsUsed] = useState(initialSession?.rerollsUsed ?? 0);
   // Empty by default rather than a generic "My Fantasy XI" placeholder — DraftPage falls back to
   // the signed-in user's own name for both display and submission whenever this is still untouched.
-  const [squadName, setSquadName] = useState("");
+  const [squadName, setSquadName] = useState(initialSession?.squadName ?? "");
+
+  useEffect(() => {
+    try {
+      const session: StoredDraftSession = { config, picks, rerollsUsed, squadName };
+      localStorage.setItem(DRAFT_SESSION_STORAGE_KEY, JSON.stringify(session));
+    } catch {
+      // Storage full/blocked (private mode) — the draft still works, it just won't survive a reload.
+    }
+  }, [config, picks, rerollsUsed, squadName]);
   // Persisted (unlike the rest of this context) so a page reload — or just leaving /season and
   // coming back — doesn't strand the user on Setup with no way back to a world that already
   // exists server-side. A fresh draft naturally overwrites this with a new id, so an old run is

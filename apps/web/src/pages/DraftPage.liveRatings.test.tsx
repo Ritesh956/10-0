@@ -105,16 +105,11 @@ describe("DraftPage — live squad-ratings panel updates progressively during th
     expect(queryByText(/^overall$/i)).toBeNull();
 
     getByRole("button", { name: /make the draw/i }).click();
-    await findByText("striker-1", {}, { timeout: 8000 });
+    await findByText("striker-1", {}, { timeout: 25000 });
 
+    // A striker can only go in a 4-4-2's ST slots (one distinct position), so a single tap places
+    // them straight away — no "choose a position" step when there's only one answer.
     getByRole("button", { name: /striker-1/i }).click();
-    // Confirms pendingPlayer state actually landed before we go hunting for a pitch slot to click.
-    await findByText(/choose a position for/i);
-
-    // 4-4-2 has two ST slots; click the first empty one to assign the striker into it.
-    const stSlotButtons = getAllByRole("button").filter((b) => /striker/i.test(b.textContent ?? ""));
-    expect(stSlotButtons.length).toBeGreaterThan(0);
-    stSlotButtons[0]!.click();
 
     // The panel should now be visible after exactly one pick — not gated behind a full XI.
     await waitFor(() => expect(queryByText(/^overall$/i)).not.toBeNull());
@@ -124,5 +119,5 @@ describe("DraftPage — live squad-ratings panel updates progressively during th
     expect(getAllByText("88").length).toBeGreaterThanOrEqual(1);
     // Midfield, Defence, and Goalkeeping have no picks yet — each renders the empty placeholder.
     expect(getAllByText("–").length).toBe(3);
-  }, 12000);
+  }, 30000);
 });

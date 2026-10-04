@@ -1,5 +1,8 @@
+import { worldClubLabel } from "../lib/clubNames";
 import { motion } from "framer-motion";
-import type { KnockoutRound, KnockoutTieDto, WorldClubDto } from "../api/types";
+import type { KnockoutTieDto, WorldClubDto } from "../api/types";
+import { EUROPE_STAGES } from "../lib/europe";
+import { useT } from "../lib/i18n/context";
 import { staggerContainer, staggerItem } from "../lib/motion";
 
 interface Props {
@@ -8,12 +11,11 @@ interface Props {
   highlightClubId?: string | undefined;
 }
 
-const ROUND_ORDER: KnockoutRound[] = ["QF", "SF", "FINAL"];
-const ROUND_LABEL: Record<KnockoutRound, string> = { QF: "Quarter-Finals", SF: "Semi-Finals", FINAL: "Final" };
 
 export function KnockoutBracket({ ties, clubs, highlightClubId }: Props) {
-  const nameFor = (clubId: string) => clubs.find((c) => c.id === clubId)?.name ?? clubId;
-  const rounds = ROUND_ORDER.map((round) => ({ round, ties: ties.filter((t) => t.round === round) })).filter(
+  const { t } = useT();
+  const nameFor = (clubId: string) => worldClubLabel(clubs.find((c) => c.id === clubId), clubId);
+  const rounds = EUROPE_STAGES.map((round) => ({ round, ties: ties.filter((t) => t.round === round) })).filter(
     (group) => group.ties.length > 0,
   );
 
@@ -21,7 +23,7 @@ export function KnockoutBracket({ ties, clubs, highlightClubId }: Props) {
     <div className="space-y-5">
       {rounds.map(({ round, ties: roundTies }) => (
         <div key={round}>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-smoke-600">{ROUND_LABEL[round]}</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-smoke-600">{t(`round.${round}` as const)}</p>
           <motion.div variants={staggerContainer} initial="initial" animate="animate" className="space-y-2">
             {roundTies.map((tie) => {
               const homeWon = tie.winnerClubId === tie.homeClubId;
@@ -40,9 +42,17 @@ export function KnockoutBracket({ ties, clubs, highlightClubId }: Props) {
                     {nameFor(tie.homeClubId)}
                     {tie.homeClubId === highlightClubId && <span className="ml-1 text-[10px] font-normal text-mint-400">(You)</span>}
                   </span>
-                  <span className="shrink-0 text-[10px] uppercase text-smoke-600">
-                    {round === "FINAL" ? "final" : "vs"}
-                  </span>
+                  {tie.score ? (
+                    <span
+                      className="shrink-0 text-center font-display text-sm font-bold text-paper"
+                      title={tie.score.legsPlayed > 1 ? "Aggregate over two legs" : undefined}
+                    >
+                      {tie.score.homeGoals}-{tie.score.awayGoals}
+                      {tie.score.legsPlayed > 1 && <span className="ml-1 text-[9px] font-normal uppercase text-smoke-600">agg</span>}
+                    </span>
+                  ) : (
+                    <span className="shrink-0 text-[10px] uppercase text-smoke-600">{round === "FINAL" ? "final" : "vs"}</span>
+                  )}
                   <span className={`min-w-0 flex-1 truncate text-right ${awayWon ? "font-bold text-mint-300" : "text-paper"}`}>
                     {tie.awayClubId === highlightClubId && <span className="mr-1 text-[10px] font-normal text-mint-400">(You)</span>}
                     {nameFor(tie.awayClubId)}

@@ -2,6 +2,9 @@ import type { JanuaryResultDto, MatchSummaryDto, SquadPositionOverallDto, TeamSt
 import { computePreseasonOdds } from "./preseasonOdds";
 import { POSITION_GROUP, type Position } from "./formations";
 import { summarizeForClub } from "./matchResult";
+import { formatSeason } from "./season";
+import { surname } from "./positionColors";
+import { derbyLine, titleIdiom } from "./leagueFlavour";
 
 /** Auto-generated end-of-season narrative (38-0 §6b) — a template bank keyed by signals, no LLM.
     Every signal is pure and unit-testable in isolation; buildSeasonNarrative() just assembles them
@@ -13,32 +16,48 @@ export interface VerdictTag {
   colorClass: string;
 }
 
-/** Finished-vs-projected delta → phrase + color. Recomputes a "projected finish" from the squad's
-    overall via the same computePreseasonOdds used at draft time, rather than persisting the
-    pre-season projection anywhere — the projection is a pure function of overall alone, so it's
-    always cheaply re-derivable instead of needing new storage. Falls back to a position-only
-    heuristic when no squad overall is available (e.g. an AI-only world). */
-export function computeVerdict(position: number, seasonSize: number, squadOverall: number | undefined): VerdictTag {
-  if (squadOverall === undefined) {
+/** Finished-vs-projected delta → phrase + color. Uses the projection the draft room actually showed
+    (stored on World.settings.projection) when there is one; older worlds re-derive it from the
+    squad's overall and league with the same computePreseasonOdds. Falls back to a position-only
+    heuristic when neither is available (e.g. an AI-only world). */
+export function computeVerdict(
+  position: number,
+  seasonSize: number,
+  squadOverall: number | undefined,
+  shownProjectedFinish?: number,
+  leagueId?: string,
+): VerdictTag {
+  if (squadOverall === undefined && shownProjectedFinish === undefined) {
     if (position <= Math.max(1, Math.ceil(seasonSize * 0.2))) return { label: "STRONG SEASON", colorClass: "text-mint-400" };
     if (position > seasonSize - Math.max(1, Math.ceil(seasonSize * 0.15))) {
       return { label: "TOUGH SEASON", colorClass: "text-crimson-400" };
     }
     return { label: "AS EXPECTED", colorClass: "text-smoke-400" };
   }
-  const projectedFinish = computePreseasonOdds(squadOverall).projectedFinish;
+  const projectedFinish = shownProjectedFinish ?? computePreseasonOdds(squadOverall!, leagueId).projectedFinish;
+  // A title is always a story: winning it from anywhere below 1st beats the projection, however
+  // small the gap looks in places (projected 4th -> champions used to read "AS EXPECTED").
+  if (position === 1) {
+    return projectedFinish > 1
+      ? { label: "OVERACHIEVED", colorClass: "text-mint-400" }
+      : { label: "DELIVERED", colorClass: "text-mint-400" };
+  }
+  // Scale the "meaningful gap" to the league instead of a flat 4 places: 3 in a 20- or 18-club league.
+  const threshold = Math.max(2, Math.round(seasonSize * 0.15));
   const delta = projectedFinish - position; // positive = finished better than projected (lower position number)
-  if (delta >= 4) return { label: "OVERACHIEVED", colorClass: "text-mint-400" };
-  if (delta <= -4) return { label: "FLATTERED TO DECEIVE", colorClass: "text-crimson-400" };
+  if (delta >= threshold) return { label: "OVERACHIEVED", colorClass: "text-mint-400" };
+  if (delta <= -threshold) return { label: "FLATTERED TO DECEIVE", colorClass: "text-crimson-400" };
   return { label: "AS EXPECTED", colorClass: "text-smoke-400" };
 }
 
+/** Cut on the 2026-10 rating curve from simulated drafts' unit averages (tools/sim-lab calibrate.ts):
+    a typical drafted unit sits ~81 ("Strong"), the top ~3% reach 89+ ("Elite"). */
 const UNIT_TIER_BANDS: { min: number; label: string }[] = [
-  { min: 85, label: "Elite" },
-  { min: 78, label: "Excellent" },
-  { min: 70, label: "Strong" },
-  { min: 62, label: "Very good" },
-  { min: 52, label: "Solid" },
+  { min: 89, label: "Elite" },
+  { min: 85, label: "Excellent" },
+  { min: 81, label: "Strong" },
+  { min: 77, label: "Very good" },
+  { min: 73, label: "Solid" },
   { min: 0, label: "Shaky" },
 ];
 
@@ -77,13 +96,31 @@ export function groupSquadUnits(squad: SquadPositionOverallDto[]): UnitRatings {
   };
 }
 
-/** Names the squad's strongest + weakest unit — the "composition sentence" signal. */
+const UNIT_NOUN: Record<keyof UnitRatings, string> = {
+  attack: "attack",
+  midfield: "midfield",
+  defence: "defence",
+  goalkeeping: "goalkeeper",
+};
+
+function withArticle(word: string): string {
+  return /^[aeiou]/i.test(word) ? `an ${word}` : `a ${word}`;
+}
+
+/** Names the squad's strongest + weakest unit — the "composition sentence" signal. Only calls a
+    unit the weak link when it actually sits in a lower tier band; when every unit shares a band the
+    sentence says so instead (an all-Elite XI used to be told its attack was "shakier"). */
 export function compositionSentence(units: UnitRatings): string {
   const entries = Object.entries(units) as [keyof UnitRatings, number][];
   const strongest = entries.reduce((a, b) => (b[1] > a[1] ? b : a));
   const weakest = entries.reduce((a, b) => (b[1] < a[1] ? b : a));
-  if (strongest[0] === weakest[0]) return `A balanced squad built around its ${strongest[0]}.`;
-  return `Built on a ${unitTierLabel(strongest[1]).toLowerCase()} ${strongest[0]}, undermined at times by a shakier ${weakest[0]}.`;
+  const strongTier = unitTierLabel(strongest[1]).toLowerCase();
+  const weakTier = unitTierLabel(weakest[1]).toLowerCase();
+  if (strongest[0] === weakest[0]) return `A balanced squad built around its ${UNIT_NOUN[strongest[0]]}.`;
+  if (strongTier === weakTier) {
+    return `${withArticle(strongTier).replace(/^a/, "A")} side right across the pitch, with the ${UNIT_NOUN[strongest[0]]} just shading it.`;
+  }
+  return `Built on ${withArticle(strongTier)} ${UNIT_NOUN[strongest[0]]}; the ${UNIT_NOUN[weakest[0]]} (${weakTier}) was the weak link.`;
 }
 
 export type FinishBracket = "champion" | "top4" | "europa" | "mid-table" | "relegation-scrap" | "relegated";
@@ -123,11 +160,12 @@ export function finishParagraph(
   points: number,
   clubName: string,
   winText: string | undefined,
+  leagueId?: string,
 ): string {
   const winClause = winText ? ` The high point was ${winText}.` : "";
   switch (bracket) {
     case "champion":
-      return `${clubName} went all the way, lifting the title with ${points} points.${winClause}`;
+      return `${clubName} went all the way, lifting ${titleIdiom(leagueId)} with ${points} points.${winClause}`;
     case "top4":
       return `A top-four finish (#${position}) with ${points} points — European football is secured.${winClause}`;
     case "europa":
@@ -145,7 +183,7 @@ export function finishParagraph(
 export function januaryLines(outcome: JanuaryResultDto | null | undefined): string[] {
   if (!outcome) return [];
   return [
-    `In January, ${outcome.inPlayer.name} arrived (OVR ${outcome.inPlayer.overall}) from ${outcome.inPlayer.clubName} ${outcome.inPlayer.seasonYear}.`,
+    `In January, ${outcome.inPlayer.name} arrived (OVR ${outcome.inPlayer.overall}) from ${outcome.inPlayer.clubName} ${formatSeason(outcome.inPlayer.seasonYear)}.`,
     `${outcome.outPlayer.name} (OVR ${outcome.outPlayer.overall}) made way for them — a swing of ${outcome.delta > 0 ? "+" : ""}${outcome.delta} OVR.`,
   ];
 }
@@ -174,7 +212,7 @@ export function standoutQuote(teamStats: TeamStatsDto | null | undefined): Stand
       : candidate.goals > 0
         ? `${candidate.goals} goals`
         : `${candidate.assists} assists`;
-  const lastName = candidate.name.trim().split(/\s+/).slice(-1)[0];
+  const lastName = surname(candidate.name);
 
   return {
     line: `${candidate.name} was the standout, with ${contribution} in ${candidate.matchesPlayed} appearances.`,
@@ -195,6 +233,9 @@ export interface SeasonNarrativeInput {
   clubName: string;
   userClubId: string;
   squadOverall: number | undefined;
+  /** The pre-season projected finish the player was shown (World.settings.projection.finish). */
+  shownProjectedFinish?: number | undefined;
+  leagueId?: string | undefined;
   squad: SquadPositionOverallDto[] | undefined;
   matches: MatchSummaryDto[];
   teamStats: TeamStatsDto | null | undefined;
@@ -209,6 +250,8 @@ export interface SeasonNarrative {
   compositionSentence: string | undefined;
   finishParagraph: string;
   januaryLines: string[];
+  /** The user's best derby result when the league has a named derby against someone they played. */
+  derbyLine: string | undefined;
   standout: StandoutQuote | undefined;
   managerLine: string | undefined;
 }
@@ -217,7 +260,7 @@ export interface SeasonNarrative {
     render body every time (no need to cache the result separately; everything it's fed is already
     cached). */
 export function buildSeasonNarrative(input: SeasonNarrativeInput): SeasonNarrative {
-  const verdict = computeVerdict(input.position, input.seasonSize, input.squadOverall);
+  const verdict = computeVerdict(input.position, input.seasonSize, input.squadOverall, input.shownProjectedFinish, input.leagueId);
   const units = input.squad && input.squad.length > 0 ? groupSquadUnits(input.squad) : undefined;
   const unitTiers = units
     ? {
@@ -234,8 +277,9 @@ export function buildSeasonNarrative(input: SeasonNarrativeInput): SeasonNarrati
     verdict,
     unitTiers,
     compositionSentence: units ? compositionSentence(units) : undefined,
-    finishParagraph: finishParagraph(bracket, input.position, input.points, input.clubName, winText),
+    finishParagraph: finishParagraph(bracket, input.position, input.points, input.clubName, winText, input.leagueId),
     januaryLines: januaryLines(input.januaryOutcome),
+    derbyLine: derbyLine(input.leagueId, input.clubName, input.userClubId, input.matches, input.nameFor),
     standout: standoutQuote(input.teamStats),
     managerLine: managerClosingLine(input.managerPhilosophy, input.clubName),
   };

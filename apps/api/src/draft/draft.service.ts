@@ -3,7 +3,7 @@ import type { Position } from "@futbol/domain";
 import type { PrismaClient } from "@futbol/db";
 import { PRISMA } from "../prisma/prisma.module.js";
 import { WorldsService } from "../worlds/worlds.service.js";
-import { buildLineup, type DraftCandidate } from "../common/lineup.js";
+import { buildLineup, validateUserLineup, type DraftCandidate, type Lineup } from "../common/lineup.js";
 import { instantiateWorldClub } from "../common/instantiate-world-club.js";
 import type { DraftClubDto, DraftFantasyDto } from "./draft.schemas.js";
 
@@ -57,7 +57,19 @@ export class DraftService {
       positions: ps.positions as Position[],
       overall: ps.overall,
     }));
-    const lineup = buildLineup(dto.formation, pool);
+    // A user-arranged lineup is stored exactly as given — re-running buildLineup here once silently
+    // reshuffled drafted XIs (e.g. a striker auto-dropped into an empty RB slot), so the engine
+    // played a different team than the one on the user's pitch.
+    let lineup: Lineup;
+    if (dto.lineup) {
+      try {
+        lineup = validateUserLineup(dto.formation, dto.lineup, pool);
+      } catch (err) {
+        throw new BadRequestException(err instanceof Error ? err.message : "Invalid lineup");
+      }
+    } else {
+      lineup = buildLineup(dto.formation, pool);
+    }
 
     return instantiateWorldClub(this.prisma, {
       worldId,

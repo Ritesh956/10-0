@@ -25,9 +25,11 @@ export default {
         paper: "#f4f4f6",
         /** Primary accent: fresh pitch mint. Actions, selection, primary CTAs. */
         mint: {
-          500: "#1fbf75",
-          400: "#3ed98f",
-          300: "#7de8b6",
+          // CSS variables (styles/index.css) so the whole site can re-theme per league — see
+          // lib/leagueTheme.ts. The defaults are the original pitch-mint.
+          500: "rgb(var(--c-mint-500) / <alpha-value>)",
+          400: "rgb(var(--c-mint-400) / <alpha-value>)",
+          300: "rgb(var(--c-mint-300) / <alpha-value>)",
         },
         /** Secondary accent: informational / cool contrast. */
         teal: {

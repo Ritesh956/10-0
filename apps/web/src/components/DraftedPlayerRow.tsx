@@ -1,6 +1,7 @@
 import type { PlayerSeasonDto } from "../api/types";
 import type { Position, PositionGroup } from "../lib/formations";
 import { GROUP_FILL, GROUP_TEXT, GROUP_TINT } from "../lib/positionColors";
+import { formatSeason } from "../lib/season";
 
 interface Props {
   position: Position;
@@ -33,7 +34,7 @@ export function DraftedPlayerRow({ position, group, player, showRatings }: Props
         <span className="block truncate text-xs text-smoke-500">{player.player.nationality}</span>
       </span>
       <span className="shrink-0 text-right text-xs text-smoke-500">
-        {player.clubSeason.club.name} <span className="text-smoke-600">{player.seasonYear}</span>
+        {player.clubSeason.club.name} <span className="text-smoke-600">{formatSeason(player.seasonYear)}</span>
       </span>
       {showRatings && (
         <span

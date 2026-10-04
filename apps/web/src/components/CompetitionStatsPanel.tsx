@@ -1,10 +1,13 @@
 import { motion } from "framer-motion";
 import type { CompetitionStatsDto } from "../api/types";
+import { awardNamesFor } from "../lib/leagueFlavour";
 import { staggerContainer, staggerItem } from "../lib/motion";
 
 interface Props {
   stats: CompetitionStatsDto;
   highlightClubId?: string | undefined;
+  /** The league the stats are for, so awards carry its own names (Pichichi, Capocannoniere…). */
+  leagueId?: string | undefined;
 }
 
 const AWARD_ACCENT: Record<"amber" | "plum" | "mint" | "teal", { border: string; text: string }> = {
@@ -48,7 +51,8 @@ function AwardChip({
 
 /** Competition-wide leaderboard (Golden Boot, MVP, top scorers across every club) — distinct from
     TeamStatsPanel, which is scoped to just the user's own squad. */
-export function CompetitionStatsPanel({ stats, highlightClubId }: Props) {
+export function CompetitionStatsPanel({ stats, highlightClubId, leagueId }: Props) {
+  const names = awardNamesFor(leagueId);
   if (!stats.goldenBoot && !stats.mvp && !stats.playmaker && !stats.goldenGlove && stats.topScorers.length === 0) {
     return null;
   }
@@ -59,7 +63,7 @@ export function CompetitionStatsPanel({ stats, highlightClubId }: Props) {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {stats.goldenBoot && (
             <AwardChip
-              label="Golden Boot"
+              label={names.goldenBoot}
               value={`${stats.goldenBoot.name} — ${stats.goldenBoot.goals}`}
               sub={stats.goldenBoot.clubName}
               isYou={stats.goldenBoot.clubId === highlightClubId}
@@ -67,7 +71,7 @@ export function CompetitionStatsPanel({ stats, highlightClubId }: Props) {
           )}
           {stats.mvp && (
             <AwardChip
-              label="MVP"
+              label={names.mvp}
               value={`${stats.mvp.name} — ${stats.mvp.avgRating.toFixed(1)}`}
               sub={stats.mvp.clubName}
               isYou={stats.mvp.clubId === highlightClubId}
@@ -76,7 +80,7 @@ export function CompetitionStatsPanel({ stats, highlightClubId }: Props) {
           )}
           {stats.playmaker && (
             <AwardChip
-              label="Playmaker"
+              label={names.playmaker}
               value={`${stats.playmaker.name} — ${stats.playmaker.assists}`}
               sub={stats.playmaker.clubName}
               isYou={stats.playmaker.clubId === highlightClubId}
@@ -85,7 +89,7 @@ export function CompetitionStatsPanel({ stats, highlightClubId }: Props) {
           )}
           {stats.goldenGlove && (
             <AwardChip
-              label="Golden Glove"
+              label={names.goldenGlove}
               value={`${stats.goldenGlove.name} — ${stats.goldenGlove.cleanSheets}`}
               sub={stats.goldenGlove.clubName}
               isYou={stats.goldenGlove.clubId === highlightClubId}

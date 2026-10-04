@@ -1,73 +1,83 @@
 import { describe, expect, it } from "vitest";
 import { computePreseasonOdds } from "../lib/preseasonOdds";
+import { PROJECTION_TABLE } from "../lib/projectionTable";
+
+const LEAGUES = Object.keys(PROJECTION_TABLE);
 
 describe("computePreseasonOdds", () => {
-  it("regression: an Overall 82 squad no longer shows a ~40% title chance with a 7th-place projected finish", () => {
-    // This is the exact scenario a user reported as visibly self-contradictory.
-    const odds = computePreseasonOdds(82);
-    expect(odds.projectedFinish).toBeGreaterThanOrEqual(5);
-    expect(odds.projectedFinish).toBeLessThanOrEqual(9);
-    expect(odds.winPct).toBeLessThan(15);
-  });
-
-  it("winPct, top4Pct, top6Pct, and top10Pct stay internally consistent across the full rating range", () => {
-    for (let rating = 50; rating <= 99; rating++) {
-      const odds = computePreseasonOdds(rating);
-      // You can never be more likely to win the league outright than to merely finish top 4, and
-      // finishing top 4 implies finishing top 6, which implies finishing top 10 — each band is a
-      // strict superset of the one above it, so the percentages must never decrease band to band.
-      expect(odds.winPct).toBeLessThanOrEqual(odds.top4Pct);
-      expect(odds.top4Pct).toBeLessThanOrEqual(odds.top6Pct);
-      expect(odds.top6Pct).toBeLessThanOrEqual(odds.top10Pct);
-      // A team can't be simultaneously favored for relegation and for a top-4 finish.
-      expect(odds.top4Pct + odds.relegationPct).toBeLessThanOrEqual(150);
+  it("regression (B20): expected points always look like the projected finish", () => {
+    // The old curve projected an Overall-90 XI "4th, 89 pts" while simulated champions finished on
+    // ~69, so the projection disagreed with the engine. It's now read off simulated seasons, so a
+    // squad projected outside the title race can't also be credited with title-winning points.
+    for (const leagueId of LEAGUES) {
+      for (let overall = 62; overall <= 94; overall++) {
+        const odds = computePreseasonOdds(overall, leagueId);
+        if (odds.projectedFinish >= 4) expect(odds.expectedPoints).toBeLessThan(80);
+        if (odds.projectedFinish >= 10) expect(odds.expectedPoints).toBeLessThan(60);
+      }
     }
   });
 
-  it("projected finish and all percentages move monotonically with squad quality", () => {
-    const ratings = [55, 65, 75, 82, 90, 99];
-    const results = ratings.map(computePreseasonOdds);
-    for (let i = 1; i < results.length; i++) {
-      const prev = results[i - 1]!;
-      const cur = results[i]!;
-      // Better squads finish higher (lower position number), never worse.
-      expect(cur.projectedFinish).toBeLessThanOrEqual(prev.projectedFinish);
-      expect(cur.winPct).toBeGreaterThanOrEqual(prev.winPct);
-      expect(cur.top4Pct).toBeGreaterThanOrEqual(prev.top4Pct);
-      expect(cur.top6Pct).toBeGreaterThanOrEqual(prev.top6Pct);
-      expect(cur.top10Pct).toBeGreaterThanOrEqual(prev.top10Pct);
-      expect(cur.relegationPct).toBeLessThanOrEqual(prev.relegationPct);
-      expect(cur.expectedPoints).toBeGreaterThanOrEqual(prev.expectedPoints);
+  it("an XI that projects mid-table doesn't also show a big title chance", () => {
+    const odds = computePreseasonOdds(82, "league-gb1");
+    expect(odds.projectedFinish).toBeGreaterThanOrEqual(8);
+    expect(odds.projectedFinish).toBeLessThanOrEqual(12);
+    expect(odds.winPct).toBeLessThan(10);
+  });
+
+  it("win <= top 4 <= top 6 <= top 10 in every league across the whole rating range", () => {
+    for (const leagueId of LEAGUES) {
+      for (let rating = 50; rating <= 99; rating++) {
+        const odds = computePreseasonOdds(rating, leagueId);
+        expect(odds.winPct).toBeLessThanOrEqual(odds.top4Pct);
+        expect(odds.top4Pct).toBeLessThanOrEqual(odds.top6Pct);
+        expect(odds.top6Pct).toBeLessThanOrEqual(odds.top10Pct);
+        expect(odds.top4Pct + odds.relegationPct).toBeLessThanOrEqual(150);
+      }
     }
   });
 
-  it("a genuinely dominant squad (rating 99) is a plausible title favorite, not a near-certainty", () => {
-    const odds = computePreseasonOdds(99);
-    expect(odds.projectedFinish).toBeLessThanOrEqual(3);
-    expect(odds.winPct).toBeGreaterThan(20);
-    expect(odds.relegationPct).toBe(0);
+  it("everything moves monotonically with squad quality", () => {
+    for (const leagueId of LEAGUES) {
+      let prev = computePreseasonOdds(60, leagueId);
+      for (let rating = 61; rating <= 96; rating++) {
+        const cur = computePreseasonOdds(rating, leagueId);
+        expect(cur.projectedFinish).toBeLessThanOrEqual(prev.projectedFinish);
+        expect(cur.winPct).toBeGreaterThanOrEqual(prev.winPct);
+        expect(cur.top4Pct).toBeGreaterThanOrEqual(prev.top4Pct);
+        expect(cur.top10Pct).toBeGreaterThanOrEqual(prev.top10Pct);
+        expect(cur.relegationPct).toBeLessThanOrEqual(prev.relegationPct);
+        expect(cur.expectedPoints).toBeGreaterThanOrEqual(prev.expectedPoints);
+        prev = cur;
+      }
+    }
   });
 
-  it("a weak squad (rating 55) is a plausible relegation candidate with near-zero title odds", () => {
-    const odds = computePreseasonOdds(55);
-    expect(odds.projectedFinish).toBeGreaterThanOrEqual(15);
-    expect(odds.winPct).toBeLessThanOrEqual(2);
-    expect(odds.relegationPct).toBeGreaterThan(30);
+  it("an elite XI is the title favourite but never a certainty; a weak one is relegation fodder", () => {
+    const elite = computePreseasonOdds(92, "league-gb1");
+    expect(elite.projectedFinish).toBe(1);
+    expect(elite.winPct).toBeGreaterThan(50);
+    expect(elite.winPct).toBeLessThanOrEqual(99);
+    expect(elite.relegationPct).toBe(0);
+
+    const weak = computePreseasonOdds(72, "league-gb1");
+    expect(weak.projectedFinish).toBeGreaterThanOrEqual(17);
+    expect(weak.winPct).toBe(0);
+    expect(weak.relegationPct).toBeGreaterThan(50);
   });
 
-  it("a dominant squad (rating 99) is a near-certainty for top 6 and top 10, not just top 4", () => {
-    const odds = computePreseasonOdds(99);
-    expect(odds.top6Pct).toBeGreaterThan(odds.top4Pct);
-    expect(odds.top10Pct).toBeGreaterThanOrEqual(odds.top6Pct);
-    expect(odds.top10Pct).toBeGreaterThanOrEqual(95);
+  it("uses each league's real size and falls back to the Premier League for an unknown league", () => {
+    expect(computePreseasonOdds(80, "league-l1").seasonSize).toBe(18);
+    expect(computePreseasonOdds(80, "league-es1").seasonSize).toBe(20);
+    expect(computePreseasonOdds(80, "not-a-league")).toEqual(computePreseasonOdds(80, "league-gb1"));
+    expect(computePreseasonOdds(80)).toEqual(computePreseasonOdds(80, "league-gb1"));
   });
 
-  it("a weak squad (rating 55) still has some realistic top-10 hope even with near-zero title odds", () => {
-    const odds = computePreseasonOdds(55);
-    // A relegation-form squad can still scrape into the top half on a given season — this
-    // shouldn't be a flat 0%, since that would make Top 10 read as impossible for weak squads.
-    expect(odds.top10Pct).toBeGreaterThan(0);
-    expect(odds.top10Pct).toBeGreaterThanOrEqual(odds.top6Pct);
-    expect(odds.top6Pct).toBeGreaterThanOrEqual(odds.top4Pct);
+  it("interpolates between simulated buckets instead of jumping", () => {
+    const a = computePreseasonOdds(84, "league-gb1").expectedPoints;
+    const b = computePreseasonOdds(85, "league-gb1").expectedPoints;
+    const c = computePreseasonOdds(86, "league-gb1").expectedPoints;
+    expect(b).toBeGreaterThan(a);
+    expect(c).toBeGreaterThan(b);
   });
 });

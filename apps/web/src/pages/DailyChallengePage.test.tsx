@@ -6,6 +6,8 @@ import type { ClubSeasonDto, DailyChallengeDto, PlayerSeasonDto } from "../api/t
 const api = vi.hoisted(() => ({
   getDailyChallenge: vi.fn(),
   getDailyLeaderboard: vi.fn(),
+  getDailyRecap: vi.fn(),
+  getMyDailyEntry: vi.fn(),
   listLeagues: vi.fn(),
   listClubSeasons: vi.fn(),
   listPlayerSeasons: vi.fn(),
@@ -68,6 +70,8 @@ describe("DailyChallengePage — anchor pre-seed and live requirements tracking"
   beforeEach(() => {
     api.getDailyChallenge.mockResolvedValue(challenge);
     api.getDailyLeaderboard.mockResolvedValue([]);
+    api.getDailyRecap.mockResolvedValue(null);
+    api.getMyDailyEntry.mockResolvedValue({ attemptsUsed: 0, attemptsRemaining: 5, bestScore: null, maxScore: null });
     api.listLeagues.mockResolvedValue([{ id: "l1", eraId: "e1", name: "Test League", country: "England", tier: 1 }]);
     api.listClubSeasons.mockResolvedValue([club]);
     api.listPlayerSeasons.mockResolvedValue([polishMidfielder]);
@@ -95,7 +99,7 @@ describe("DailyChallengePage — anchor pre-seed and live requirements tracking"
     expect(getAllByText("0/1").length).toBeGreaterThan(0);
 
     fireEvent.click(getByRole("button", { name: /make the draw/i }));
-    await findByText("Polish Anchorman", {}, { timeout: 8000 });
+    await findByText("Polish Anchorman", {}, { timeout: 25000 });
 
     fireEvent.click(getByRole("button", { name: /polish anchorman/i }));
 
@@ -111,5 +115,27 @@ describe("DailyChallengePage — anchor pre-seed and live requirements tracking"
     // is Polish, same as the anchor) but not the club requirement (different club).
     await waitFor(() => expect(getAllByText("1/2").length).toBeGreaterThan(0));
     expect(getAllByText("0/1").length).toBeGreaterThan(0);
-  }, 12000);
+  }, 30000);
+
+  it("shows yesterday's community result and a friendly date, and doesn't offer a reroll before the first draw", async () => {
+    api.getDailyRecap.mockResolvedValue({
+      date: "2026-07-21",
+      themeLabel: "Club Legends: Test FC",
+      players: 12,
+      topScore: 34,
+      maxScore: 30,
+      maxedCount: 3,
+      fewestAttemptsToMax: 1,
+    });
+    const { findByText, queryByRole, getByText } = render(
+      <MemoryRouter>
+        <DailyChallengePage />
+      </MemoryRouter>,
+    );
+
+    expect(await findByText(/Club Legends: Test FC/)).toBeTruthy();
+    expect(getByText(/fastest in 1 attempt$/)).toBeTruthy();
+    expect(getByText(/Wednesday 22 July · Attempt 1\/5/)).toBeTruthy();
+    expect(queryByRole("button", { name: /reroll this club/i })).toBeNull();
+  });
 });

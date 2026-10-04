@@ -1,28 +1,6 @@
 /** Pure aggregation logic factored out of seasons.service.ts (Prisma-coupled) so it's unit-testable
     without mocking the database — the same pattern as lineup.ts/round-robin.ts/january.logic.ts. */
 
-export interface SquadSlotJson {
-  position: string;
-  playerId: string;
-}
-export interface MatchTeamSetupJson {
-  clubId: string;
-  squad: { startingXI: SquadSlotJson[] };
-}
-export interface MatchSetupJson {
-  home: MatchTeamSetupJson;
-  away: MatchTeamSetupJson;
-}
-
-/** The engine's per-match Squad snapshot is buried in Match.setup (Json, no dedicated relational
-    column) — this is the only way to attribute a clean sheet to the specific goalkeeper who kept
-    it (vs. just the club), by finding the GK slot in whichever side's squad matches clubId. */
-export function findGoalkeeperId(setup: unknown, clubId: string): string | undefined {
-  const parsed = setup as MatchSetupJson;
-  const side = parsed.home?.clubId === clubId ? parsed.home : parsed.away?.clubId === clubId ? parsed.away : undefined;
-  return side?.squad.startingXI.find((s) => s.position === "GK")?.playerId;
-}
-
 export interface ClubMatchResult {
   opponentClubId: string;
   ourScore: number;

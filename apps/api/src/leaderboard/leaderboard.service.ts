@@ -11,6 +11,7 @@ import type { LeaderboardQueryDto, SubmitLeaderboardDto } from "./leaderboard.sc
 interface WorldSettingsShape {
   oneClubClubId?: string;
   nationsNationality?: string;
+  leagueId?: string;
 }
 
 @Injectable()
@@ -45,7 +46,14 @@ export class LeaderboardService {
     const leagueSourceClub =
       world.clubs.find((c) => c.id !== userClub.id && c.refClubSeasonId) ??
       (userClub.refClubSeasonId ? userClub : undefined);
+    // settings.leagueId is authoritative; the club-based lookup below is only for older worlds, and
+    // can be fooled once European Nights has added other leagues' clubs to the world.
+    const storedLeagueId = (world.settings as WorldSettingsShape | null)?.leagueId;
+    const storedLeagueName = storedLeagueId
+      ? ((await this.prisma.refLeague.findUnique({ where: { id: storedLeagueId }, select: { name: true } }))?.name ?? null)
+      : null;
     const leagueName =
+      storedLeagueName ??
       (leagueSourceClub?.refClubSeasonId
         ? (
             await this.prisma.refClubSeason.findUnique({

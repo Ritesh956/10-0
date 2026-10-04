@@ -4,11 +4,11 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { PrismaClient, type Prisma } from "@prisma/client";
 import { createRng } from "@futbol/engine";
-import { generateAttributes } from "@futbol/engine/testing";
+import { generateAttributes, overallToEngineQuality } from "@futbol/engine/testing";
 
 /**
  * Seeds the real reference-catalog dataset: top-5 European leagues (Premier
- * League, LaLiga, Serie A, Bundesliga, Ligue 1), seasons 2012-2024, built
+ * League, LaLiga, Serie A, Bundesliga, Ligue 1), seasons 2012-2025 (2012/13 to 2025/26), built
  * from real player/club/appearance facts (names, positions, minutes, goals,
  * assists, market value) published by the dcaribou/transfermarkt-datasets
  * project (https://github.com/dcaribou/transfermarkt-datasets, CC-licensed,
@@ -20,7 +20,7 @@ import { generateAttributes } from "@futbol/engine/testing";
  * `quality` seed for the engine's own `generateAttributes()` so the full
  * FM-style attribute vector stays consistent with how @futbol/sim-lab
  * calibrates the match engine. See tools/data-etl/ for the ETL that produced
- * prisma/data/real-top5-2012-2024.json.gz from the raw CSVs.
+ * prisma/data/real-top5-2012-2025.json.gz from the raw CSVs.
  *
  * Additive: inserted into the same "era-all-time" era as the fictional seed
  * (packages/db/prisma/seed.ts) rather than replacing it, so both are
@@ -30,9 +30,12 @@ import { generateAttributes } from "@futbol/engine/testing";
 const prisma = new PrismaClient();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_PATH = path.join(__dirname, "data", "real-top5-2012-2024.json.gz");
+const DATA_PATH = path.join(__dirname, "data", "real-top5-2012-2025.json.gz");
 
 const ERA = { id: "era-all-time", name: "All-Time", startYear: 1992, endYear: 2025 };
+
+// `overall` -> engine quality lives in @futbol/engine/testing (overallToEngineQuality) so this seed
+// and tools/sim-lab's real-league calibration harness always generate identical attributes.
 
 interface RealLeague {
   id: string;
@@ -77,27 +80,6 @@ interface RealCatalog {
   playerSeasons: RealPlayerSeason[];
 }
 
-/**
- * Maps a stored `overall` (70-99 after the rating recalibration — see tools/data-etl/) onto the
- * engine's [0,1] `quality`, which seeds `generateAttributes()`.
- *
- * NOT a plain `overall / 99`: that compresses the whole real-player pool into quality 0.71-1.0,
- * and since the engine derives per-unit ratings from `6 + quality*12` attribute centers, that left
- * barely any gap between a great side and a poor one — a 90-rated team beat a 75-rated team only
- * ~56% of the time in sim-lab (a title team vs a relegation team should be far more decisive).
- * Instead we stretch [70,99] across [0.42,1.0], restoring a realistic spread: sim-lab then shows
- * 90v75 ≈ 71% and 99v70 ≈ 87% favorite wins (upsets still ~4-11%), while even matchups across the
- * whole range stay within the engine's calibrated targets (2.3-3.0 goals, 23-28% draws, home edge).
- * Keep the floor/cap in sync with the OVR curve's [70,99] in tools/data-etl.
- */
-const QUALITY_OVR_FLOOR = 70;
-const QUALITY_OVR_CAP = 99;
-const QUALITY_AT_FLOOR = 0.42;
-function overallToEngineQuality(overall: number): number {
-  const t = (overall - QUALITY_OVR_FLOOR) / (QUALITY_OVR_CAP - QUALITY_OVR_FLOOR);
-  return Math.min(1, Math.max(0, QUALITY_AT_FLOOR + t * (1 - QUALITY_AT_FLOOR)));
-}
-
 function loadCatalog(): RealCatalog {
   const gz = readFileSync(DATA_PATH);
   const json = gunzipSync(gz).toString("utf-8");
@@ -112,7 +94,7 @@ function chunk<T>(items: T[], size: number): T[][] {
 }
 
 async function main(): Promise<void> {
-  console.log("Seeding real reference data (top-5 leagues, 2012-2024)...");
+  console.log("Seeding real reference data (top-5 leagues, 2012/13-2025/26)...");
   const catalog = loadCatalog();
 
   await prisma.era.upsert({

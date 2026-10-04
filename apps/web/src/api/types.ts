@@ -23,6 +23,9 @@ export interface LeagueDto {
   name: string;
   country: string;
   tier: number;
+  /** First/last season start year this league actually has club-season data for (null if none). */
+  minSeasonYear?: number | null;
+  maxSeasonYear?: number | null;
 }
 
 export interface ClubSeasonDto {
@@ -47,6 +50,25 @@ export interface PlayerSeasonDto {
   clubSeason: { club: { id: string; name: string } };
 }
 
+/** GET /catalog/best-xi?leagueId= — one team-sheet slot of a league's top-rated XI. */
+export interface BestXiPlayerDto {
+  playerSeasonId: string;
+  playerId: string;
+  name: string;
+  nationality: string;
+  photoUrl: string | null;
+  clubName: string;
+  seasonYear: number;
+  overall: number;
+  position: string;
+}
+
+export interface BestXiSlotDto {
+  slot: string;
+  pick: BestXiPlayerDto | null;
+  alternatives: BestXiPlayerDto[];
+}
+
 export interface ManagerDto {
   id: string;
   name: string;
@@ -65,6 +87,8 @@ export interface WorldClubDto {
   name: string;
   managedByUserId: string | null;
   refClubSeasonId: string | null;
+  /** The country of the league the club plays in (for a flag); null when unknown. */
+  country?: string | null;
 }
 
 export interface WorldSettingsDto {
@@ -79,6 +103,13 @@ export interface WorldSettingsDto {
       undefined for a normal world. Set once at world creation; read-only from the frontend's
       perspective, same convention as oneClubClubId. */
   multiplayerLeagueId?: string;
+  nationsNationality?: string;
+  /** RefLeague id of the league this world's season is played in, when the draft picked one. */
+  leagueId?: string;
+  /** "all" when the draft wheel spanned all five leagues (All Top-5). */
+  draftPool?: "all";
+  /** The pre-season projection as the draft room displayed it — the verdict compares against this. */
+  projection?: { finish: number; points: number; overall: number };
 }
 
 export interface WorldDto {
@@ -243,7 +274,7 @@ export interface ManagerStatsDto {
   highestScoringMatch?: { opponentClubId: string; ourScore: number; theirScore: number; total: number };
 }
 
-export type KnockoutRound = "QF" | "SF" | "FINAL";
+export type KnockoutRound = "PO" | "R16" | "QF" | "SF" | "FINAL";
 
 export interface KnockoutTieDto {
   id: string;
@@ -254,19 +285,81 @@ export interface KnockoutTieDto {
   secondLegFixtureId: string | null;
   winnerClubId: string | null;
   wentToPenalties: boolean;
+  /** Aggregate from the tie's own home/away perspective; null/absent until a leg has been played. */
+  score?: { homeGoals: number; awayGoals: number; legsPlayed: number } | null;
 }
 
 export interface EuropeStatusDto {
   qualified: boolean;
   position: number;
   qualifierCount: number;
+  /** Clubs in the cross-league field (36). Optional: older API builds don't send it. */
+  clubCount?: number;
+  /** The Continental Cup — the second European tier, for a 9th–12th finish. */
+  cup?: { qualified: boolean; clubCount: number; competitionId?: string };
   competitionId?: string;
   ties: KnockoutTieDto[];
+}
+
+export interface EuropeDrawClubDto {
+  clubId: string;
+  name: string;
+  /** League country — drives the flag. */
+  country: string;
+  /** 1 = strongest by our squad ratings. */
+  seed: number;
+  /** 1–4. */
+  pot: number;
+  /** Average overall of the best eleven. */
+  strength: number;
+}
+
+export interface EuropeDrawDto {
+  clubs: EuropeDrawClubDto[];
+}
+
+/** One Nations Cup group: letter + its table (best first). */
+export interface NationsCupGroupDto {
+  letter: string;
+  rows: StandingsRowDto[];
+}
+
+export type NationsCupStatusDto =
+  | { started: false }
+  | { started: true; competitionId: string; groupSeasonId: string | null; champion: string | null };
+
+export interface NationsCupStartDto {
+  competitionId: string;
+  seasonId: string;
+  groups: NationsCupGroupDto[];
+}
+
+/** GET /events/current — one public weekly event per league. */
+export interface WeeklyEventDto {
+  key: string;
+  week: string;
+  leagueId: string;
+  name: string;
+  twist: string;
+  difficulty: "easy" | "normal" | "hard";
+  formation: string | null;
+  /** Joined through the normal league invite flow: /multiplayer/join/<inviteCode>. */
+  inviteCode: string;
+  endsAt: string;
+  memberCount: number;
+  top: { rank: number; handle: string; points: number; goalDiff: number }[];
+}
+
+export interface EuropeCupDto {
+  competitionId: string;
+  round: EuropeRoundDto;
+  draw: EuropeDrawDto;
 }
 
 export interface EuropeLeaguePhaseDto {
   competitionId: string;
   seasonId: string;
+  draw: EuropeDrawDto;
 }
 
 export interface EuropeRoundDto {
@@ -296,8 +389,39 @@ export interface JanuaryInPlayerDto extends JanuaryPlayerDto {
   seasonYear: number;
 }
 
+/** The named January events — mirrors apps/api/src/january/january.logic.ts JanuaryEventKind. */
+export type JanuaryEventKind =
+  | "bargain-buy"
+  | "wheeler-dealer"
+  | "deadline-day"
+  | "loan-swap"
+  | "star-wants-out"
+  | "border-raid";
+
+export interface JanuaryOptionDto {
+  id: string;
+  name: string;
+  clubName: string;
+  seasonYear: number;
+  position: string;
+}
+
+/** GET .../january/:seasonId/offer — this season's event; `options` only for a choice event. */
+export interface JanuaryOfferDto {
+  kind: JanuaryEventKind;
+  label: string;
+  premise: string;
+  /** The other league a cross-border event reaches into (flag), else null. Absent on older API builds. */
+  league?: { name: string; country: string } | null;
+  outPlayer: JanuaryPlayerDto;
+  options: JanuaryOptionDto[] | null;
+}
+
 export interface JanuaryResultDto {
   eventType: JanuaryEventType;
+  /** Absent on results cached before the event layer existed. */
+  kind?: JanuaryEventKind;
+  label?: string;
   outPlayer: JanuaryPlayerDto;
   inPlayer: JanuaryInPlayerDto;
   delta: number;
@@ -315,7 +439,154 @@ export type TrophyKey =
   | "mvp"
   | "club-record-breaker"
   | "club-worst-ever"
-  | "nations-champion";
+  | "nations-champion"
+  | "european-champion"
+  | "the-double"
+  | "top-four"
+  | "centurion"
+  | "goal-machine"
+  | "fortress"
+  | "overachievers"
+  | "miracle"
+  | "great-escape"
+  | "bottle-job"
+  | "relegated"
+  | "united-nations"
+  | "homegrown"
+  | "foreign-legion"
+  | "class-of"
+  | "time-travellers"
+  | "band-of-brothers"
+  | "dads-army"
+  | "fledglings"
+  | "alphabet-soup"
+  | "regular"
+  | "veteran"
+  | "serial-winner"
+  | "dynasty"
+  | "tactician"
+  | "globetrotter"
+  | "five-league-champion"
+  | "continental-cup"
+  | "european-unbeaten"
+  | "perfect-eight"
+  | "top-of-europe"
+  | "grand-tour"
+  | "continental-raiders"
+  | "five-league-xi"
+  | "nations-cup-winner";
+
+// Mirrors @futbol/domain's TrophyCategory / TrophyTier.
+export type TrophyCategory = "season" | "awards" | "squad" | "career" | "europe" | "modes" | "fun";
+export type TrophyTier = "common" | "rare" | "epic" | "legendary";
+
+export interface RunRefDto {
+  worldId: string;
+  clubName: string | null;
+  value: number;
+}
+
+export interface StreakDto {
+  current: number;
+  best: number;
+}
+
+export interface CabinetEntryDto {
+  key: TrophyKey;
+  category: TrophyCategory;
+  tier: TrophyTier;
+  count: number;
+  firstEarnedAt: string | null;
+  lastWorldId: string | null;
+  progress: { current: number; target: number } | null;
+  rarityPct: number | null;
+}
+
+export type RunMode = "solo" | "one-club" | "nations" | "league";
+
+export interface ProfileRunDto {
+  worldId: string;
+  createdAt: string;
+  clubName: string | null;
+  formation: string | null;
+  leagueId: string | null;
+  mode: RunMode;
+  finished: boolean;
+  points: number | null;
+  position: number | null;
+  leagueSize: number | null;
+  won: number | null;
+  drawn: number | null;
+  lost: number | null;
+  goalsFor: number | null;
+  goalsAgainst: number | null;
+  squadOverall: number | null;
+  longestWinStreak: number | null;
+  trophies: TrophyKey[];
+}
+
+export interface ProfileDto {
+  user: { displayName: string; isGuest: boolean; memberSince: string };
+  stats: {
+    seasonsStarted: number;
+    seasonsFinished: number;
+    titles: number;
+    topFours: number;
+    invincibles: number;
+    unbeatenSeasons: number;
+    europeanTitles: number;
+    bestPoints: RunRefDto | null;
+    bestRecord: { worldId: string; clubName: string | null; won: number; drawn: number; lost: number; points: number } | null;
+    winRate: number | null;
+    matchesPlayed: number;
+    goalsScored: number;
+    averageFinish: number | null;
+    favouriteFormation: string | null;
+    favouriteLeagueId: string | null;
+    topRatedXi: RunRefDto | null;
+    bestWinStreak: number | null;
+    trophiesEarned: number;
+  };
+  streaks: { titles: StreakDto; unbeaten: StreakDto; onTheUp: StreakDto; days: StreakDto };
+  cabinet: CabinetEntryDto[];
+  daily: { played: number; perfect: number; bestScore: number };
+  runs: ProfileRunDto[];
+}
+
+/** GET /auth/providers — which passwordless sign-in methods this server offers. */
+export interface AuthProvidersDto {
+  emailLink: boolean;
+  google: boolean;
+  googleClientId: string | null;
+}
+
+/** GET /stats — public counters for the landing page. */
+export interface SiteStatsDto {
+  seasonsSimulated: number;
+  xisDrafted: number;
+  matchesPlayed: number;
+  invincibles: number;
+  topRuns: { handle: string; points: number; won: number; drawn: number; lost: number; leagueName: string | null }[];
+}
+
+/** GET /worlds/:worldId/seasons/run-index — what a finished run's stats hub is built from. */
+export interface RunIndexDto {
+  domesticSeasonId: string | null;
+  domesticCompetitionId: string | null;
+  finished: boolean;
+  userClubId: string | null;
+  /** Only once the European Final has a winner. */
+  europe: {
+    competitionId: string;
+    /** 1 = European Nights, 2 = the Continental Cup (knockouts only, so no league phase). */
+    tier: 1 | 2;
+    leaguePhaseSeasonId: string | null;
+    knockoutSeasonIds: string[];
+    champion: string | null;
+  } | null;
+  january: JanuaryResultDto | null;
+  trophies: TrophyKey[];
+}
 
 export interface FinalizeRunResultDto {
   trophies: TrophyKey[];
@@ -418,7 +689,43 @@ export interface DailyPoolStatsDto {
   totalPlayers: number;
   /** Aligned with the challenge's `constraints` array. */
   eligiblePerConstraint: number[];
+  /** Aligned with `constraints` — club-season ids whose squad has someone satisfying each one; the
+      reel leans draws toward these and the completion odds are computed from them. */
+  clubSeasonIdsPerConstraint?: string[][];
 }
+
+/** GET /daily/yesterday — the previous day's community result. */
+export interface DailyRecapDto {
+  date: string;
+  themeLabel: string;
+  players: number;
+  topScore: number;
+  maxScore: number;
+  maxedCount: number;
+  fewestAttemptsToMax: number | null;
+}
+
+/** GET /daily/:id/me — the signed-in player's own standing today. */
+export interface DailyMyEntryDto {
+  attemptsUsed: number;
+  attemptsRemaining: number;
+  bestScore: number | null;
+  maxScore: number | null;
+}
+
+export interface DailyArchiveRowDto {
+  id: string;
+  date: string;
+  theme: DailyTheme;
+  themeLabel: string;
+  fixedFormation: string;
+  anchorName: string | null;
+  maxScore: number;
+  players: number;
+  topScore: number | null;
+}
+
+export type DailyMyArchiveDto = Record<string, { score: number; maxScore: number; attemptsUsed: number }>;
 
 export interface DailyChallengeDto {
   id: string;

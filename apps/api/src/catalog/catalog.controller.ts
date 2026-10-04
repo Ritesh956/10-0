@@ -1,4 +1,4 @@
-import { Controller, Get, Inject, Param, Query } from "@nestjs/common";
+import { BadRequestException, Controller, Get, Inject, Param, Query } from "@nestjs/common";
 import { CatalogService } from "./catalog.service.js";
 import {
   clubPositionCoverageQuerySchema,
@@ -43,6 +43,12 @@ export class CatalogController {
   @Get("leagues")
   listLeagues(@Query("eraId") eraId?: string) {
     return this.catalog.listLeagues(eraId);
+  }
+
+  @Get("best-xi")
+  bestXi(@Query("leagueId") leagueId: string) {
+    if (!leagueId) throw new BadRequestException("leagueId is required");
+    return this.catalog.getBestXi(leagueId);
   }
 
   @Get("club-seasons")

@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { SPRING_SNAPPY } from "../../lib/motion";
 
-export type ToggleAccent = "mint" | "teal" | "crimson";
+export type ToggleAccent = "mint" | "teal" | "crimson" | "amber";
 
 interface Props {
   label: string;
@@ -15,6 +15,7 @@ const ACCENT_CLASSES: Record<ToggleAccent, { border: string; bg: string; text: s
   mint: { border: "border-mint-500/50", bg: "bg-mint-500", text: "text-mint-400" },
   teal: { border: "border-teal-500/50", bg: "bg-teal-500", text: "text-teal-400" },
   crimson: { border: "border-crimson-500/50", bg: "bg-crimson-500", text: "text-crimson-400" },
+  amber: { border: "border-amber-500/50", bg: "bg-amber-500", text: "text-amber-300" },
 };
 
 export function Toggle({ label, description, checked, onChange, accent = "mint" }: Props) {
@@ -26,7 +27,7 @@ export function Toggle({ label, description, checked, onChange, accent = "mint" 
       transition={SPRING_SNAPPY}
       onClick={() => onChange(!checked)}
       aria-pressed={checked}
-      className={`notch-sm flex w-full items-center gap-4 border-2 p-4 text-left transition ${
+      className={`notch-sm flex w-full items-center gap-3 border p-3 text-left transition ${
         checked ? `${accentClasses.border} bg-ink-900/80` : "border-ink-700 bg-ink-900/40"
       }`}
     >

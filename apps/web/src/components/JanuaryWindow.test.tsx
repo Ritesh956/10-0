@@ -82,4 +82,41 @@ describe("JanuaryWindow", () => {
     expect(getByRole("button", { name: /stick with your xi/i })).toBeTruthy();
     expect(onDone).not.toHaveBeenCalled();
   });
+
+  it("with the event layer: reels to the event, shows a choice event's blind offers, and signs the one picked", async () => {
+    const offer = {
+      kind: "wheeler-dealer" as const,
+      label: "Wheeler Dealer",
+      premise: "Three agents, three blind offers.",
+      outPlayer: { id: "out1", name: "Old Winger", overall: 60, position: "RW" },
+      options: [
+        { id: "opt-a", name: "Option A", clubName: "Club A", seasonYear: 2015, position: "RW" },
+        { id: "opt-b", name: "Option B", clubName: "Club B", seasonYear: 2018, position: "RW" },
+        { id: "opt-c", name: "Option C", clubName: "Club C", seasonYear: 2021, position: "RW" },
+      ],
+    };
+    const onOffer = vi.fn().mockResolvedValue(offer);
+    const onResolve = vi.fn().mockResolvedValue({ ...result, kind: "wheeler-dealer", label: "Wheeler Dealer" });
+    const { getByRole, findByRole, findByText, container } = render(
+      <JanuaryWindow
+        matches={[]}
+        userClubId="home"
+        totalMatchdays={6}
+        matchdaysPlayed={3}
+        tablePosition={3}
+        leagueSize={20}
+        onOffer={onOffer}
+        onResolve={onResolve}
+        onDone={vi.fn()}
+      />,
+    );
+    expect(container.textContent).toContain("3rd of 20");
+
+    getByRole("button", { name: /enter the transfer market/i }).click();
+    (await findByRole("button", { name: /option b/i }, { timeout: 6000 })).click();
+
+    await findByText(/done deal/i, {}, { timeout: 4000 });
+    expect(onResolve).toHaveBeenCalledWith("opt-b");
+    expect(container.textContent).toContain("Wheeler Dealer");
+  }, 10000);
 });

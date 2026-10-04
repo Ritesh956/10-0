@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Button } from "./ui/Button";
 import { SlotReel } from "./SlotReel";
+import { formatSeason } from "../lib/season";
 
 export interface ReelCandidate {
   club: string;
@@ -33,7 +34,7 @@ export function DrawReel({
   onSettled,
 }: Props) {
   const clubItems = candidates?.length ? candidates.map((c) => c.club) : ["SCANNING", "ARCHIVES", "RECORDS"];
-  const yearItems = candidates?.length ? candidates.map((c) => String(c.year)) : ["----", "----", "----"];
+  const yearItems = candidates?.length ? candidates.map((c) => formatSeason(c.year)) : ["----", "----", "----"];
 
   const clubSettled = useRef(false);
   const seasonSettled = useRef(false);
@@ -93,7 +94,7 @@ export function DrawReel({
           <SlotReel
             label="Season"
             decorativeItems={yearItems}
-            winnerLabel={target ? String(target.year) : null}
+            winnerLabel={target ? formatSeason(target.year) : null}
             spinToken={spinToken}
             spinning={spinning}
             landedClass="text-mint-400"

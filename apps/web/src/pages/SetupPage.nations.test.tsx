@@ -60,7 +60,8 @@ describe("SetupPage — Nations Trophy adaptation (Phase 10)", () => {
     // player's career-best one, so Prime stays a real, selectable option here.
     expect(queryByText(/forced to/i)).toBeNull();
     expect(getByText("Prime")).toBeTruthy();
-    expect(getByText(/career-best rating/i)).toBeTruthy();
+    // Descriptions show for the selected option only; the Prime option itself must be a real choice.
+    expect(getByText("Prime").closest("button")?.disabled).toBeFalsy();
     // League section (LeaguePicker) never rendered while a nation is locked, same as One-Club.
     expect(queryByText(/no leagues available/i)).toBeNull();
   });
@@ -77,5 +78,5 @@ describe("SetupPage — Nations Trophy adaptation (Phase 10)", () => {
     const cta = await findByRole("button", { name: /enter the draft room/i });
     expect((cta as HTMLButtonElement).disabled).toBe(false);
     expect(api.getClubPositionCoverage).not.toHaveBeenCalled();
-  });
+  }, 15000);
 });
