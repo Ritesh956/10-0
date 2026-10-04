@@ -1,4 +1,5 @@
 import { TROPHY_DEFS, type TrophyKey } from "@futbol/domain";
+import type { EuropeRunSummary } from "../europe/europe.logic.js";
 
 /** One starter in the user's XI, reduced to what the composition trophies look at. */
 export interface RunSquadPlayer {
@@ -9,6 +10,8 @@ export interface RunSquadPlayer {
   seasonYear: number;
   /** The real club the player was drafted from. */
   refClubId: string;
+  /** Country of the league that club played in ("England"…), for the cross-league XI trophies. */
+  clubCountry?: string | undefined;
 }
 
 /** Pure input bundle for trophy evaluation — everything SeasonsService.finalizeRun already has
@@ -34,6 +37,10 @@ export interface RunSummary {
   oneClubLocked?: boolean | undefined;
   /** True when this world's European competition has been played and the user's club won the Final. */
   europeChampion?: boolean | undefined;
+  /** The user's club won the Continental Cup (the second European tier). */
+  cupChampion?: boolean | undefined;
+  /** The user's European Nights campaign, when they played it. */
+  europe?: EuropeRunSummary | undefined;
   goalsFor?: number | undefined;
   goalsAgainst?: number | undefined;
   points?: number | undefined;
@@ -68,6 +75,8 @@ export function evaluateTrophies(run: RunSummary): TrophyKey[] {
   if (champion && run.nationsLocked) trophies.push("nations-champion");
   if (run.europeChampion) trophies.push("european-champion");
   if (run.europeChampion && champion) trophies.push("the-double");
+  if (run.cupChampion) trophies.push("continental-cup");
+  trophies.push(...evaluateEuropeTrophies(run));
   if (run.goldenBootClubId === run.userClubId) trophies.push("golden-boot");
   if (run.playmakerClubId === run.userClubId) trophies.push("playmaker");
   if (run.goldenGloveClubId === run.userClubId) trophies.push("golden-glove");
@@ -91,6 +100,29 @@ export function evaluateTrophies(run: RunSummary): TrophyKey[] {
   }
 
   trophies.push(...evaluateSquadTrophies(run, champion));
+  return trophies;
+}
+
+/** Trophies for the European Nights campaign itself: the league phase and who you beat. */
+function evaluateEuropeTrophies(run: RunSummary): TrophyKey[] {
+  const europe = run.europe;
+  const trophies: TrophyKey[] = [];
+  const phase = europe?.leaguePhase;
+  if (phase && phase.played >= 8) {
+    if (phase.lost === 0) trophies.push("european-unbeaten");
+    if (phase.won === phase.played) trophies.push("perfect-eight");
+    if (phase.rank === 1) trophies.push("top-of-europe");
+  }
+  const abroad = new Set((europe?.countriesBeaten ?? []).filter((c) => c !== run.leagueCountry));
+  if (abroad.size >= 4) trophies.push("grand-tour");
+
+  // Winning Europe with an XI drawn entirely from one league that isn't the one you play in.
+  const squad = run.squad;
+  if (run.europeChampion && squad && squad.length >= 11 && run.leagueCountry) {
+    const countries = new Set(squad.map((p) => p.clubCountry));
+    const [only] = [...countries];
+    if (countries.size === 1 && only && only !== run.leagueCountry) trophies.push("continental-raiders");
+  }
   return trophies;
 }
 
@@ -118,6 +150,9 @@ function evaluateSquadTrophies(run: RunSummary, champion: boolean): TrophyKey[] 
     if (avgAge >= 30) trophies.push("dads-army");
     if (avgAge <= 24) trophies.push("fledglings");
   }
+
+  const clubCountries = new Set(squad.map((p) => p.clubCountry).filter((c): c is string => Boolean(c)));
+  if (clubCountries.size >= 5) trophies.push("five-league-xi");
 
   if (maxCount(squad.map((p) => surnameInitial(p.name)).filter((c) => c !== "")) >= 6) {
     trophies.push("alphabet-soup");

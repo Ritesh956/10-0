@@ -20,7 +20,8 @@ import {
   type Position,
   type PositionGroup,
 } from "../lib/formations";
-import { isRealCountry } from "../lib/leagues";
+import { isRealCountry, playLeagueIdOf } from "../lib/leagues";
+import { LeagueBadge } from "../components/LeagueBadge";
 import { computePreseasonOdds } from "../lib/preseasonOdds";
 import { GROUP_FILL, surname } from "../lib/positionColors";
 import { squadTierName, TIER_BORDER, TIER_TEXT } from "../lib/squadRatings";
@@ -446,7 +447,8 @@ export function DraftPage() {
         ...(config.lockedClubId ? { oneClubClubId: config.lockedClubId } : {}),
         ...(config.lockedNationality ? { nationsNationality: config.lockedNationality } : {}),
         ...(config.multiplayerLeagueId ? { multiplayerLeagueId: config.multiplayerLeagueId } : {}),
-        ...(config.leagueIds[0] ? { leagueId: config.leagueIds[0] } : {}),
+        ...(playLeagueIdOf(config) ? { leagueId: playLeagueIdOf(config)! } : {}),
+        ...(config.draftPool === "all" ? { draftPool: "all" as const } : {}),
         projection: { finish: odds.projectedFinish, points: odds.expectedPoints, overall: overallRating },
       });
       setWorldId(world.id);
@@ -572,7 +574,7 @@ export function DraftPage() {
 
   const overallRating = useMemo(() => average(Object.values(picks).map((p) => p.overall)), [picks]);
 
-  const odds = useMemo(() => computePreseasonOdds(overallRating, config.leagueIds[0]), [overallRating, config.leagueIds]);
+  const odds = useMemo(() => computePreseasonOdds(overallRating, playLeagueIdOf(config)), [overallRating, config.leagueIds, config.playLeagueId]);
 
   const pitchClickable = moveMode
     ? handlePitchSlotClick
@@ -605,6 +607,14 @@ export function DraftPage() {
             <h1 className="mt-3 font-display text-2xl font-bold uppercase leading-tight tracking-tight text-paper sm:mt-4 sm:text-4xl">
               Draft Room
             </h1>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <LeagueBadge leagueId={playLeagueIdOf(config)} />
+              {config.draftPool === "all" && (
+                <span className="rounded-full border border-teal-500/40 bg-teal-500/10 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wide text-teal-300">
+                  All Top-5 draft
+                </span>
+              )}
+            </div>
           </div>
           <Button
             variant="outline"

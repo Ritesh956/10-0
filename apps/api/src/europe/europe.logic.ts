@@ -32,3 +32,48 @@ export function aggregateTieScore(tie: { homeClubId: string; awayClubId: string 
   }
   return legsPlayed > 0 ? { homeGoals, awayGoals, legsPlayed } : null;
 }
+
+/** One match the user's club played, from the user's own point of view. */
+export interface RunMatch {
+  opponentClubId: string;
+  goalsFor: number;
+  goalsAgainst: number;
+}
+
+export interface EuropeRunSummary {
+  /** Null for a competition with no league phase (the Continental Cup). */
+  leaguePhase: { played: number; won: number; drawn: number; lost: number; rank: number | null } | null;
+  /** Home countries of every club the user beat in a match, league phase or knockout. */
+  countriesBeaten: string[];
+}
+
+/**
+ * Reduces the user's European matches to what the trophies read: the league-phase record and finish,
+ * and which leagues' clubs they've beaten. Pure — the caller supplies the matches and a country lookup.
+ */
+export function summarizeEuropeRun(input: {
+  leaguePhaseMatches: RunMatch[] | null;
+  leaguePhaseRank: number | null;
+  knockoutMatches: RunMatch[];
+  countryOf: (clubId: string) => string | undefined;
+}): EuropeRunSummary {
+  const beaten = new Set<string>();
+  for (const m of [...(input.leaguePhaseMatches ?? []), ...input.knockoutMatches]) {
+    if (m.goalsFor > m.goalsAgainst) {
+      const country = input.countryOf(m.opponentClubId);
+      if (country) beaten.add(country);
+    }
+  }
+  let leaguePhase: EuropeRunSummary["leaguePhase"] = null;
+  if (input.leaguePhaseMatches) {
+    const ms = input.leaguePhaseMatches;
+    leaguePhase = {
+      played: ms.length,
+      won: ms.filter((m) => m.goalsFor > m.goalsAgainst).length,
+      drawn: ms.filter((m) => m.goalsFor === m.goalsAgainst).length,
+      lost: ms.filter((m) => m.goalsFor < m.goalsAgainst).length,
+      rank: input.leaguePhaseRank,
+    };
+  }
+  return { leaguePhase, countriesBeaten: [...beaten] };
+}

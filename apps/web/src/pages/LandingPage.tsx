@@ -4,7 +4,10 @@ import { api } from "../api/client";
 import type { SiteStatsDto } from "../api/types";
 import { isRealCountry } from "../lib/leagues";
 import { formatSeason } from "../lib/season";
-import { storedDraftProgress } from "../state/DraftContext";
+import { storedDraftProgress, useDraft } from "../state/DraftContext";
+import { LeagueSwitcher } from "../components/LeagueSwitcher";
+import { playLeagueIdOf } from "../lib/leagues";
+import { rememberLeagueTheme, storedLeagueTheme } from "../lib/leagueTheme";
 import { SiteFooter } from "../components/SiteFooter";
 import { Button } from "../components/ui/Button";
 
@@ -158,6 +161,8 @@ function LiveStrip({ stats }: { stats: SiteStatsDto }) {
 
 export function LandingPage() {
   const navigate = useNavigate();
+  const { config, setConfig } = useDraft();
+  const chosenLeague = playLeagueIdOf(config) ?? storedLeagueTheme();
   const [archive, setArchive] = useState<ArchiveStats | null>(null);
   const [live, setLive] = useState<SiteStatsDto | null>(null);
   // An unfinished draft from an earlier visit (persisted by DraftContext) — offer to pick it back up.
@@ -196,6 +201,16 @@ export function LandingPage() {
             <span className="notch-sm inline-flex items-center gap-2 border-2 border-mint-500/30 bg-mint-500/5 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-smoke-400">
               Fan project &middot; not affiliated with any league
             </span>
+
+            <div className="mt-6">
+              <LeagueSwitcher
+                value={chosenLeague}
+                onChange={(id) => {
+                  rememberLeagueTheme(id);
+                  setConfig({ leagueIds: [id], playLeagueId: undefined, draftPool: undefined });
+                }}
+              />
+            </div>
 
             <h1 className="mt-6 font-display text-5xl font-bold uppercase leading-[1.05] tracking-tight text-paper sm:text-6xl">
               Draft a legend

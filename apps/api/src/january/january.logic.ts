@@ -78,7 +78,13 @@ export function biasPoolForEvent<T extends OverallLookup>(
 
 /** The named January events. Each changes *which* slot is touched and *how* the replacement is
     found, so the window is a different decision each season rather than one coin flip. */
-export type JanuaryEventKind = "bargain-buy" | "wheeler-dealer" | "deadline-day" | "loan-swap" | "star-wants-out";
+export type JanuaryEventKind =
+  | "bargain-buy"
+  | "wheeler-dealer"
+  | "deadline-day"
+  | "loan-swap"
+  | "star-wants-out"
+  | "border-raid";
 
 export interface JanuaryKindSpec {
   kind: JanuaryEventKind;
@@ -89,19 +95,37 @@ export interface JanuaryKindSpec {
   target: "weakest" | "random" | "strongest";
   /** How the replacement pool is narrowed relative to the outgoing player. */
   bias: JanuaryEventType;
-  /** Draw from leagues other than the club's own. */
+  /** Draw from one specific league other than the club's own — chosen per window (see
+      `pickForeignLeague`) and named in the event ("Bundesliga Bargain", "Serie A Loan Swap"). */
   otherLeagues?: boolean;
   /** Offer this many blind options to choose from instead of a single draw. */
   options?: number;
 }
 
 export const JANUARY_KINDS: JanuaryKindSpec[] = [
-  { kind: "bargain-buy", label: "Bargain Buy", premise: "A club in trouble will sell cheap. Your weakest starter makes way for a better player.", weight: 25, target: "weakest", bias: "POSITIVE" },
-  { kind: "wheeler-dealer", label: "Wheeler Dealer", premise: "Three agents, three blind offers for your weakest slot. Pick one; you see the rating after you sign.", weight: 25, target: "weakest", bias: "NEUTRAL", options: 3 },
-  { kind: "deadline-day", label: "Deadline Day Panic", premise: "The window's closing and the phones are ringing. Someone in your XI is going; nobody knows who comes in.", weight: 20, target: "random", bias: "NEUTRAL" },
-  { kind: "loan-swap", label: "Loan Swap", premise: "A loan from another league for your weakest slot. Could be a gem, could be a passenger.", weight: 15, target: "weakest", bias: "NEUTRAL", otherLeagues: true },
+  { kind: "bargain-buy", label: "Bargain Buy", premise: "A club in trouble will sell cheap. Your weakest starter makes way for a better player.", weight: 20, target: "weakest", bias: "POSITIVE" },
+  { kind: "wheeler-dealer", label: "Wheeler Dealer", premise: "Three agents, three blind offers for your weakest slot. Pick one; you see the rating after you sign.", weight: 20, target: "weakest", bias: "NEUTRAL", options: 3 },
+  { kind: "deadline-day", label: "Deadline Day Panic", premise: "The window's closing and the phones are ringing. Someone in your XI is going; nobody knows who comes in.", weight: 15, target: "random", bias: "NEUTRAL" },
+  { kind: "loan-swap", label: "Loan Swap", premise: "A loan from the {league} for your weakest slot. Could be a gem, could be a passenger.", weight: 15, target: "weakest", bias: "NEUTRAL", otherLeagues: true },
   { kind: "star-wants-out", label: "Star Wants Out", premise: "Your best player has handed in a transfer request. You'll get a replacement, but rarely a like-for-like.", weight: 15, target: "strongest", bias: "NEGATIVE" },
+  { kind: "border-raid", label: "Bargain", premise: "A {league} side needs the cash. Your weakest starter makes way for a better player from across the border.", weight: 15, target: "weakest", bias: "POSITIVE", otherLeagues: true },
 ];
+
+/** The league a cross-border event reaches into: one of the other leagues, picked from the seed so
+    the same window always names the same league. */
+export function pickForeignLeague<T extends { id: string }>(leagues: T[], homeLeagueId: string | undefined, random: () => number): T | undefined {
+  const others = leagues.filter((l) => l.id !== homeLeagueId).sort((a, b) => a.id.localeCompare(b.id));
+  return others.length > 0 ? others[Math.floor(random() * others.length)] : undefined;
+}
+
+/** "Bundesliga" + "Bargain" → "Bundesliga Bargain"; plain events keep their own label. */
+export function eventLabel(spec: JanuaryKindSpec, foreignLeagueName?: string): string {
+  return spec.otherLeagues && foreignLeagueName ? `${foreignLeagueName} ${spec.label}` : spec.label;
+}
+
+export function eventPremise(spec: JanuaryKindSpec, foreignLeagueName?: string): string {
+  return spec.premise.replace("{league}", foreignLeagueName ?? "other leagues");
+}
 
 /** Small deterministic string → [0,1) generator (FNV-1a seeded mulberry32). The January offer is a
     pure function of (season, club), so asking for it twice returns the same event and the same

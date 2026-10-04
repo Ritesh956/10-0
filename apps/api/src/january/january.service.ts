@@ -5,7 +5,10 @@ import { WorldsService } from "../worlds/worlds.service.js";
 import {
   biasPoolForKind,
   drawDistinct,
+  eventLabel,
+  eventPremise,
   eventTypeForDelta,
+  pickForeignLeague,
   pickKind,
   pickTargetSlot,
   seededRandom,
@@ -38,6 +41,8 @@ export interface JanuaryOffer {
   kind: JanuaryEventKind;
   label: string;
   premise: string;
+  /** The other league a cross-border event reaches into (for a flag), when there is one. */
+  league: { name: string; country: string } | null;
   outPlayer: { id: string; name: string; overall: number; position: string };
   options: JanuaryOption[] | null;
 }
@@ -72,8 +77,9 @@ export class JanuaryService {
     const offer = await this.buildOffer(worldId, seasonId, userId);
     return {
       kind: offer.spec.kind,
-      label: offer.spec.label,
-      premise: offer.spec.premise,
+      label: offer.label,
+      premise: offer.premise,
+      league: offer.foreignLeague,
       outPlayer: offer.outPlayer,
       options: offer.options?.map((o) => ({
         id: o.id,
@@ -87,7 +93,7 @@ export class JanuaryService {
 
   async resolveGamble(worldId: string, seasonId: string, userId: string, choiceId?: string): Promise<JanuaryResult> {
     const offer = await this.buildOffer(worldId, seasonId, userId);
-    const { spec, club, lineup, outSlot, outPlayer } = offer;
+    const { spec, club, lineup, outSlot, outPlayer, label } = offer;
 
     let drawn: (typeof offer.pool)[number];
     if (offer.options) {
@@ -159,7 +165,7 @@ export class JanuaryService {
     return {
       eventType: event.eventType,
       kind: spec.kind,
-      label: spec.label,
+      label,
       outPlayer,
       inPlayer: {
         id: event.inPlayerId,
@@ -211,10 +217,25 @@ export class JanuaryService {
       (club.refClubSeasonId
         ? (await this.prisma.refClubSeason.findUnique({ where: { id: club.refClubSeasonId }, select: { leagueId: true } }))?.leagueId
         : undefined);
+    // Cross-border events reach into one specific other league, picked from the seed.
+    let foreignLeague: { id: string; name: string; country: string } | undefined;
+    if (spec.otherLeagues) {
+      const leagues = await this.prisma.refLeague.findMany({
+        where: { eraId: world.eraId, country: { in: REAL_LEAGUE_COUNTRIES } },
+        select: { id: true, name: true, country: true },
+      });
+      foreignLeague = pickForeignLeague(leagues, homeLeagueId, seededRandom(`${seed}:league`));
+    }
     const leagueFilter = {
       eraId: world.eraId,
       country: { in: REAL_LEAGUE_COUNTRIES },
-      ...(homeLeagueId ? (spec.otherLeagues ? { id: { not: homeLeagueId } } : { id: homeLeagueId }) : {}),
+      ...(foreignLeague
+        ? { id: foreignLeague.id }
+        : homeLeagueId
+          ? spec.otherLeagues
+            ? { id: { not: homeLeagueId } }
+            : { id: homeLeagueId }
+          : {}),
     };
 
     const basePool = await this.prisma.refPlayerSeason.findMany({
@@ -234,6 +255,9 @@ export class JanuaryService {
 
     return {
       spec,
+      label: eventLabel(spec, foreignLeague?.name),
+      premise: eventPremise(spec, foreignLeague?.name),
+      foreignLeague: foreignLeague ? { name: foreignLeague.name, country: foreignLeague.country } : null,
       club,
       lineup,
       outSlot,

@@ -22,6 +22,7 @@ import type {
 } from "../api/types";
 import { CompetitionStatsPanel } from "../components/CompetitionStatsPanel";
 import { EuropeDraw } from "../components/EuropeDraw";
+import { LeagueBadge } from "../components/LeagueBadge";
 import { GuestPersistPrompt } from "../components/GuestPersistPrompt";
 import { JanuaryShareCard } from "../components/JanuaryShareCard";
 import { JanuaryWindow } from "../components/JanuaryWindow";
@@ -30,6 +31,7 @@ import { LeaderboardSubmitBlock } from "../components/LeaderboardSubmitBlock";
 import { ManagerStatCard } from "../components/ManagerStatCard";
 import { MatchLog } from "../components/MatchLog";
 import { MatchPopupReel } from "../components/MatchPopupReel";
+import { MiniTable } from "../components/MiniTable";
 import { SeasonNarrative } from "../components/SeasonNarrative";
 import { ShareCard } from "../components/ShareCard";
 import { StandingsTable } from "../components/StandingsTable";
@@ -41,7 +43,7 @@ import { staggerContainer, staggerItem, staggerItemBounce } from "../lib/motion"
 import { buildSeasonNarrative } from "../lib/seasonNarrative";
 import { worldClubLabel } from "../lib/clubNames";
 import { leaguePhaseVerdict, ROUND_LABEL, zoneForPosition, ZONE_LEGEND } from "../lib/europe";
-import { leagueLabel } from "../lib/leagues";
+import { leagueLabel, playLeagueIdOf } from "../lib/leagues";
 import { loadStatsHubCache, rebuildStatsHub, saveStatsHubCache } from "../lib/statsHubCache";
 import { EuropeShareCard } from "../components/EuropeShareCard";
 import { squadTierName, TIER_TEXT } from "../lib/squadRatings";
@@ -142,6 +144,8 @@ export function SeasonPage() {
   const [januaryOutcome, setJanuaryOutcome] = useState<JanuaryResultDto | null>(null);
   // The table at the halfway mark, for the January panel's "you're 3rd of 20" line.
   const [halfwayStandings, setHalfwayStandings] = useState<StandingsDto | null>(null);
+  // The league table as it stands while the season is being revealed — your position ± 2 rows.
+  const [liveStandings, setLiveStandings] = useState<StandingsDto | null>(null);
   const [standings, setStandings] = useState<StandingsDto | null>(null);
   const [teamStats, setTeamStats] = useState<TeamStatsDto | null>(null);
   const [summary, setSummary] = useState<SummaryDto | null>(null);
@@ -149,6 +153,9 @@ export function SeasonPage() {
   const [qualified, setQualified] = useState(false);
   const [europeCompetitionId, setEuropeCompetitionId] = useState<string | null>(null);
   const [europeDraw, setEuropeDraw] = useState<EuropeDrawDto | null>(null);
+  // 1 = European Nights, 2 = the Continental Cup (a straight knockout for a 9th-12th finish).
+  const [europeTier, setEuropeTier] = useState<1 | 2>(1);
+  const [cupTies, setCupTies] = useState<KnockoutTieDto[]>([]);
   const [europeFixtures, setEuropeFixtures] = useState<FixtureDto[]>([]);
   const [europeLeagueMatches, setEuropeLeagueMatches] = useState<MatchSummaryDto[]>([]);
   const [europeLeagueStandings, setEuropeLeagueStandings] = useState<StandingsDto | null>(null);
@@ -232,10 +239,13 @@ export function SeasonPage() {
 
     let rangeDone = false;
     while (!rangeDone && !stopped) {
-      const [season, userMatches] = await Promise.all([
+      const [season, userMatches, table] = await Promise.all([
         api.getSeason(wId, seasonId),
         api.getMatchesWithEvents(wId, seasonId, userClubId),
+        // Best-effort: the table is garnish, a failed fetch just leaves the last one showing.
+        api.getStandings(wId, seasonId).catch(() => null),
       ]);
+      if (table) setLiveStandings(table);
       setDomesticReelMatches(userMatches.filter(inRange));
       setDomesticReelPrior(userMatches.filter((m) => m.matchday < opts.fromMatchday));
       rangeDone =
@@ -282,6 +292,7 @@ export function SeasonPage() {
         setTeamStats(cached.teamStats);
         setLeagueCompetitionStats(cached.leagueCompetitionStats);
         setQualified(cached.qualified);
+        setEuropeTier(cached.europeTier ?? 1);
         setEuropeLeagueStandings(cached.europeLeagueStandings);
         setEuropeCompetitionStats(cached.europeCompetitionStats);
         setEuropeTeamStats(cached.europeTeamStats);
@@ -330,7 +341,7 @@ export function SeasonPage() {
     setBusy(true);
     setError(null);
     try {
-      const created = await api.createSeason(worldId, "Fantasy Top Flight", { leagueId: config.leagueIds[0] });
+      const created = await api.createSeason(worldId, "Fantasy Top Flight", { leagueId: playLeagueIdOf(config) });
       setSeason(created);
       const refreshed = await api.getWorld(worldId);
       setWorld(refreshed);
@@ -452,15 +463,18 @@ export function SeasonPage() {
     // entirely — "Off = just the league" — even for a qualifying finish. `settings` is null for
     // worlds created before this toggle was wired, which defaults to the toggle's own on-by-default.
     const europeanNightsEnabled = w.settings?.europeanNights ?? true;
-    const status: Pick<EuropeStatusDto, "qualified"> = europeanNightsEnabled
+    const status: Pick<EuropeStatusDto, "qualified" | "cup"> = europeanNightsEnabled
       ? await api.getEuropeStatus(wId, domesticSeasonId)
       : { qualified: false };
-    setQualified(status.qualified);
+    // Tier 1 is European Nights (top 8); tier 2 is the Continental Cup (9th-12th). 0 = neither.
+    const tier: 0 | 1 | 2 = status.qualified ? 1 : status.cup?.qualified ? 2 : 0;
+    setQualified(tier > 0);
+    setEuropeTier(tier === 2 ? 2 : 1);
 
-    // Qualifying is an invitation, not an obligation: the player chooses to play European Nights
-    // (it used to start automatically after a 3s pause) or to go straight to their season review.
-    let playEurope = status.qualified;
-    if (status.qualified) {
+    // Qualifying is an invitation, not an obligation: the player chooses to play (it used to start
+    // automatically after a 3s pause) or to go straight to their season review.
+    let playEurope = tier > 0;
+    if (tier > 0) {
       setPhase("europe-transition");
       playEurope = await new Promise<boolean>((resolve) => {
         europeChoiceRef.current = resolve;
@@ -494,53 +508,76 @@ export function SeasonPage() {
       return;
     }
 
-
     // Clicking past a pause immediately kicks off a real backend call + polling wait with no
     // MatchPopupReel/animation to fill the gap — without an explicit loading phase here, the
     // screen just sits on the same stale content with the same "Continue" button still showing,
     // which reads as "Continue did nothing" even though the pipeline is actually progressing.
     setPhase("simulating");
-    setSimulatingLabel("Drawing European Nights…");
-    const { competitionId, seasonId: leaguePhaseSeasonId, draw } = await api.startEuropeLeaguePhase(wId, domesticSeasonId);
-    setEuropeCompetitionId(competitionId);
-    setEuropeDraw(draw);
+    let competitionId: string;
+    let leagueMatches: MatchSummaryDto[] = [];
+    let leagueStandings: StandingsDto | null = null;
+    let firstRound: EuropeRoundDto;
 
-    // The draw brought clubs from the other four leagues into the world — reload it so every table
-    // and result below can name them. The league phase is already simulating in the background while
-    // the draw is on screen.
-    const [withEurope, leaguePhaseSeason] = await Promise.all([api.getWorld(wId), api.getSeason(wId, leaguePhaseSeasonId)]);
-    setWorld(withEurope);
-    setEuropeFixtures(leaguePhaseSeason.fixtures);
-    setPhase("europe-draw");
-    await pause(15000);
+    if (tier === 1) {
+      setSimulatingLabel("Drawing European Nights…");
+      const { competitionId: cId, seasonId: leaguePhaseSeasonId, draw } = await api.startEuropeLeaguePhase(wId, domesticSeasonId);
+      competitionId = cId;
+      setEuropeCompetitionId(cId);
+      setEuropeDraw(draw);
 
-    setPhase("simulating");
-    setSimulatingLabel("Playing the league phase…");
-    await pollUntilCompleted(wId, leaguePhaseSeasonId);
+      // The draw brought clubs from the other four leagues into the world — reload it so every table
+      // and result below can name them. The league phase is already simulating in the background
+      // while the draw is on screen.
+      const [withEurope, leaguePhaseSeason] = await Promise.all([api.getWorld(wId), api.getSeason(wId, leaguePhaseSeasonId)]);
+      setWorld(withEurope);
+      setEuropeFixtures(leaguePhaseSeason.fixtures);
+      setPhase("europe-draw");
+      await pause(15000);
 
-    const [leagueMatches, leagueStandings] = await Promise.all([
-      api.getMatchesWithEvents(wId, leaguePhaseSeasonId),
-      api.getLeaguePhaseStandings(wId, leaguePhaseSeasonId),
-    ]);
-    setEuropeLeagueMatches(leagueMatches);
-    setEuropeLeagueStandings(leagueStandings);
-    setPhase("europe-league-replay");
-    await waitForReplay();
+      setPhase("simulating");
+      setSimulatingLabel("Playing the league phase…");
+      await pollUntilCompleted(wId, leaguePhaseSeasonId);
 
-    setPhase("europe-league-standings");
-    await pause(4000);
+      const [lm, ls] = await Promise.all([
+        api.getMatchesWithEvents(wId, leaguePhaseSeasonId),
+        api.getLeaguePhaseStandings(wId, leaguePhaseSeasonId),
+      ]);
+      leagueMatches = lm;
+      leagueStandings = ls;
+      setEuropeLeagueMatches(lm);
+      setEuropeLeagueStandings(ls);
+      setPhase("europe-league-replay");
+      await waitForReplay();
 
-    // This is the one deliberate, required checkpoint in the whole knockout stage — everything
-    // from here (play-off -> R16 -> QF -> SF -> Final -> champion) plays straight through with no
-    // further "Continue" clicks needed, only brief auto-advancing pauses (see runKnockoutRound).
-    setPhase("simulating");
-    setSimulatingLabel("Setting up the knockouts…");
-    const playOff = await api.startEuropeKnockouts(wId, competitionId, leaguePhaseSeasonId);
+      setPhase("europe-league-standings");
+      await pause(4000);
+
+      // This is the one deliberate, required checkpoint in the whole knockout stage — everything
+      // from here (play-off -> R16 -> QF -> SF -> Final -> champion) plays straight through with no
+      // further "Continue" clicks needed, only brief auto-advancing pauses (see runKnockoutRound).
+      setPhase("simulating");
+      setSimulatingLabel("Setting up the knockouts…");
+      firstRound = await api.startEuropeKnockouts(wId, cId, leaguePhaseSeasonId);
+    } else {
+      // The Continental Cup is a straight knockout: draw, then the same round-by-round pipeline.
+      setSimulatingLabel("Drawing the Continental Cup…");
+      const cup = await api.startEuropeCup(wId, domesticSeasonId);
+      competitionId = cup.competitionId;
+      setEuropeCompetitionId(cup.competitionId);
+      setEuropeDraw(cup.draw);
+      setCupTies(cup.round.ties);
+      setWorld(await api.getWorld(wId));
+      setEuropeFixtures([]);
+      setPhase("europe-draw");
+      await pause(15000);
+      firstRound = cup.round;
+    }
+
     const {
       champion: finalChampion,
       ties: finalTies,
       matches: knockoutHistory,
-    } = await runKnockoutRound(wId, competitionId, playOff, [], [], userClub?.id);
+    } = await runKnockoutRound(wId, competitionId, firstRound, [], [], userClub?.id);
     const europeMatches = [...leagueMatches, ...knockoutHistory];
     setEuropeAllMatches(europeMatches);
 
@@ -549,7 +586,7 @@ export function SeasonPage() {
       api.getCompetitionStats(wId, competitionId),
       userClub ? api.getTeamStatsForCompetition(wId, competitionId, userClub.id) : Promise.resolve(null),
       // Second (idempotent) finalize now that the Final exists — the first ran before Europe, so it
-      // couldn't award the European trophies ("european-champion" / "the-double").
+      // couldn't award the European trophies ("european-champion" / "the-double" / the cup's).
       userClub ? api.finalizeRun(wId, domesticSeasonId).catch(() => null) : Promise.resolve(null),
     ]);
     const runTrophies = europeFinalize?.trophies ?? unlockedTrophies;
@@ -576,6 +613,7 @@ export function SeasonPage() {
       leagueManagerStats: managerStats,
       trophies: runTrophies,
       domesticSeasonId,
+      europeTier: tier === 2 ? 2 : 1,
     });
   }
 
@@ -642,6 +680,7 @@ export function SeasonPage() {
   }
 
   const userClub = world.clubs.find((c) => c.managedByUserId);
+  const europeName = europeTier === 2 ? "Continental Cup" : "European Nights";
   const userPhasePosition =
     userClub && europeLeagueStandings ? europeLeagueStandings.rows.findIndex((r) => r.clubId === userClub.id) + 1 : 0;
   const nameFor = (clubId: string) => worldClubLabel(world.clubs.find((c) => c.id === clubId), clubId);
@@ -668,7 +707,7 @@ export function SeasonPage() {
           userClubId: userClub.id,
           squadOverall: summary.squadOverall,
           shownProjectedFinish: world.settings?.projection?.finish,
-          leagueId: world.settings?.leagueId ?? config.leagueIds[0],
+          leagueId: world.settings?.leagueId ?? playLeagueIdOf(config),
           squad: summary.squad,
           matches: onlyMine(domesticMatches),
           teamStats,
@@ -682,6 +721,9 @@ export function SeasonPage() {
     <div className="mx-auto max-w-3xl space-y-8 px-6 py-12">
       <div className="text-center">
         <h1 className="font-display text-3xl font-bold uppercase tracking-wide text-paper">{userClub?.name ?? "Your XI"}</h1>
+        <div className="mt-2 flex justify-center">
+          <LeagueBadge leagueId={world.settings?.leagueId ?? playLeagueIdOf(config)} />
+        </div>
         <p className="mt-1 text-sm text-smoke-500">
           {world.clubs.length > 1
             ? // European Nights adds other leagues' clubs to the world; the league is its own table.
@@ -717,6 +759,10 @@ export function SeasonPage() {
         />
       )}
 
+      {phase === "domestic-replay" && userClub && (
+        <MiniTable standings={liveStandings} clubs={world.clubs} userClubId={userClub.id} title="Live table" />
+      )}
+
       {phase === "january" && userClub && season && (
         <JanuaryWindow
           matches={onlyMine(domesticReelMatches)}
@@ -731,6 +777,16 @@ export function SeasonPage() {
           onOffer={() => api.getJanuaryOffer(world.id, season.id)}
           onResolve={(choiceId) => api.resolveJanuaryGamble(world.id, season.id, choiceId)}
           onDone={(outcome) => januaryResolveRef.current?.(outcome)}
+        />
+      )}
+
+      {phase === "january" && userClub && (
+        <MiniTable
+          standings={halfwayStandings ?? liveStandings}
+          clubs={world.clubs}
+          userClubId={userClub.id}
+          radius={4}
+          title="The table at halfway"
         />
       )}
 
@@ -773,14 +829,19 @@ export function SeasonPage() {
             &#127942;
           </motion.p>
           <motion.h2 variants={staggerItem} className="font-display text-2xl font-bold uppercase tracking-wide text-paper">
-            Congratulations! {userClub?.name} qualified for European Nights
+            {europeTier === 2
+              ? `${userClub?.name} earned a place in the Continental Cup`
+              : `Congratulations! ${userClub?.name} qualified for European Nights`}
           </motion.h2>
           <motion.p variants={staggerItem} className="text-sm text-smoke-400">
-            Europe comes calling: 36 clubs from the five big leagues, eight league-phase games against rivals from
-            abroad, then the knockouts — play-offs, Round of 16, all the way to the Final.
+            {europeTier === 2
+              ? "Europe's second tier: 16 clubs from the five big leagues in a straight knockout — Round of 16, quarter-finals, semi-finals and a single-match Final."
+              : "Europe comes calling: 36 clubs from the five big leagues, eight league-phase games against rivals from abroad, then the knockouts — play-offs, Round of 16, all the way to the Final."}
           </motion.p>
           <motion.div variants={staggerItem} className="flex flex-col items-center justify-center gap-2 sm:flex-row">
-            <Button onClick={() => europeChoiceRef.current?.(true)}>Continue to European Nights &rarr;</Button>
+            <Button onClick={() => europeChoiceRef.current?.(true)}>
+              {europeTier === 2 ? "Enter the Continental Cup" : "Continue to European Nights"} &rarr;
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => europeChoiceRef.current?.(false)}>
               Skip Europe, see my season
             </Button>
@@ -794,6 +855,7 @@ export function SeasonPage() {
           clubs={world.clubs}
           userClubId={userClub?.id}
           fixtures={europeFixtures}
+          cup={europeTier === 2 ? { ties: cupTies } : undefined}
           onContinue={skipPause}
         />
       )}
@@ -839,7 +901,7 @@ export function SeasonPage() {
       {phase === "europe-knockout-replay" && knockoutRound && (
         <div className="space-y-3">
           <p className="text-center text-xs font-semibold uppercase tracking-widest text-smoke-600">
-            European Nights &middot; {ROUND_LABEL[knockoutRound]}
+            {europeName} &middot; {ROUND_LABEL[knockoutRound]}
           </p>
           <MatchPopupReel
             matches={onlyMine(knockoutMatches)}
@@ -873,7 +935,7 @@ export function SeasonPage() {
             &#127942;
           </motion.p>
           <motion.p variants={staggerItem} className="text-xs font-semibold uppercase tracking-[0.3em] text-smoke-600">
-            European Champions
+            {europeTier === 2 ? "Continental Cup Winners" : "European Champions"}
           </motion.p>
           <motion.h2 variants={staggerItem} className="font-display text-3xl font-bold uppercase tracking-tight text-paper">
             {nameFor(champion)}
@@ -892,9 +954,13 @@ export function SeasonPage() {
             <p className="text-center text-sm text-amber-400">
               {champion === userClub?.id
                 ? summary.position === 1
-                  ? "The Double — league champions and European champions in the same season!"
-                  : "European champions this season!"
-                : `${nameFor(champion)} were crowned European champions this season.`}
+                  ? europeTier === 2
+                    ? "League champions and Continental Cup winners in the same season!"
+                    : "The Double — league champions and European champions in the same season!"
+                  : europeTier === 2
+                    ? "Continental Cup winners this season!"
+                    : "European champions this season!"
+                : `${nameFor(champion)} won the ${europeName} this season.`}
             </p>
           )}
           {summary.position !== undefined && summary.userRow && (
@@ -924,7 +990,7 @@ export function SeasonPage() {
 
           <ShareCard
             summary={summary}
-            subtitle={[leagueLabel(world.settings?.leagueId ?? config.leagueIds[0]), config.formation, cap(config.difficulty)]
+            subtitle={[leagueLabel(world.settings?.leagueId ?? playLeagueIdOf(config)), world.settings?.draftPool === "all" ? "All Top-5 draft" : "", config.formation, cap(config.difficulty)]
               .filter(Boolean)
               .join(" · ")}
             lines={[
@@ -934,7 +1000,7 @@ export function SeasonPage() {
           />
           {januaryOutcome && <JanuaryShareCard outcome={januaryOutcome} clubName={userClub?.name} />}
           {qualified && champion && userClub && (
-            <EuropeShareCard clubName={userClub.name} champion={champion === userClub.id} championName={nameFor(champion)} ties={allTies} userClubId={userClub.id} />
+            <EuropeShareCard competitionName={europeName} clubName={userClub.name} champion={champion === userClub.id} championName={nameFor(champion)} ties={allTies} userClubId={userClub.id} />
           )}
           {worldId && domesticSeasonId && userClub && (
             <LeaderboardSubmitBlock
@@ -953,7 +1019,7 @@ export function SeasonPage() {
                 League
               </Button>
               <Button variant={statsTab === "europe" ? "primary" : "outline"} size="sm" onClick={() => setStatsTab("europe")}>
-                European Nights
+                {europeName}
               </Button>
             </div>
           )}
@@ -961,7 +1027,11 @@ export function SeasonPage() {
           {statsTab === "league" && standings && (
             <div className="space-y-4">
               {leagueCompetitionStats && (
-                <CompetitionStatsPanel stats={leagueCompetitionStats} highlightClubId={userClub?.id} />
+                <CompetitionStatsPanel
+                  stats={leagueCompetitionStats}
+                  highlightClubId={userClub?.id}
+                  leagueId={world.settings?.leagueId ?? playLeagueIdOf(config)}
+                />
               )}
               {teamStats && (
                 <>
@@ -996,7 +1066,7 @@ export function SeasonPage() {
           {statsTab === "europe" && qualified && (
             <div className="space-y-4">
               <h2 className="text-center font-display text-lg font-semibold uppercase tracking-wide text-paper">
-                European Nights
+                {europeName}
               </h2>
               {allTies.length > 0 && <KnockoutBracket ties={allTies} clubs={world.clubs} highlightClubId={userClub?.id} />}
               {europeLeagueStandings && (

@@ -27,6 +27,15 @@ export class EuropeController {
     return this.europe.startLeaguePhase(worldId, domesticSeasonId, user.sub);
   }
 
+  @Post("cup")
+  cup(
+    @CurrentUser() user: AuthTokenPayload,
+    @Param("worldId") worldId: string,
+    @Query("domesticSeasonId") domesticSeasonId: string,
+  ) {
+    return this.europe.startCup(worldId, domesticSeasonId, user.sub);
+  }
+
   @Post(":competitionId/knockouts")
   knockouts(
     @CurrentUser() user: AuthTokenPayload,

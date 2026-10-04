@@ -9,6 +9,7 @@ import { WorldsService } from "../worlds/worlds.service.js";
 import { buildLineup, type DraftCandidate } from "../common/lineup.js";
 import { instantiateWorldClub } from "../common/instantiate-world-club.js";
 import { generateDoubleRoundRobin } from "./round-robin.js";
+import { CUP_COMPETITION_NAME, loadEuropeRun } from "../europe/europe-run.js";
 import { computeManagerStats } from "./season-stats.logic.js";
 import {
   CAREER_TROPHIES,
@@ -688,15 +689,13 @@ export class SeasonsService {
 
     // Null until Europe has actually been played to a Final — the first finalizeRun call (straight
     // after the domestic season) sees no Final yet; SeasonPage calls again once Europe finishes.
-    const [europeFinal, leagueId, squad] = await Promise.all([
-      this.prisma.knockoutTie.findFirst({
-        where: { worldId, round: "FINAL", winnerClubId: { not: null } },
-      }),
+    const [leagueId, squad] = await Promise.all([
       settings.leagueId ? Promise.resolve(settings.leagueId) : this.inferLeagueId(world.clubs),
       this.loadRunSquad(userClub.lineup),
     ]);
-    const europeChampion = europeFinal?.winnerClubId === userClub.id;
     const league = leagueId ? await this.prisma.refLeague.findUnique({ where: { id: leagueId } }) : null;
+    const europeRun = await loadEuropeRun(this.prisma, worldId, userClub.id, league?.country);
+    const europeChampion = europeRun.championClubId === userClub.id;
     // Worlds drafted before settings carried leagueId: record the inferred one so the profile's
     // per-league stats and the career trophies can read it straight off settings from now on.
     if (leagueId && !settings.leagueId) {
@@ -717,6 +716,8 @@ export class SeasonsService {
       nationsLocked,
       oneClubLocked: Boolean(settings.oneClubClubId),
       europeChampion,
+      cupChampion: europeRun.cupChampionClubId === userClub.id,
+      europe: europeRun.summary ?? undefined,
       goalsFor: userRow.goalsFor,
       goalsAgainst: userRow.goalsAgainst,
       points: userRow.points,
@@ -782,20 +783,27 @@ export class SeasonsService {
   async getRunIndex(worldId: string, userId: string) {
     const world = await this.worlds.getWorld(worldId, userId);
     const userClub = world.clubs.find((c) => c.managedByUserId === userId) ?? null;
-    const [seasons, finalTie, achievements] = await Promise.all([
+    const [seasons, finalTies, achievements] = await Promise.all([
       this.prisma.season.findMany({ where: { worldId }, include: { competition: true }, orderBy: { createdAt: "asc" } }),
-      this.prisma.knockoutTie.findFirst({ where: { worldId, round: "FINAL", winnerClubId: { not: null } } }),
+      this.prisma.knockoutTie.findMany({ where: { worldId, round: "FINAL", winnerClubId: { not: null } } }),
       this.prisma.achievement.findMany({ where: { worldId, userId }, select: { key: true } }),
     ]);
 
     const domestic = seasons.find((s) => s.competition.type === "LEAGUE") ?? null;
     const continental = seasons.filter((s) => s.competition.type === "CONTINENTAL");
+    // European Nights (tier 1, which has a league phase) wins over the Continental Cup (tier 2,
+    // knockouts only); a user only ever plays one of them.
+    const tierOne = continental.filter((s) => s.competition.name !== CUP_COMPETITION_NAME);
+    const cupSeasons = continental.filter((s) => s.competition.name === CUP_COMPETITION_NAME);
+    const picked = tierOne.length > 0 ? tierOne : cupSeasons;
+    const finalTie = picked.length > 0 ? finalTies.find((t) => t.competitionId === picked[0]!.competitionId) : undefined;
     const europe =
-      finalTie && continental.length > 0
+      finalTie && picked.length > 0
         ? {
-            competitionId: continental[0]!.competitionId,
-            leaguePhaseSeasonId: continental[0]!.id,
-            knockoutSeasonIds: continental.slice(1).map((s) => s.id),
+            competitionId: picked[0]!.competitionId,
+            tier: tierOne.length > 0 ? (1 as const) : (2 as const),
+            leaguePhaseSeasonId: tierOne.length > 0 ? picked[0]!.id : null,
+            knockoutSeasonIds: (tierOne.length > 0 ? picked.slice(1) : picked).map((s) => s.id),
             champion: finalTie.winnerClubId,
           }
         : null;
@@ -907,7 +915,11 @@ export class SeasonsService {
         age: true,
         overall: true,
         refPlayerSeason: {
-          select: { seasonYear: true, clubSeason: { select: { clubId: true } }, player: { select: { nationality: true } } },
+          select: {
+            seasonYear: true,
+            clubSeason: { select: { clubId: true, league: { select: { country: true } } } },
+            player: { select: { nationality: true } },
+          },
         },
       },
     });
@@ -918,6 +930,7 @@ export class SeasonsService {
         nationality: r.refPlayerSeason.player.nationality,
         seasonYear: r.refPlayerSeason.seasonYear,
         refClubId: r.refPlayerSeason.clubSeason.clubId,
+        clubCountry: r.refPlayerSeason.clubSeason.league.country,
       })),
       overall: Math.round(rows.reduce((sum, r) => sum + r.overall, 0) / rows.length),
     };

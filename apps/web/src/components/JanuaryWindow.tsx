@@ -1,3 +1,4 @@
+import { CountryFlag } from "./CountryFlag";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import type { JanuaryEventType, JanuaryOfferDto, JanuaryResultDto, MatchSummaryDto } from "../api/types";
@@ -231,7 +232,10 @@ export function JanuaryWindow({
         <motion.div variants={staggerItem} className="notch space-y-4 border-2 border-amber-500/40 bg-amber-500/5 p-5">
           <div className="text-center">
             <p className="text-xs uppercase tracking-widest text-amber-300/80">January event</p>
-            <h3 className="font-display text-xl font-bold uppercase tracking-wide text-paper">{offer.label}</h3>
+            <h3 className="flex items-center justify-center gap-2 font-display text-xl font-bold uppercase tracking-wide text-paper">
+              {offer.league && <CountryFlag country={offer.league.country} className="h-4 w-6" />}
+              {offer.label}
+            </h3>
             <p className="mt-1 text-sm text-smoke-400">{offer.premise}</p>
             <p className="mt-2 text-xs text-smoke-500">
               On the line: <span className="font-semibold text-paper">{offer.outPlayer.name}</span> ({offer.outPlayer.position}, OVR{" "}

@@ -29,6 +29,11 @@ const LEAGUE_NAME: Record<string, string> = {
   "league-fr1": "Ligue 1",
 };
 
+/** The league a season is played in: the explicit choice (All Top-5 drafts) or the one league picked. */
+export function playLeagueIdOf(config: { leagueIds: string[]; playLeagueId?: string | undefined }): string | undefined {
+  return config.playLeagueId ?? config.leagueIds[0];
+}
+
 /** "LaLiga" for a known league id, else "". Plain text: it's also drawn into share images. */
 export function leagueLabel(leagueId: string | undefined): string {
   return (leagueId && LEAGUE_NAME[leagueId]) || "";

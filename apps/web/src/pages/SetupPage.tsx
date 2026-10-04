@@ -11,7 +11,7 @@ import { Toggle } from "../components/ui/Toggle";
 import { Chip } from "../components/ui/Chip";
 import { SiteFooter } from "../components/SiteFooter";
 import { isFormation, positionLabel } from "../lib/formations";
-import { isRealCountry } from "../lib/leagues";
+import { isRealCountry, playLeagueIdOf } from "../lib/leagues";
 import { checkFormationFillable } from "../lib/oneClubValidation";
 import { useDraft, type Difficulty, type DraftMode, type PlayerRatingsMode } from "../state/DraftContext";
 import { formatSeason } from "../lib/season";
@@ -257,10 +257,35 @@ export function SetupPage() {
         <Section title="League" accent="mint">
           <LeaguePicker
             leagues={leagues}
-            selectedIds={config.leagueIds}
-            onChange={(leagueIds) => setConfig({ leagueIds })}
+            selectedIds={[playLeagueIdOf(config)].filter((id): id is string => Boolean(id))}
+            onChange={(ids) =>
+              config.draftPool === "all"
+                ? setConfig({ playLeagueId: ids[0] })
+                : setConfig({ leagueIds: ids, playLeagueId: undefined })
+            }
             singleSelect
           />
+          <div className="mt-3 space-y-1.5">
+            <p className="text-center text-xs font-semibold uppercase tracking-widest text-smoke-500">Draft from</p>
+            <SegmentedControl<"league" | "all">
+              accent="mint"
+              columns={2}
+              value={config.draftPool ?? "league"}
+              onChange={(pool) =>
+                pool === "all"
+                  ? setConfig({ draftPool: "all", leagueIds: leagues.map((l) => l.id), playLeagueId: playLeagueIdOf(config) })
+                  : setConfig({ draftPool: "league", leagueIds: [playLeagueIdOf(config) ?? leagues[0]?.id].filter((id): id is string => Boolean(id)), playLeagueId: undefined })
+              }
+              options={[
+                { value: "league", label: "This league", description: "Every spin is a club from the league you'll play in." },
+                {
+                  value: "all",
+                  label: "All Top-5",
+                  description: "Spin clubs from all five leagues — then play the season in the league you picked above.",
+                },
+              ]}
+            />
+          </div>
         </Section>
       )}
 

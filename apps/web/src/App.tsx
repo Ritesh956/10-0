@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./lib/auth-context";
-import { DraftProvider } from "./state/DraftContext";
+import { DraftProvider, useDraft } from "./state/DraftContext";
+import { applyLeagueTheme, storedLeagueTheme } from "./lib/leagueTheme";
+import { playLeagueIdOf } from "./lib/leagues";
 import { fadeSlide } from "./lib/motion";
 import { routeTitle } from "./lib/routeTitles";
 import { useOnline } from "./lib/install";
@@ -32,6 +34,16 @@ import { NotFoundPage } from "./pages/NotFoundPage";
 import { SiteHeader } from "./components/SiteHeader";
 import { SaveProgressModal } from "./components/SaveProgressModal";
 
+/** Keeps the accent colour on the league being played (else the last one chosen, else the default). */
+function LeagueThemeSync() {
+  const { config } = useDraft();
+  const leagueId = playLeagueIdOf(config);
+  useEffect(() => {
+    applyLeagueTheme(leagueId ?? storedLeagueTheme());
+  }, [leagueId]);
+  return null;
+}
+
 function Shell() {
   const { isAuthenticated } = useAuth();
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -52,8 +64,9 @@ function Shell() {
           Fixed + behind everything + very low opacity, so it never competes with content contrast. */}
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(ellipse_70%_45%_at_50%_-8%,rgba(31,191,117,0.10),transparent),radial-gradient(ellipse_55%_40%_at_105%_15%,rgba(61,143,130,0.08),transparent),radial-gradient(ellipse_60%_45%_at_-5%_100%,rgba(22,101,52,0.10),transparent)]"
+        className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(ellipse_70%_45%_at_50%_-8%,rgb(var(--c-mint-500)/0.10),transparent),radial-gradient(ellipse_55%_40%_at_105%_15%,rgba(61,143,130,0.08),transparent),radial-gradient(ellipse_60%_45%_at_-5%_100%,rgba(22,101,52,0.10),transparent)]"
       />
+      <LeagueThemeSync />
       <SiteHeader onRequestSaveProgress={isAuthenticated ? () => setShowSaveModal(true) : undefined} />
       {!online && (
         <p role="status" className="bg-amber-500/15 px-4 py-2 text-center text-xs font-semibold text-amber-300">

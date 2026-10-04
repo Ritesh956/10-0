@@ -4,6 +4,7 @@ import { POSITION_GROUP, type Position } from "./formations";
 import { summarizeForClub } from "./matchResult";
 import { formatSeason } from "./season";
 import { surname } from "./positionColors";
+import { derbyLine, titleIdiom } from "./leagueFlavour";
 
 /** Auto-generated end-of-season narrative (38-0 §6b) — a template bank keyed by signals, no LLM.
     Every signal is pure and unit-testable in isolation; buildSeasonNarrative() just assembles them
@@ -159,11 +160,12 @@ export function finishParagraph(
   points: number,
   clubName: string,
   winText: string | undefined,
+  leagueId?: string,
 ): string {
   const winClause = winText ? ` The high point was ${winText}.` : "";
   switch (bracket) {
     case "champion":
-      return `${clubName} went all the way, lifting the title with ${points} points.${winClause}`;
+      return `${clubName} went all the way, lifting ${titleIdiom(leagueId)} with ${points} points.${winClause}`;
     case "top4":
       return `A top-four finish (#${position}) with ${points} points — European football is secured.${winClause}`;
     case "europa":
@@ -248,6 +250,8 @@ export interface SeasonNarrative {
   compositionSentence: string | undefined;
   finishParagraph: string;
   januaryLines: string[];
+  /** The user's best derby result when the league has a named derby against someone they played. */
+  derbyLine: string | undefined;
   standout: StandoutQuote | undefined;
   managerLine: string | undefined;
 }
@@ -273,8 +277,9 @@ export function buildSeasonNarrative(input: SeasonNarrativeInput): SeasonNarrati
     verdict,
     unitTiers,
     compositionSentence: units ? compositionSentence(units) : undefined,
-    finishParagraph: finishParagraph(bracket, input.position, input.points, input.clubName, winText),
+    finishParagraph: finishParagraph(bracket, input.position, input.points, input.clubName, winText, input.leagueId),
     januaryLines: januaryLines(input.januaryOutcome),
+    derbyLine: derbyLine(input.leagueId, input.clubName, input.userClubId, input.matches, input.nameFor),
     standout: standoutQuote(input.teamStats),
     managerLine: managerClosingLine(input.managerPhilosophy, input.clubName),
   };

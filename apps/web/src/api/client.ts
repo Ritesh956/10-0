@@ -13,6 +13,7 @@ import type {
   DailyRecapDto,
   EraDto,
   EuropeAdvanceResultDto,
+  EuropeCupDto,
   EuropeDrawDto,
   EuropeLeaguePhaseDto,
   EuropeRoundDto,
@@ -207,6 +208,8 @@ export const api = {
       multiplayerLeagueId?: string;
       nationsNationality?: string;
       leagueId?: string;
+      /** "all" = drafted from every league (All Top-5); `leagueId` is then the league played in. */
+      draftPool?: "all";
       projection?: { finish: number; points: number; overall: number };
     },
   ) => request<WorldDto>("/worlds", { method: "POST", body: JSON.stringify({ eraId, type: "SINGLE", settings }) }),
@@ -278,6 +281,9 @@ export const api = {
     request<EuropeLeaguePhaseDto>(`/worlds/${worldId}/europe/league-phase?domesticSeasonId=${domesticSeasonId}`, {
       method: "POST",
     }),
+
+  startEuropeCup: (worldId: string, domesticSeasonId: string) =>
+    request<EuropeCupDto>(`/worlds/${worldId}/europe/cup?domesticSeasonId=${domesticSeasonId}`, { method: "POST" }),
 
   startEuropeKnockouts: (worldId: string, competitionId: string, leaguePhaseSeasonId: string) =>
     request<EuropeRoundDto>(

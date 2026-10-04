@@ -58,6 +58,14 @@ export const trophyKey = z.enum([
   "tactician",
   "globetrotter",
   "five-league-champion",
+  // P3 (2026-10) — cross-league: European Nights is a 36-club field from all five leagues.
+  "continental-cup",
+  "european-unbeaten",
+  "perfect-eight",
+  "top-of-europe",
+  "grand-tour",
+  "continental-raiders",
+  "five-league-xi",
 ]);
 export type TrophyKey = z.infer<typeof trophyKey>;
 
@@ -106,8 +114,16 @@ export const TROPHY_DEFS: Record<TrophyKey, TrophyDef> = {
   globetrotter: { category: "career", tier: "rare", target: 5 },
   "five-league-champion": { category: "career", tier: "legendary", target: 5 },
 
+  "five-league-xi": { category: "squad", tier: "epic" },
+
   "european-champion": { category: "europe", tier: "rare" },
   "the-double": { category: "europe", tier: "epic" },
+  "continental-cup": { category: "europe", tier: "common" },
+  "top-of-europe": { category: "europe", tier: "rare" },
+  "european-unbeaten": { category: "europe", tier: "epic" },
+  "grand-tour": { category: "europe", tier: "epic" },
+  "perfect-eight": { category: "europe", tier: "legendary" },
+  "continental-raiders": { category: "europe", tier: "legendary" },
 
   "nations-champion": { category: "modes", tier: "epic" },
   "club-record-breaker": { category: "modes", tier: "rare" },

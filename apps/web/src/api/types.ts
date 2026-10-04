@@ -106,6 +106,8 @@ export interface WorldSettingsDto {
   nationsNationality?: string;
   /** RefLeague id of the league this world's season is played in, when the draft picked one. */
   leagueId?: string;
+  /** "all" when the draft wheel spanned all five leagues (All Top-5). */
+  draftPool?: "all";
   /** The pre-season projection as the draft room displayed it — the verdict compares against this. */
   projection?: { finish: number; points: number; overall: number };
 }
@@ -293,6 +295,8 @@ export interface EuropeStatusDto {
   qualifierCount: number;
   /** Clubs in the cross-league field (36). Optional: older API builds don't send it. */
   clubCount?: number;
+  /** The Continental Cup — the second European tier, for a 9th–12th finish. */
+  cup?: { qualified: boolean; clubCount: number; competitionId?: string };
   competitionId?: string;
   ties: KnockoutTieDto[];
 }
@@ -312,6 +316,12 @@ export interface EuropeDrawClubDto {
 
 export interface EuropeDrawDto {
   clubs: EuropeDrawClubDto[];
+}
+
+export interface EuropeCupDto {
+  competitionId: string;
+  round: EuropeRoundDto;
+  draw: EuropeDrawDto;
 }
 
 export interface EuropeLeaguePhaseDto {
@@ -348,7 +358,13 @@ export interface JanuaryInPlayerDto extends JanuaryPlayerDto {
 }
 
 /** The named January events — mirrors apps/api/src/january/january.logic.ts JanuaryEventKind. */
-export type JanuaryEventKind = "bargain-buy" | "wheeler-dealer" | "deadline-day" | "loan-swap" | "star-wants-out";
+export type JanuaryEventKind =
+  | "bargain-buy"
+  | "wheeler-dealer"
+  | "deadline-day"
+  | "loan-swap"
+  | "star-wants-out"
+  | "border-raid";
 
 export interface JanuaryOptionDto {
   id: string;
@@ -363,6 +379,8 @@ export interface JanuaryOfferDto {
   kind: JanuaryEventKind;
   label: string;
   premise: string;
+  /** The other league a cross-border event reaches into (flag), else null. Absent on older API builds. */
+  league?: { name: string; country: string } | null;
   outPlayer: JanuaryPlayerDto;
   options: JanuaryOptionDto[] | null;
 }
@@ -416,7 +434,14 @@ export type TrophyKey =
   | "dynasty"
   | "tactician"
   | "globetrotter"
-  | "five-league-champion";
+  | "five-league-champion"
+  | "continental-cup"
+  | "european-unbeaten"
+  | "perfect-eight"
+  | "top-of-europe"
+  | "grand-tour"
+  | "continental-raiders"
+  | "five-league-xi";
 
 // Mirrors @futbol/domain's TrophyCategory / TrophyTier.
 export type TrophyCategory = "season" | "awards" | "squad" | "career" | "europe" | "modes" | "fun";
@@ -518,7 +543,14 @@ export interface RunIndexDto {
   finished: boolean;
   userClubId: string | null;
   /** Only once the European Final has a winner. */
-  europe: { competitionId: string; leaguePhaseSeasonId: string; knockoutSeasonIds: string[]; champion: string | null } | null;
+  europe: {
+    competitionId: string;
+    /** 1 = European Nights, 2 = the Continental Cup (knockouts only, so no league phase). */
+    tier: 1 | 2;
+    leaguePhaseSeasonId: string | null;
+    knockoutSeasonIds: string[];
+    champion: string | null;
+  } | null;
   january: JanuaryResultDto | null;
   trophies: TrophyKey[];
 }

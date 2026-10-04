@@ -1,3 +1,4 @@
+import { leagueTheme } from "./leagueTheme";
 /**
  * Share images (1080×1350, the portrait size every social app shows uncropped) drawn with the
  * Canvas 2D API — no extra dependency, and no DOM-screenshot library fighting our fonts and
@@ -41,6 +42,12 @@ export const SHARE_COLORS = {
   amber: "#e6b559",
 } as const;
 
+/** The accent of the league the site is currently themed to (the default green otherwise). */
+function currentLeagueAccent(): string {
+  if (typeof document === "undefined") return SHARE_COLORS.mint;
+  return leagueTheme(document.documentElement.getAttribute("data-league") ?? undefined)?.hex ?? SHARE_COLORS.mint;
+}
+
 export const SHARE_WIDTH = 1080;
 export const SHARE_HEIGHT = 1350;
 const SITE = "futbol · draft · simulate · go unbeaten";
@@ -57,7 +64,7 @@ function fit(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, star
 export function drawShareCard(ctx: CanvasRenderingContext2D, card: ShareCardModel): void {
   const W = SHARE_WIDTH;
   const H = SHARE_HEIGHT;
-  const accent = card.accent ?? SHARE_COLORS.mint;
+  const accent = card.accent ?? currentLeagueAccent();
   const display = "Oswald, 'Arial Narrow', sans-serif";
   const body = "'Work Sans', Arial, sans-serif";
 

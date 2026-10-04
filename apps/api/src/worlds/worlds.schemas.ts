@@ -24,6 +24,9 @@ export const worldSettingsSchema = z.object({
   /** The real league the season is played in (RefLeague id), when the draft picked one. Display
       context only — SeasonsService takes the league from createSeason's own body. */
   leagueId: z.string().optional(),
+  /** "all" when the draft wheel spanned every real league (All Top-5); `leagueId` is then the league
+      the season is played in rather than the one the squad came from. */
+  draftPool: z.enum(["all"]).optional(),
   /** The pre-season projection exactly as the draft room showed it, so the end-of-season verdict
       compares the finish against what the player actually saw (and not a re-derivation from an
       overall that the January window may have changed since). */

@@ -234,6 +234,48 @@ export const TROPHY_CATALOG: Record<TrophyKey, TrophyMeta> = {
     icon: "🌟",
     colorClass: "text-amber-300 border-amber-400/60",
   },
+  "continental-cup": {
+    name: "Cup Winners",
+    description: "Won the Continental Cup, Europe's second tier.",
+    icon: "🥈",
+    colorClass: "text-teal-300 border-teal-400/60",
+  },
+  "european-unbeaten": {
+    name: "Europe Can't Touch Us",
+    description: "Went through European Nights' eight-game league phase without losing.",
+    icon: "🛡️",
+    colorClass: "text-mint-300 border-mint-400/60",
+  },
+  "perfect-eight": {
+    name: "Perfect Eight",
+    description: "Won all eight European Nights league-phase games.",
+    icon: "8️⃣",
+    colorClass: "text-amber-300 border-amber-400/60",
+  },
+  "top-of-europe": {
+    name: "Top of Europe",
+    description: "Finished first in the European Nights league phase.",
+    icon: "🥇",
+    colorClass: "text-amber-300 border-amber-400/60",
+  },
+  "grand-tour": {
+    name: "Grand Tour",
+    description: "Beat clubs from all four other leagues in a single European campaign.",
+    icon: "🗺️",
+    colorClass: "text-plum-300 border-plum-400/60",
+  },
+  "continental-raiders": {
+    name: "Continental Raiders",
+    description: "Won European Nights with an XI drawn entirely from one league that isn't yours.",
+    icon: "🏴‍☠️",
+    colorClass: "text-crimson-300 border-crimson-400/60",
+  },
+  "five-league-xi": {
+    name: "Five-League XI",
+    description: "Started players from clubs in all five leagues.",
+    icon: "🌍",
+    colorClass: "text-teal-300 border-teal-400/60",
+  },
 };
 
 export const TIER_META: Record<TrophyTier, { label: string; className: string; order: number }> = {

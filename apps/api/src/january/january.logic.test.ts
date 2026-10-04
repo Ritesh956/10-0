@@ -143,3 +143,37 @@ describe("January event kinds", () => {
     expect(eventTypeForDelta(-2)).toBe("NEGATIVE");
   });
 });
+
+import { eventLabel, eventPremise, JANUARY_KINDS, pickForeignLeague, seededRandom } from "./january.logic.js";
+
+describe("cross-border January events", () => {
+  const leagues = [{ id: "es" }, { id: "gb" }, { id: "it" }, { id: "de" }, { id: "fr" }];
+
+  it("never picks the home league, and names the same one for the same window", () => {
+    for (let i = 0; i < 50; i++) {
+      const pick = pickForeignLeague(leagues, "gb", seededRandom(`window-${i}`));
+      expect(pick).toBeDefined();
+      expect(pick!.id).not.toBe("gb");
+    }
+    expect(pickForeignLeague(leagues, "gb", seededRandom("same"))).toEqual(pickForeignLeague(leagues, "gb", seededRandom("same")));
+  });
+
+  it("reaches different leagues across different windows", () => {
+    const seen = new Set(Array.from({ length: 60 }, (_, i) => pickForeignLeague(leagues, "gb", seededRandom(`w${i}`))!.id));
+    expect(seen.size).toBeGreaterThanOrEqual(3);
+  });
+
+  it("names the league in the label and premise of a cross-border event", () => {
+    const raid = JANUARY_KINDS.find((k) => k.kind === "border-raid")!;
+    expect(eventLabel(raid, "Bundesliga")).toBe("Bundesliga Bargain");
+    expect(eventPremise(raid, "Bundesliga")).toContain("A Bundesliga side");
+    const loan = JANUARY_KINDS.find((k) => k.kind === "loan-swap")!;
+    expect(eventLabel(loan, "Serie A")).toBe("Serie A Loan Swap");
+    const plain = JANUARY_KINDS.find((k) => k.kind === "bargain-buy")!;
+    expect(eventLabel(plain, "Serie A")).toBe("Bargain Buy");
+  });
+
+  it("is only ever a foreign league for the events that say so", () => {
+    expect(JANUARY_KINDS.filter((k) => k.otherLeagues).map((k) => k.kind).sort()).toEqual(["border-raid", "loan-swap"]);
+  });
+});

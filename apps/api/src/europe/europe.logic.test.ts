@@ -24,3 +24,30 @@ describe("aggregateTieScore", () => {
     expect(aggregateTieScore(tie, [])).toBeNull();
   });
 });
+
+import { summarizeEuropeRun } from "./europe.logic.js";
+
+describe("summarizeEuropeRun", () => {
+  const countryOf = (id: string) => ({ a: "Spain", b: "Italy", c: "Spain", d: "France" })[id];
+
+  it("counts the league-phase record and the leagues whose clubs were beaten", () => {
+    const summary = summarizeEuropeRun({
+      leaguePhaseMatches: [
+        { opponentClubId: "a", goalsFor: 2, goalsAgainst: 0 },
+        { opponentClubId: "b", goalsFor: 1, goalsAgainst: 1 },
+        { opponentClubId: "d", goalsFor: 0, goalsAgainst: 3 },
+      ],
+      leaguePhaseRank: 12,
+      knockoutMatches: [{ opponentClubId: "c", goalsFor: 3, goalsAgainst: 1 }],
+      countryOf,
+    });
+    expect(summary.leaguePhase).toEqual({ played: 3, won: 1, drawn: 1, lost: 1, rank: 12 });
+    expect(summary.countriesBeaten).toEqual(["Spain"]);
+  });
+
+  it("has no league phase for a straight knockout cup", () => {
+    const summary = summarizeEuropeRun({ leaguePhaseMatches: null, leaguePhaseRank: null, knockoutMatches: [], countryOf });
+    expect(summary.leaguePhase).toBeNull();
+    expect(summary.countriesBeaten).toEqual([]);
+  });
+});

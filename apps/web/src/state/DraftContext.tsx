@@ -20,6 +20,11 @@ export interface DraftConfig {
   // instead" escape hatch (clearing the club lock) need to do exactly that.
   eraYearMin?: number | undefined;
   eraYearMax?: number | undefined;
+  /** "all" = the draft wheel spans every real league (All Top-5), while `leagueIds` holds all five;
+      the league the season is *played* in is then `playLeagueId`. Otherwise (undefined / "league")
+      the wheel and the season share the single league in `leagueIds`. */
+  draftPool?: "league" | "all" | undefined;
+  playLeagueId?: string | undefined;
   managers: boolean;
   europeanNights: boolean;
   januaryWindow: boolean;

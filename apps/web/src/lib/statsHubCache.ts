@@ -39,6 +39,8 @@ export interface CachedStatsHub {
       scoped to a season the same way finalizeRun is. Optional for backward compat; a cache entry
       saved before Phase 6 just won't offer the submit block until the next fresh run. */
   domesticSeasonId?: string;
+  /** 1 = European Nights, 2 = the Continental Cup (no league phase). Optional: older entries are tier 1. */
+  europeTier?: 1 | 2;
 }
 
 /** localStorage key for a finished run's cached stats hub. */
@@ -90,12 +92,14 @@ export async function rebuildStatsHub(worldId: string): Promise<CachedStatsHub |
 
   const europeData = europe
     ? await Promise.all([
-        api.getLeaguePhaseStandings(worldId, europe.leaguePhaseSeasonId),
+        europe.leaguePhaseSeasonId ? api.getLeaguePhaseStandings(worldId, europe.leaguePhaseSeasonId) : Promise.resolve(null),
         api.getCompetitionStats(worldId, europe.competitionId),
         api.getTeamStatsForCompetition(worldId, europe.competitionId, clubId),
         api.getEuropeBracket(worldId, europe.competitionId),
         Promise.all(
-          [europe.leaguePhaseSeasonId, ...europe.knockoutSeasonIds].map((id) => api.getMatchesWithEvents(worldId, id)),
+          [europe.leaguePhaseSeasonId, ...europe.knockoutSeasonIds]
+            .filter((id): id is string => id !== null)
+            .map((id) => api.getMatchesWithEvents(worldId, id)),
         ),
       ])
     : null;
@@ -117,5 +121,6 @@ export async function rebuildStatsHub(worldId: string): Promise<CachedStatsHub |
     leagueManagerStats,
     trophies: index.trophies,
     domesticSeasonId: seasonId,
+    europeTier: europe?.tier ?? 1,
   };
 }

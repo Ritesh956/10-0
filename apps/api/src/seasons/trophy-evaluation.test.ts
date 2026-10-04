@@ -235,3 +235,73 @@ describe("career trophies", () => {
     expect(p.tactician).toBe(2);
   });
 });
+
+describe("cross-league European trophies", () => {
+  const phase = (over: Partial<{ played: number; won: number; drawn: number; lost: number; rank: number | null }> = {}) => ({
+    played: 8,
+    won: 5,
+    drawn: 1,
+    lost: 2,
+    rank: 10,
+    ...over,
+  });
+  const europe = (leaguePhase = phase(), countriesBeaten: string[] = []) => ({ leaguePhase, countriesBeaten });
+
+  it("awards the league-phase trophies off the eight-game record", () => {
+    const t = evaluateTrophies(run({ europe: europe(phase({ won: 6, drawn: 2, lost: 0, rank: 2 })) }));
+    expect(t).toContain("european-unbeaten");
+    expect(t).not.toContain("perfect-eight");
+    expect(t).not.toContain("top-of-europe");
+
+    const perfect = evaluateTrophies(run({ europe: europe(phase({ won: 8, drawn: 0, lost: 0, rank: 1 })) }));
+    expect(perfect).toEqual(expect.arrayContaining(["european-unbeaten", "perfect-eight", "top-of-europe"]));
+  });
+
+  it("needs all eight games played", () => {
+    expect(evaluateTrophies(run({ europe: europe(phase({ played: 4, won: 4, drawn: 0, lost: 0, rank: 1 })) }))).not.toContain(
+      "perfect-eight",
+    );
+  });
+
+  it("Grand Tour needs a win against clubs from all four other leagues", () => {
+    const four = ["Spain", "Italy", "Germany", "France"];
+    expect(evaluateTrophies(run({ leagueCountry: "England", europe: europe(phase(), four) }))).toContain("grand-tour");
+    expect(evaluateTrophies(run({ leagueCountry: "England", europe: europe(phase(), four.slice(0, 3)) }))).not.toContain("grand-tour");
+    // Beating clubs from your own league doesn't count towards the four.
+    expect(
+      evaluateTrophies(run({ leagueCountry: "England", europe: europe(phase(), [...four.slice(0, 3), "England"]) })),
+    ).not.toContain("grand-tour");
+  });
+
+  it("the Continental Cup has its own trophy", () => {
+    expect(evaluateTrophies(run({ cupChampion: true }))).toContain("continental-cup");
+  });
+
+  const xi = (countries: string[]): RunSquadPlayer[] =>
+    Array.from({ length: 11 }, (_, i) => ({
+      name: `Player ${i}`,
+      nationality: "Brazil",
+      age: 27,
+      seasonYear: 2020,
+      refClubId: `c${i}`,
+      clubCountry: countries[i % countries.length]!,
+    }));
+
+  it("Continental Raiders: win Europe with an XI from a single other league", () => {
+    expect(evaluateTrophies(run({ europeChampion: true, leagueCountry: "England", squad: xi(["Spain"]) }))).toContain(
+      "continental-raiders",
+    );
+    expect(evaluateTrophies(run({ europeChampion: true, leagueCountry: "England", squad: xi(["England"]) }))).not.toContain(
+      "continental-raiders",
+    );
+    expect(evaluateTrophies(run({ europeChampion: false, leagueCountry: "England", squad: xi(["Spain"]) }))).not.toContain(
+      "continental-raiders",
+    );
+  });
+
+  it("Five-League XI: starters from clubs in all five leagues, title not required", () => {
+    const five = ["England", "Spain", "Italy", "Germany", "France"];
+    expect(evaluateTrophies(run({ position: 9, squad: xi(five) }))).toContain("five-league-xi");
+    expect(evaluateTrophies(run({ position: 9, squad: xi(five.slice(0, 4)) }))).not.toContain("five-league-xi");
+  });
+});

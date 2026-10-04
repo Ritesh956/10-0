@@ -37,6 +37,18 @@ import {
 const DOMESTIC_QUALIFIERS = 8;
 const FOREIGN_QUALIFIERS = 7;
 const COMPETITION_NAME = "European Nights";
+/**
+ * The second European tier: a straight 16-club knockout for the next group down. Domestic places
+ * 9-12 (`CUP_DOMESTIC_QUALIFIERS`) plus the 8th-10th strongest squads of each other league. It's a
+ * `CONTINENTAL` competition told apart from European Nights by name (no schema change): anything
+ * `CONTINENTAL` not called this is tier one - which also covers worlds created when tier one was
+ * still named "Champions League".
+ */
+export const CUP_NAME = "Continental Cup";
+const CUP_DOMESTIC_FIRST = 9;
+const CUP_DOMESTIC_QUALIFIERS = 4;
+const CUP_FOREIGN_SKIP = FOREIGN_QUALIFIERS;
+const CUP_FOREIGN_TAKE = 3;
 
 const NEXT_STAGE: Record<Exclude<KnockoutStage, "FINAL">, KnockoutStage> = {
   PO: "R16",
@@ -70,12 +82,15 @@ export class EuropeService {
     const position = userClub ? standings.rows.findIndex((r) => r.clubId === userClub.id) + 1 : 0;
     const qualified = position > 0 && position <= DOMESTIC_QUALIFIERS;
 
-    const competition = await this.prisma.competition.findFirst({
-      where: { worldId, type: "CONTINENTAL" },
-    });
+    const competition = await this.tierOne(worldId);
     const ties = competition
       ? await this.withScores(await this.prisma.knockoutTie.findMany({ where: { worldId, competitionId: competition.id } }))
       : [];
+
+    // The Continental Cup is for the group just below Europe proper.
+    const cupQualified =
+      !qualified && position >= CUP_DOMESTIC_FIRST && position < CUP_DOMESTIC_FIRST + CUP_DOMESTIC_QUALIFIERS;
+    const cupCompetition = await this.cupCompetition(worldId);
 
     return {
       qualified,
@@ -84,6 +99,11 @@ export class EuropeService {
       clubCount: DOMESTIC_QUALIFIERS + 4 * FOREIGN_QUALIFIERS,
       competitionId: competition?.id,
       ties,
+      cup: {
+        qualified: cupQualified,
+        clubCount: CUP_DOMESTIC_QUALIFIERS + 4 * CUP_FOREIGN_TAKE,
+        competitionId: cupCompetition?.id,
+      },
     };
   }
 
@@ -94,7 +114,7 @@ export class EuropeService {
   async startLeaguePhase(worldId: string, domesticSeasonId: string, userId: string) {
     const world = await this.worlds.getWorld(worldId, userId);
 
-    const existing = await this.prisma.competition.findFirst({ where: { worldId, type: "CONTINENTAL" } });
+    const existing = await this.tierOne(worldId);
     if (existing) {
       const first = await this.prisma.season.findFirst({ where: { worldId, competitionId: existing.id }, orderBy: { createdAt: "asc" } });
       if (first) return { competitionId: existing.id, seasonId: first.id, draw: await this.buildDraw(worldId, first.id, userId) };
@@ -145,12 +165,79 @@ export class EuropeService {
 
   /** The pots and who was drawn — recomputed from the league-phase clubs, so it also serves a reload. */
   async getDraw(worldId: string, competitionId: string, userId: string) {
+    const competition = await this.prisma.competition.findFirst({ where: { id: competitionId, worldId } });
+    if (competition?.name === CUP_NAME) return this.buildCupDraw(worldId, competitionId, userId);
     const season = await this.prisma.season.findFirst({ where: { worldId, competitionId }, orderBy: { createdAt: "asc" } });
     if (!season) throw new NotFoundException("No league phase for this competition");
     return this.buildDraw(worldId, season.id, userId);
   }
 
-  /** Starts the play-off round from the completed league-phase table (9v24 … 16v17). */
+  /**
+   * The Continental Cup: for a club that finished 9th-12th, a 16-club knockout (R16 to Final, two
+   * legs but the Final) against the next tier of clubs from the other four leagues. Calling it again
+   * returns the existing competition's first round instead of drawing a second.
+   */
+  async startCup(worldId: string, domesticSeasonId: string, userId: string) {
+    const world = await this.worlds.getWorld(worldId, userId);
+    const existing = await this.cupCompetition(worldId);
+    if (existing) {
+      const first = await this.prisma.season.findFirst({ where: { worldId, competitionId: existing.id }, orderBy: { createdAt: "asc" } });
+      const ties = await this.prisma.knockoutTie.findMany({ where: { worldId, competitionId: existing.id, round: "R16" } });
+      if (first) {
+        return { competitionId: existing.id, round: { round: "R16" as const, seasonId: first.id, ties }, draw: await this.buildCupDraw(worldId, existing.id, userId) };
+      }
+    }
+
+    const standings = await this.seasons.getStandings(worldId, domesticSeasonId, userId);
+    const domesticIds = standings.rows
+      .slice(CUP_DOMESTIC_FIRST - 1, CUP_DOMESTIC_FIRST - 1 + CUP_DOMESTIC_QUALIFIERS)
+      .map((r) => r.clubId);
+    if (domesticIds.length < CUP_DOMESTIC_QUALIFIERS) throw new BadRequestException("Not enough clubs for the Continental Cup");
+
+    const domesticLeague = await this.resolveDomesticLeague(world);
+    const foreignIds = await this.addForeignClubs(world, domesticLeague?.id ?? null, { skip: CUP_FOREIGN_SKIP, take: CUP_FOREIGN_TAKE });
+    const entrants = await this.entrantsFor(worldId, [...domesticIds, ...foreignIds], domesticLeague?.country ?? "Home");
+    const seeded = seedEntrants(entrants.length % 4 === 0 ? entrants : entrants.slice(0, entrants.length - (entrants.length % 4)));
+    const ranked: RankedClub[] = seeded.map((s) => ({ clubId: s.clubId, rank: s.seed }));
+
+    const competition = await this.prisma.competition.create({ data: { worldId, name: CUP_NAME, type: "CONTINENTAL" } });
+    const round = await this.createRound(worldId, competition.id, "R16", nextRoundPairings(ranked), userId);
+    return { competitionId: competition.id, round, draw: await this.buildCupDraw(worldId, competition.id, userId) };
+  }
+
+  /** The cup's field, rebuilt from its first-round ties (seed = strength order, as when it was drawn). */
+  private async buildCupDraw(worldId: string, competitionId: string, userId: string) {
+    const world = await this.worlds.getWorld(worldId, userId);
+    const ties = await this.prisma.knockoutTie.findMany({ where: { worldId, competitionId, round: "R16" } });
+    const clubIds = ties.flatMap((t) => [t.homeClubId, t.awayClubId]);
+    const domesticLeague = await this.resolveDomesticLeague(world);
+    const entrants = await this.entrantsFor(worldId, clubIds, domesticLeague?.country ?? "Home");
+    const nameById = new Map(world.clubs.map((c) => [c.id, c.name]));
+    const seeded = seedEntrants(entrants);
+    return {
+      clubs: seeded.map((s) => ({
+        clubId: s.clubId,
+        name: nameById.get(s.clubId) ?? "Unknown",
+        country: s.country,
+        seed: s.seed,
+        pot: s.pot,
+        strength: Math.round(s.strength),
+      })),
+    };
+  }
+
+  private tierOne(worldId: string) {
+    return this.prisma.competition.findFirst({
+      where: { worldId, type: "CONTINENTAL", name: { not: CUP_NAME } },
+      orderBy: { id: "asc" },
+    });
+  }
+
+  private cupCompetition(worldId: string) {
+    return this.prisma.competition.findFirst({ where: { worldId, type: "CONTINENTAL", name: CUP_NAME } });
+  }
+
+  /** Starts the play-off round from the completed league-phase table (9v24 ... 16v17). */
   async startKnockouts(worldId: string, competitionId: string, leaguePhaseSeasonId: string, userId: string) {
     await this.worlds.assertOwnership(worldId, userId);
     const table = await this.rankedTable(worldId, leaguePhaseSeasonId);
@@ -179,7 +266,9 @@ export class EuropeService {
       return { resolvedRound: round, resolvedTies, champion: resolvedTies[0]?.winnerClubId };
     }
 
-    const leagueTable = await this.leaguePhaseTable(worldId, competitionId);
+    const competition = await this.prisma.competition.findFirst({ where: { id: competitionId, worldId } });
+    const leagueTable =
+      competition?.name === CUP_NAME ? await this.cupSeedTable(worldId, competitionId) : await this.leaguePhaseTable(worldId, competitionId);
     const rankByClub = new Map(leagueTable.map((c) => [c.clubId, c.rank]));
     const ranked = (clubId: string): RankedClub => ({ clubId, rank: rankByClub.get(clubId) ?? 99 });
 
@@ -272,6 +361,7 @@ export class EuropeService {
   private async addForeignClubs(
     world: { id: string; eraId: string; clubs: { refClubSeasonId: string | null }[] },
     domesticLeagueId: string | null,
+    window: { skip: number; take: number } = { skip: 0, take: FOREIGN_QUALIFIERS },
   ): Promise<string[]> {
     const leagues = await this.prisma.refLeague.findMany({
       where: { eraId: world.eraId, country: { in: REAL_LEAGUE_COUNTRIES }, ...(domesticLeagueId ? { id: { not: domesticLeagueId } } : {}) },
@@ -307,7 +397,7 @@ export class EuropeService {
           })
           .map((c) => ({ ...c, strength: squadStrength(c.playerSeasons.map((p) => p.overall)) }))
           .sort((a, b) => b.strength - a.strength || a.clubId.localeCompare(b.clubId))
-          .slice(0, FOREIGN_QUALIFIERS);
+          .slice(window.skip, window.skip + window.take);
       }),
     );
 
@@ -519,6 +609,13 @@ export class EuropeService {
   private async rankedTable(worldId: string, seasonId: string): Promise<RankedClub[]> {
     const standings = await this.computeStandings(worldId, seasonId);
     return standings.rows.map((row, i) => ({ clubId: row.clubId, rank: i + 1 }));
+  }
+
+  /** The Continental Cup has no league phase: its seeds are its clubs ranked by squad strength. */
+  private async cupSeedTable(worldId: string, competitionId: string): Promise<RankedClub[]> {
+    const ties = await this.prisma.knockoutTie.findMany({ where: { worldId, competitionId, round: "R16" } });
+    const entrants = await this.entrantsFor(worldId, ties.flatMap((t) => [t.homeClubId, t.awayClubId]), "Home");
+    return seedEntrants(entrants).map((s) => ({ clubId: s.clubId, rank: s.seed }));
   }
 
   /** The competition's own league-phase table — its first season, which seeds every knockout round. */
